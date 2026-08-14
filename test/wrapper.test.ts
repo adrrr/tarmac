@@ -15,6 +15,7 @@ import {
   TEMP_PREFIX,
 } from '../src/wrapper.ts';
 import { wideningLocale } from './locales.ts';
+import { settle, waitFor } from './sweep.ts';
 
 // `find` and the shell share a libc, so the locale that widens a range for `/bin/sh` — the
 // interpreter the generated wrapper declares — is the one that would widen it for `find`.
@@ -197,8 +198,17 @@ test('a snapshot dir path containing spaces and quotes is handled', () => {
 //
 // A live session rewrites its snapshot on EVERY frame, so mtime is what separates the dead
 // from the living — and the sweep is amortized, because this code sits in the render path.
+//
+// Since #8 it is also DETACHED: the frame starts the sweep and returns, so nothing below may
+// read the directory the instant `runWrapper` comes back. What the sweep did is waited for;
+// what it must NOT do is asserted behind a barrier, and the barrier is a cold snapshot the
+// sweep is bound to take — `find … -exec rm -f {} +` removes everything it matched in one
+// call, so once the canary is gone the batch is over and what is still there was kept on
+// purpose. Only the cases where NO sweep may start at all have nothing to wait for, and
+// those use `settle()`.
 
 const DEAD = 'ffffffff-1111-2222-3333-444444444444';
+const QUIET = 'ffffffff-5555-6666-7777-888888888888';
 const MIN = 60_000;
 
 /** Backdates files into `dir` — ages in minutes, the unit the wrapper's `find` speaks. */
@@ -215,48 +225,52 @@ function seed(dir: string, files: Record<string, number>): void {
 
 const deadFile = (dir: string): string => path.join(dir, `${DEAD}.json`);
 
-test('removes the snapshot of a session that stopped rendering more than 48h ago', () => {
+test('removes the snapshot of a session that stopped rendering more than 48h ago', async () => {
   const { root, snapDir } = sandbox();
   seed(snapDir, { [`${DEAD}.json`]: SNAPSHOT_TTL_MIN + 60 });
   runWrapper({ root, snapDir, input: payload() });
-  assert.equal(fs.existsSync(deadFile(snapDir)), false, 'the dead session is gone');
+  await waitFor(() => !fs.existsSync(deadFile(snapDir)), 'the dead session to be swept');
   assert.equal(fs.existsSync(path.join(snapDir, `${SID}.json`)), true, "and this frame's own snapshot is not");
 });
 
 // The whole risk of a sweep: deleting a session that is merely quiet. A frame rewrites the
 // file, so anything inside the window is presumed alive — the same rule the temp reaper
 // applies to a write in flight, one timescale up.
-test('keeps a snapshot younger than 48h — that is what a live session looks like', () => {
+test('keeps a snapshot younger than 48h — that is what a live session looks like', async () => {
   const { root, snapDir } = sandbox();
-  seed(snapDir, { [`${DEAD}.json`]: SNAPSHOT_TTL_MIN - 60 });
+  seed(snapDir, { [`${QUIET}.json`]: SNAPSHOT_TTL_MIN - 60, [`${DEAD}.json`]: SNAPSHOT_TTL_MIN + 60 });
   runWrapper({ root, snapDir, input: payload() });
-  assert.equal(fs.existsSync(deadFile(snapDir)), true);
+  await waitFor(() => !fs.existsSync(deadFile(snapDir)), 'the sweep to finish, which is when the quiet one has survived it');
+  assert.equal(fs.existsSync(path.join(snapDir, `${QUIET}.json`)), true);
 });
 
 // Amortization is not an optimization here, it is the reason this can live in the render
 // path at all: a sweep on every frame would put a directory walk between Claude Code and
 // its status line, dozens of times a minute.
-test('does not sweep again while the marker is fresh — one sweep per hour, not one per frame', () => {
+test('does not sweep again while the marker is fresh — one sweep per hour, not one per frame', async () => {
   const { root, snapDir } = sandbox();
   seed(snapDir, { [`${DEAD}.json`]: 5 * 24 * 60, [PRUNE_MARKER]: 0 });
   runWrapper({ root, snapDir, input: payload() });
+  await settle();
   assert.equal(fs.existsSync(deadFile(snapDir)), true, 'the frame paid one `find` on one file and nothing else');
 });
 
-test('sweeps once the marker is older than the window, and restamps it', () => {
+test('sweeps once the marker is older than the window, and restamps it', async () => {
   const { root, snapDir } = sandbox();
   seed(snapDir, { [`${DEAD}.json`]: 5 * 24 * 60, [PRUNE_MARKER]: PRUNE_EVERY_MIN + 60 });
   const marker = path.join(snapDir, PRUNE_MARKER);
   const before = fs.statSync(marker).mtimeMs;
   runWrapper({ root, snapDir, input: payload() });
-  assert.equal(fs.existsSync(deadFile(snapDir)), false, 'the sweep ran');
-  assert.ok(fs.statSync(marker).mtimeMs > before, 'and the next hour starts now');
+  // The stamp is the FRAME's, so it is there the moment the frame returns; the sweep it
+  // started is the thing that has to be waited for.
+  assert.ok(fs.statSync(marker).mtimeMs > before, 'the next hour starts now');
+  await waitFor(() => !fs.existsSync(deadFile(snapDir)), 'the sweep to run');
 });
 
 // `*.json` at the top level is the whole contract, so it is worth pinning from BOTH sides —
 // these decoys are all non-`.json`, and every one of them is excluded by the glob before any
 // other test in this file gets a say.
-test('never touches a file that is not a *.json, however old', () => {
+test('never touches a file that is not a *.json, however old', async () => {
   const { root, snapDir } = sandbox();
   const others = {
     [`${TEMP_PREFIX}${DEAD}.999.tmp`]: 5 * 24 * 60,
@@ -266,7 +280,7 @@ test('never touches a file that is not a *.json, however old', () => {
   };
   seed(snapDir, { ...others, [`${DEAD}.json`]: 5 * 24 * 60 });
   runWrapper({ root, snapDir, input: payload() });
-  assert.equal(fs.existsSync(deadFile(snapDir)), false, 'ours is still swept');
+  await waitFor(() => !fs.existsSync(deadFile(snapDir)), 'ours to be swept — the barrier for what follows');
   assert.deepEqual(contents(snapDir), [...Object.keys(others), `${SID}.json`].sort());
 });
 
@@ -280,7 +294,7 @@ test('never touches a file that is not a *.json, however old', () => {
 // narrowing the WRITER rather than by widening this glob to the writer's old charset: every
 // stem of 8..64 characters of `[0-9A-Za-z-]` would then be deletable, from a directory the
 // docs invite you to share with a production statusline and that people keep in git.
-test('never removes a *.json that is not shaped like a session id', () => {
+test('never removes a *.json that is not shaped like a session id', async () => {
   const { root, snapDir } = sandbox();
   const foreign = {
     'config.json': 5 * 24 * 60,
@@ -291,7 +305,7 @@ test('never removes a *.json that is not shaped like a session id', () => {
   };
   seed(snapDir, { ...foreign, [`${DEAD}.json`]: 5 * 24 * 60 });
   runWrapper({ root, snapDir, input: payload() });
-  assert.equal(fs.existsSync(deadFile(snapDir)), false, 'ours is still swept');
+  await waitFor(() => !fs.existsSync(deadFile(snapDir)), 'ours to be swept — the barrier for what follows');
   assert.deepEqual(contents(snapDir), [...Object.keys(foreign), `${SID}.json`].sort());
 });
 
@@ -379,12 +393,12 @@ test('the glob the shell deletes by and the regex TypeScript deletes by are one 
 // That is the sweep exceeding "only what we wrote", on the more destructive side of the trade.
 // Bracket expressions cannot match a `.`, so the hole closes with the shared rule itself
 // rather than with a second `-name` term nobody would remember to keep in step.
-test('never removes a dotfile wearing a session id name — the writer cannot emit one', () => {
+test('never removes a dotfile wearing a session id name — the writer cannot emit one', async () => {
   const { root, snapDir } = sandbox();
   const dotfile = `.${DEAD.slice(1)}.json`;
   seed(snapDir, { [dotfile]: 5 * 24 * 60, [`${DEAD}.json`]: 5 * 24 * 60 });
   runWrapper({ root, snapDir, input: payload() });
-  assert.equal(fs.existsSync(deadFile(snapDir)), false, 'ours is still swept');
+  await waitFor(() => !fs.existsSync(deadFile(snapDir)), 'ours to be swept — the barrier for what follows');
   assert.equal(fs.existsSync(path.join(snapDir, dotfile)), true, 'a name we could never write is not');
 });
 
@@ -397,7 +411,7 @@ test('never removes a dotfile wearing a session id name — the writer cannot em
 // only UUIDs, so `abcdefgh.json` was filed and then invisible — #19 back for that session,
 // for good, with the whole suite green.
 for (const { what, sid } of SIDS.filter((s) => s.accepted)) {
-  test(`the sweep removes the very file the wrapper writes, once it goes cold (${what})`, () => {
+  test(`the sweep removes the very file the wrapper writes, once it goes cold (${what})`, async () => {
     const { root, snapDir } = sandbox();
     runWrapper({ root, snapDir, input: payload({ session_id: sid }) });
     const written = path.join(snapDir, `${sid}.json`);
@@ -408,13 +422,13 @@ for (const { what, sid } of SIDS.filter((s) => s.accepted)) {
 
     runWrapper({ root, snapDir, input: payload({ session_id: DEAD }) });
 
-    assert.equal(fs.existsSync(written), false, 'the sweep does not recognise what the writer emits');
+    await waitFor(() => !fs.existsSync(written), 'the sweep to recognise what the writer emits');
   });
 }
 
 // `-type f`: delete it from the expression and the whole suite still passes. A directory and
 // a symlink can both carry a session id's name, and neither is a snapshot.
-test('never removes a directory or a symlink that carries a session id name', () => {
+test('never removes a directory or a symlink that carries a session id name', async () => {
   const { root, snapDir } = sandbox();
   seed(snapDir, { [`${DEAD}.json`]: 5 * 24 * 60 });
   const victim = path.join(root, 'victim');
@@ -429,23 +443,26 @@ test('never removes a directory or a symlink that carries a session id name', ()
 
   runWrapper({ root, snapDir, input: payload() });
 
-  assert.equal(fs.existsSync(deadFile(snapDir)), false, 'the real snapshot is swept');
+  await waitFor(() => !fs.existsSync(deadFile(snapDir)), 'the real snapshot to be swept — the barrier for what follows');
   assert.equal(fs.existsSync(asDir), true, 'a directory is not a snapshot');
   assert.equal(fs.existsSync(asLink), true, 'nor is a symlink');
   assert.equal(fs.existsSync(victim), true, 'and what it pointed at is untouched');
 });
 
-test('does not descend into a subdirectory of the snapshot dir', () => {
+test('does not descend into a subdirectory of the snapshot dir', async () => {
   const { root, snapDir } = sandbox();
-  seed(snapDir, { [path.join('archive', `${DEAD}.json`)]: 5 * 24 * 60 });
+  // The cold snapshot at the top level is the barrier: it is what the sweep is bound to take,
+  // and its removal is what says the walk is over and the nested one was left alone.
+  seed(snapDir, { [path.join('archive', `${DEAD}.json`)]: 5 * 24 * 60, [`${QUIET}.json`]: 5 * 24 * 60 });
   runWrapper({ root, snapDir, input: payload() });
+  await waitFor(() => !fs.existsSync(path.join(snapDir, `${QUIET}.json`)), 'the top-level sweep to finish');
   assert.equal(fs.existsSync(path.join(snapDir, 'archive', `${DEAD}.json`)), true);
 });
 
 // RULE 1, applied to the new code: a directory we cannot stamp is a directory we do not
 // sweep. Marker first, sweep second — otherwise a sweep that cannot finish is retried on
 // every single frame, which is the cost this whole design exists to avoid.
-test('a snapshot dir it cannot write to is never swept, and still renders', (t) => {
+test('a snapshot dir it cannot write to is never swept, and still renders', async (t) => {
   // 0555 does not stop root, so under a root container this fixture is not the state it
   // claims to build. Saying that out loud beats a green tick that proved nothing.
   if (process.getuid?.() === 0) {
@@ -458,6 +475,7 @@ test('a snapshot dir it cannot write to is never swept, and still renders', (t) 
   try {
     const out = runWrapper({ root, snapDir, chain: 'echo STILL-RENDERED', input: payload() });
     assert.match(out, /STILL-RENDERED/);
+    await settle();
     assert.equal(fs.existsSync(deadFile(snapDir)), true);
   } finally {
     fs.chmodSync(snapDir, 0o755);
@@ -467,7 +485,7 @@ test('a snapshot dir it cannot write to is never swept, and still renders', (t) 
 // RULE 2, through the one file the prune WRITES. `touch` follows symlinks: a marker that is
 // a dangling link makes it create the link's target — a file outside the snapshot dir, from
 // inside a status line. A name we did not write is not ours to stamp.
-test('refuses to stamp a marker that is a symlink, and writes nothing outside the dir', () => {
+test('refuses to stamp a marker that is a symlink, and writes nothing outside the dir', async () => {
   const { root, snapDir } = sandbox();
   seed(snapDir, { [`${DEAD}.json`]: 5 * 24 * 60 });
   const outside = path.join(root, 'escaped');
@@ -476,6 +494,7 @@ test('refuses to stamp a marker that is a symlink, and writes nothing outside th
   const out = runWrapper({ root, snapDir, chain: 'echo OK', input: payload() });
 
   assert.match(out, /OK/, 'the display still renders');
+  await settle();
   assert.equal(fs.existsSync(outside), false, 'nothing was created outside the snapshot dir');
   assert.equal(fs.existsSync(deadFile(snapDir)), true, 'and a marker we refuse is a sweep we skip');
 });
@@ -484,7 +503,7 @@ test('refuses to stamp a marker that is a symlink, and writes nothing outside th
 // is a directory reads as "stamped" on every frame while `-mmin` never has a regular file to
 // judge: the sweep runs on every single frame and the amortization this whole design is
 // built around is silently gone. Anything at that name that is not a plain file is refused.
-test('refuses a marker that is not a regular file, rather than sweeping every frame', () => {
+test('refuses a marker that is not a regular file, rather than sweeping every frame', async () => {
   const { root, snapDir } = sandbox();
   seed(snapDir, { [`${DEAD}.json`]: 5 * 24 * 60 });
   fs.mkdirSync(path.join(snapDir, PRUNE_MARKER));
@@ -492,6 +511,7 @@ test('refuses a marker that is not a regular file, rather than sweeping every fr
   const out = runWrapper({ root, snapDir, chain: 'echo OK', input: payload() });
 
   assert.match(out, /OK/, 'the display still renders');
+  await settle();
   assert.equal(fs.existsSync(deadFile(snapDir)), true, 'no sweep ran');
 });
 
