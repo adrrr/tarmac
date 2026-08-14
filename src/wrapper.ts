@@ -16,13 +16,16 @@
 // below is in the POSIX shell command language, and `test/portability.test.ts` runs this
 // script under every POSIX shell present on the machine to keep it that way.
 //
-// Two invariants, both tested by running the real script:
+// Three invariants, all tested by running the real script:
 //   RULE 1 — never break the display. Missing chain, failing chain, unwritable directory:
 //            the status line still renders and the exit code is still 0. Telemetry loses,
 //            display wins, always.
 //   RULE 2 — never write outside the snapshot directory. `session_id` is external input
 //            that becomes a filename, so anything that is not UUID-shaped is REFUSED, not
 //            sanitised: a guessed name would be read back later as if it were certain.
+//   RULE 3 — the sweep may remove exactly what the writer may write, no more and no less.
+//            One rule, `SID_GLOB`, read by both — because when those two sets are merely
+//            written to agree, they stop agreeing quietly, in both directions at once (#7).
 
 /**
  * Prefix of every temp file the wrapper writes, and the ONLY thing that proves tarmac

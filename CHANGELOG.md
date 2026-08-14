@@ -15,6 +15,26 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - `uninstall` now removes the wrapper-owned `.tarmac-last-prune` housekeeping marker while
   preserving every snapshot file. A foreign `statusLine` keeps both the wrapper and marker,
   and settings restoration completes before marker cleanup can fail. (#9)
+- **The wrapper now writes exactly what it can delete.** The writer took any `session_id` of
+  8 to 64 characters of `[0-9A-Za-z-]`; the amortized sweep, the legacy purge and the temp
+  reaper each matched a different, hand-copied set. That diverged in both directions at once.
+  A session id wider than a UUID was filed and then invisible to the sweep — one dead file per
+  session per night, forever, for that session, with nothing saying so. And the sweep's glob
+  was written with `?`, which matches a leading dot, so a `.bcdefgh-….json` **that the writer
+  could never have produced** was unlinked by a status line — the same reach the legacy purge
+  had inside `~/.claude`. Both were one divergent constant, and there is now one: a session id
+  is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal in either case, read by the writer, by
+  the sweep, by the purge and by the reaper from `SID_GLOB`.
+
+  The alignment is towards the **writer**, not the deleters. Widening a deleter to the old
+  charset would have put every stem of eight characters or more within reach of `rm`, in a
+  directory the manual invites you to share with another statusline and that people keep in
+  git; a name is not provenance. The cost of the direction chosen is named: a session whose id
+  is not a UUID now gets no snapshot, and appears in `list` as a live session with `absent`
+  telemetry — a state the fleet join already has, on screen, rather than a leak on disk.
+  Existing snapshots and temp files bearing a non-UUID id are no longer swept; the shape has
+  never been observed in the wild (every fixture here, and every transcript Claude Code
+  names). (#7)
 
 ## [0.2.0] - 2026-08-14
 

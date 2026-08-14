@@ -80,12 +80,18 @@ every night grows one dead file per session per night, forever. The sweep is amo
 because it sits in the render path of your status line: a frame costs one `find` on a single
 marker file (`.tarmac-last-prune`), and the directory itself is swept at most once an hour.
 
-It deletes by the same rule as the temp files: **only what it wrote**. The sweep matches the
-shape of a session id — `????????-????-????-????-????????????.json`, the UUID Claude Code
-emits — at the top level of the snapshots directory `install` made for it, and nothing else: not a subdirectory, not a directory or symlink wearing that name, and
-not your `settings.json` or `fleet.json` sitting next to it. (`--snapshots-dir` is a
-*reader's* lens for `list` and `serve` — pointing those at a directory another statusline owns
-deletes nothing, because no reader deletes anything.)
+It deletes by the same rule as the temp files: **only what it wrote** — and that is one rule,
+not two. A session id is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal; the wrapper
+refuses to file a payload whose `session_id` is anything else, and the sweep unlinks exactly
+that shape at the top level of the snapshots directory `install` made for it, and nothing
+else: not a subdirectory, not a directory or symlink wearing that name, not a dotfile wearing
+it either, and not your `settings.json` or `fleet.json` sitting next to it. (`--snapshots-dir`
+is a *reader's* lens for `list` and `serve` — pointing those at a directory another statusline
+owns deletes nothing, because no reader deletes anything.)
+
+A session whose id is not a UUID therefore gets no snapshot at all, and `list` shows it with
+no reading rather than with a stale one. That is the deliberate half of the trade: the
+alternative is a sweep whose reach is every filename of eight characters or more.
 
 One consequence worth knowing: a session that is alive but has drawn no status line for 48h
 loses its snapshot too, and `list` then shows it as a session with no reading rather than a

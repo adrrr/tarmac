@@ -368,11 +368,11 @@ function readLegacyDir(p: TarmacPaths): { ours: string[]; kept: number } | null 
 /**
  * The three names the wrapper writes into its snapshot directory, and nothing else.
  *
- * `SNAPSHOT_NAME` is the PRUNER's shape (8-4-4-4-12), deliberately narrower than the ids the
- * writer accepts (`[0-9a-zA-Z-]{8,64}` — it refuses to guess what an id may look like). One
- * choice, made once, and it is what produces the residue this branch states: a session id
- * wider than a UUID is written here and swept by neither the pruner nor this. Widening it
- * would mean deleting, from inside a git repository, by a shape rather than by a signature.
+ * `SNAPSHOT_NAME` is the writer's own rule, not a second reading of it (#7): this purge
+ * deletes from inside `~/.claude`, a directory people version-control, so the one thing it
+ * must never do is recognise a name the wrapper could not have produced. Widening it — to
+ * catch a name that merely LOOKS like a session's — would be deleting by shape rather than
+ * by signature, in the worst place to be wrong about the difference.
  */
 const isPayloadName = (name: string): boolean =>
   SNAPSHOT_NAME.test(name) || name.startsWith(TEMP_PREFIX) || name === PRUNE_MARKER;
