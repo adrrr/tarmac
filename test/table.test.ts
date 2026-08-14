@@ -125,8 +125,14 @@ test('warns when the statusline covers only part of the fleet', () => {
 // done and cannot work. The number has to travel, or the honest half of that trade is invisible.
 test('says how many sessions carry an id it will never file, next to the coverage', () => {
   const out = renderTable(fleet([row({ ctxState: 'absent', ctxPct: null })], { sessions: 3, covered: 1, unfilable: 2 }));
-  assert.match(out, /! statusline chained on 1\/3 sessions/);
-  assert.match(out, /2 .*(never|cannot|not)/i, 'the two that will never be filed are named');
+  // The literal sentence, not a loose pattern: `/2 .*(never|cannot|not)/i` passed against the
+  // pre-#7 line too, so it pinned nothing at all.
+  assert.match(out, /! statusline chained on 1\/3 sessions — 2 session\(s\) with an id tarmac never files/);
+});
+
+test('says nothing about unfilable ids when every uncovered session is a frame away', () => {
+  const out = renderTable(fleet([row()], { sessions: 3, covered: 1, unfilable: 0 }));
+  assert.match(out, /! statusline chained on 1\/3 sessions$/m, 'the bare line, with nothing appended');
 });
 
 // C1: `readSnapshots` has always counted the payloads it could not key to a session — a

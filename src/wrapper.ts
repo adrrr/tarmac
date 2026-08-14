@@ -89,7 +89,8 @@ export const SNAPSHOT_TTL_MIN = 48 * 60;
  * will be. That is one string meaning two different sets depending on `LANG`, which is this
  * whole rule undone: a sid filed in a Terminal, refused under `LC_ALL=C`, and a file written
  * by the first frame that no TypeScript consumer here can ever recognise. Sixteen digits
- * spelled out cost 400 characters of pattern and nothing measurable per frame.
+ * spelled out roughly doubles the pattern — 356 characters to 772 — and costs nothing
+ * measurable per frame.
  */
 const HEX = '[0123456789abcdefABCDEF]';
 export const SID_GLOB = [8, 4, 4, 4, 12].map((n) => HEX.repeat(n)).join('-');

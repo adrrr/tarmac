@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PRUNE_MARKER, renderWrapper, SNAPSHOT_TTL_MIN } from '../src/wrapper.ts';
+import { wideningLocale } from './locales.ts';
 
 // The wrapper was developed on macOS, where /bin/sh is bash wearing a POSIX hat and
 // forgives a great deal. On Debian and Ubuntu — the primary target of a public npx tool —
@@ -32,19 +33,6 @@ function runsHere(shell: Shell): boolean {
 
 const SHELLS = CANDIDATES.filter(runsHere);
 
-/** The first of `names` this machine actually has, so a locale test can skip honestly. */
-function installedLocale(names: string[]): string | undefined {
-  let available: string;
-  try {
-    available = spawnSync('locale', ['-a'], { encoding: 'utf8' }).stdout ?? '';
-  } catch {
-    return undefined;
-  }
-  const have = new Set(available.split('\n').map((l) => l.trim().toLowerCase()));
-  return names.find((n) => have.has(n.toLowerCase()));
-}
-
-const UTF8 = installedLocale(['en_US.UTF-8', 'C.UTF-8', 'en_US.utf8']);
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 const DEAD = 'ffffffff-1111-2222-3333-444444444444';
 const QUIET = 'ffffffff-5555-6666-7777-888888888888';
@@ -103,6 +91,9 @@ const payload = (over: Record<string, unknown> = {}): string =>
 const listSnapshots = (dir: string): string[] =>
   fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n !== PRUNE_MARKER).sort() : [];
 
+/** Shells for which the collation case above was really built — see the guard at the end. */
+const exercised = new Set<string>();
+
 for (const shell of SHELLS) {
   // One test per shell, exercising the constructs where implementations actually diverge:
   // `${var#pattern}` with a quoted pattern, `${var%%pattern}`, `[!…]` bracket negation,
@@ -143,17 +134,19 @@ for (const shell of SHELLS) {
     // meaning two sets, chosen by the `LANG` of whoever's terminal drew the frame. The rule is
     // an enumeration of the sixteen digits for exactly this reason, and this is the test that
     // holds it there.
-    if (UTF8) {
+    const wide = wideningLocale(shell.cmd, shell.prefix);
+    if (wide) {
+      exercised.add(shell.label);
       const nonAscii = runUnder(
         shell,
         payload({ session_id: 'éa6a607c-42e0-4773-af4d-ae5f5938d819' }),
         'echo CHAINED',
         undefined,
         false,
-        { LC_ALL: UTF8 },
+        { LC_ALL: wide },
       );
       assert.match(nonAscii.stdout, /CHAINED/);
-      assert.deepEqual(listSnapshots(nonAscii.snapDir), [], `a non-ASCII sid writes nothing under ${UTF8}`);
+      assert.deepEqual(listSnapshots(nonAscii.snapDir), [], `a non-ASCII sid writes nothing under ${wide}`);
     }
 
     // Two ids: the `case` fallthrough and the `[ … ] && sid=''` guard.
@@ -227,6 +220,23 @@ for (const shell of SHELLS) {
 // the honest report of that. But a skip still exits 0 — so on the paths where the claim has
 // to HOLD rather than merely be attempted (CI, and `prepublishOnly` before a release),
 // TARMAC_REQUIRE_DASH turns the gap into a failure instead of a line that scrolls past.
+// The same shape as the dash guard below, for the same reason, one property further out.
+// The collation assertion inside each shell's test is conditional — it can only run where a
+// locale exists under which that shell really does widen `a-f`. A condition that is silently
+// false is a test that silently is not one, and this one was: written against a NAME list
+// with `C.UTF-8` in it, it resolved to a locale that collates by code point, ran, and passed
+// with the range spelling fully restored. The list is gone; this makes its absence audible.
+test('the collation case was built for at least one shell', (t) => {
+  if (exercised.size > 0) {
+    assert.ok(true);
+    return;
+  }
+  const why =
+    'no installed locale makes any shell here read `a-f` past ASCII: the enumeration was NOT proven on this machine';
+  if (process.env.TARMAC_REQUIRE_DASH) assert.fail(why);
+  t.skip(why);
+});
+
 test('dash — the /bin/sh of Debian and Ubuntu — was exercised', (t) => {
   if (!SHELLS.some((s) => s.label === 'dash')) {
     const why = 'dash is not installed here: POSIX conformance was NOT proven on this machine';

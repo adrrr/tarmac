@@ -36,9 +36,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   git; a name is not provenance. The cost of the direction chosen is named: a session whose id
   is not a UUID now gets no snapshot, and appears in `list` as a live session with `absent`
   telemetry — a state the fleet join already has, on screen, rather than a leak on disk.
-  Existing snapshots and temp files bearing a non-UUID id are no longer swept; the shape has
-  never been observed in the wild (every fixture here, and every transcript Claude Code
-  names). And the cost is now *said*: `list` and `serve` no longer answer a session of that
+  Two residues on any machine that ran an earlier version, stated rather than glossed: a
+  snapshot filed under a non-UUID name is still read but will never be swept, and a temp file
+  left under one, `.tarmac-<sid>.<pid>.tmp`, is no longer collected at all — coverage lost
+  over the existing stock, not just a sweep that skips it. Neither gets a migration: the shape
+  has never been observed (every fixture here, every transcript Claude Code names), and these
+  would be files of installs never published. And the cost is now *said*: `list` and `serve` no longer answer a session of that
   kind with "run `tarmac install` and give them one TUI frame" — advice already taken, which
   no frame can satisfy. They report how many session ids the wrapper will never file, which is
   the difference between telemetry that is late and telemetry that is not coming. (#7)

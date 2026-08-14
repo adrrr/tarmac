@@ -13,6 +13,13 @@ import {
   SNAPSHOT_TTL_MIN,
   TEMP_PREFIX,
 } from '../src/wrapper.ts';
+import { wideningLocale } from './locales.ts';
+
+// `find` and the shell share a libc, so the locale that widens a range for `/bin/sh` — the
+// interpreter the generated wrapper declares — is the one that would widen it for `find`.
+// Measured, never named: `C.UTF-8` is UTF-8 and collates by code point, so asking under it
+// proves nothing at all.
+const WIDENING = wideningLocale('/bin/sh');
 
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 const payload = (over: Record<string, unknown> = {}): string =>
@@ -44,19 +51,6 @@ function runWrapper({ snapDir, chain, input, root }: RunWrapperOptions): string 
   return stdout;
 }
 
-/** The first of `names` this machine actually has, or nothing — see the differential test. */
-function installedLocale(names: string[]): string | undefined {
-  let available: string;
-  try {
-    available = execFileSync('locale', ['-a'], { encoding: 'utf8' });
-  } catch {
-    return undefined;
-  }
-  const have = new Set(available.split('\n').map((l) => l.trim().toLowerCase()));
-  return names.find((n) => have.has(n.toLowerCase()));
-}
-
-const UTF8 = installedLocale(['en_US.UTF-8', 'C.UTF-8', 'en_US.utf8']);
 
 /**
  * Everything in the snapshot dir except the prune marker — subtracted by NAME, not by
@@ -337,13 +331,13 @@ test('the glob the shell deletes by and the regex TypeScript deletes by are one 
   // about a DIRECTORY — whichever directory the host actually built.
   const onDisk = fs.readdirSync(dir);
 
-  // Under a UTF-8 locale where one exists: a bracket RANGE would collate `é` INTO `a-f` here
-  // — in BSD `find` as much as in bash — while the regex never would. Ambient locale would
-  // leave that half of the pair asked in `C`, where the question cannot fail.
+  // Under a locale that really does widen a range, where one exists: `é` would collate INTO
+  // `a-f` here — in BSD `find` as much as in bash — while the regex never would. Asked under
+  // the ambient locale, or under a code-point one, that half of the pair cannot fail at all.
   const found = execFileSync(
     'find',
     [`${dir}/.`, '!', '-name', '.', '-prune', '-name', SNAPSHOT_GLOB, '-type', 'f'],
-    { encoding: 'utf8', env: { ...process.env, ...(UTF8 ? { LC_ALL: UTF8 } : {}) } },
+    { encoding: 'utf8', env: { ...process.env, ...(WIDENING ? { LC_ALL: WIDENING } : {}) } },
   )
     .split('\n')
     .filter(Boolean)

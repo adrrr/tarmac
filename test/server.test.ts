@@ -157,6 +157,42 @@ test('marks a busy session as busy and an unknown status as unknown', () => {
   assert.match(html, /transmogrifying/);
 });
 
+// ── the three ways a fleet can be partly uncovered ────────────────────────────────────
+// One `else if` with three outcomes, and until these existed all three could be collapsed
+// into the pre-#7 sentence with the whole suite still green. The distinction is not cosmetic:
+// `tarmac install` is the fix for a session that has drawn no frame yet, and is meaningless
+// for one whose id the wrapper declines to file — the second reads as "you have not installed
+// tarmac" when tarmac is installed and working exactly as designed.
+test('sends an uncovered fleet to install when a frame is all that is missing', () => {
+  const live = renderLive({
+    rows: [row({ ctxState: 'absent', ctxPct: null })],
+    health: health({ sessions: 2, covered: 1, unfilable: 0 }),
+  });
+  assert.match(live, /tarmac install/, 'a frame away, and the advice works');
+  assert.equal(/never|no frame will ever/i.test(live), false, 'nothing here is permanent');
+});
+
+test('never sends a session to install when no frame could ever file it', () => {
+  const live = renderLive({
+    rows: [row({ ctxState: 'absent', ctxPct: null })],
+    health: health({ sessions: 2, covered: 1, unfilable: 1 }),
+  });
+  assert.match(live, /no frame will ever produce one/, 'says the telemetry is not late, it is not coming');
+  assert.match(live, /Installing again will not change that/, 'and says the obvious next move is not one');
+});
+
+// The mixed case, which is where getting `unfilable` wrong actually costs something: one
+// session a frame away, one that will never be filed. Both sentences have to be there, or
+// whichever session is left out is the one whose problem goes unexplained.
+test('tells the two uncovered kinds apart when the fleet has both', () => {
+  const live = renderLive({
+    rows: [row({ ctxState: 'absent', ctxPct: null }), row({ sessionId: 's2', ctxState: 'absent', ctxPct: null })],
+    health: health({ sessions: 3, covered: 1, unfilable: 1 }),
+  });
+  assert.match(live, /1 of them will never be filed/, 'the permanent one is named, and counted');
+  assert.match(live, /For the others, run `tarmac install`/, 'and the fixable one still gets its advice');
+});
+
 // ── weight: busy first, and visible as such from across a room ────────────────────────
 // The sort is already right. What was missing is that a busy row and an idle one weighed
 // the same on screen, and that the difference between them was a colour — which is no
