@@ -24,13 +24,14 @@ atlas              idle   — fresh  8h !   Opus 5   high    $0.00   8h
 4 sessions · 2 busy · $109.35
 ```
 
-One command, no config, no account. Sessions, busy/idle and uptime come straight from
-`claude agents --json` with nothing installed at all; the context, model, effort and cost
-columns arrive once you chain the status line — one line of `settings.json`, below.
+That is the table with the status line chained. Without it — nothing installed at all — the
+same command still lists every session, its state and its uptime, straight from
+`claude agents --json`; the context column reads `— absent`, model, effort and cost fall to
+`—`, and the line under the table counts how many sessions are covered.
 
 Node ≥ 20. **Zero runtime dependencies** — no framework, no bundler, nothing to audit.
 
-[Manual](docs/MANUAL.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/adrrr/tarmac/issues) · [Feasibility spike](REPORT.md)
+[Manual](docs/MANUAL.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/adrrr/tarmac/issues)
 
 ## Install
 
@@ -39,12 +40,12 @@ npx @adrrr/tarmac              # one-shot fleet table
 npx @adrrr/tarmac --watch      # the same table, redrawn every 5s until ^C
 npx @adrrr/tarmac serve        # the same fleet in the browser
 npx @adrrr/tarmac install      # chain the status line: unlocks ctx, model, effort and cost
-npx @adrrr/tarmac uninstall    # put your status line back, exactly
+npx @adrrr/tarmac uninstall    # hand your status line back
 ```
 
-`install` changes one line of `~/.claude/settings.json`, and never on your say-so alone. It
-prints the whole plan first — including the exact command that undoes it — and waits for a
-**typed word** (`y` is not an answer; scripts pass `--yes`, deliberately):
+`install` changes the `statusLine` key of `~/.claude/settings.json`, and never on your
+say-so alone. It prints the whole plan first — including the exact command that undoes it —
+and waits for a **typed word** (`y` is not an answer; scripts pass `--yes`, deliberately):
 
 ```
 tarmac install — your home
@@ -59,34 +60,38 @@ tarmac install — your home
 Type "install" to proceed, anything else to abort:
 ```
 
-Your status line is **wrapped, not replaced** — the display stays byte-identical, and
-`uninstall` restores the original exactly, naming which of its four restore modes ran. The
-only things that land under `~/.claude/` are that wrapper and the `backup.json` that undoes
-it, neither of which changes at runtime: the snapshots the wrapper writes at every frame go
-to `$XDG_STATE_HOME/tarmac/snapshots` (`~/.local/state/tarmac/snapshots` by default),
-because `~/.claude` is a directory people commit. Coming from 0.1.x, `install` clears the
-payloads an older version left in there, says how many and from where, and — when that
-directory is a git repository — prints the `.gitignore` line worth adding.
+A status line you already had is **wrapped, not replaced**: its display stays byte-identical,
+and `uninstall` names which of its four restore modes ran — `bytes`, the usual one, puts the
+original file back exactly. Note that the write re-serialises `settings.json`, so a
+version-controlled one shows a formatting diff, not a one-line diff.
+
+The only things that land under `~/.claude/` are that wrapper and the `backup.json` that
+undoes it, neither of which changes at runtime: the snapshots the wrapper writes at every
+frame go to `$XDG_STATE_HOME/tarmac/snapshots` (`~/.local/state/tarmac/snapshots` by
+default), because `~/.claude` is a directory people commit. Coming from 0.1.x, `install`
+clears the payloads an older version left in there, says how many and from where, and — when
+`~/.claude` is a git repository — prints the `.gitignore` line worth adding.
 
 ## The dashboard
 
 `tarmac serve` puts the same fleet in the browser — every session a row, ages that keep
-climbing, and a banner the moment a refresh fails instead of a table quietly going stale:
+climbing, and a banner the moment a refresh fails instead of a table quietly going stale. It
+prints the settings it resolved, then the URL it got:
 
 ```
 tarmac serving http://127.0.0.1:4477
 ```
 
 It binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
-marks cross-site — your cwd paths and costs never leave the machine. A busy **default** port
-walks up to the next free one and says so; a port you named with `--port` refuses instead,
-because that one you chose.
+does not mark same-origin — your cwd paths and costs never leave the machine. A busy
+**default** port walks up to the next free one and says so; a port you chose yourself — flag,
+environment or config file — refuses instead, because you chose it.
 
 ## Why it does not break
 
-Every other way to watch a Claude Code fleet reads something Claude Code never promised
-would stay put: transcript files, terminal panes, undocumented paths. Those tools break on
-an update, and — worse — they break *quietly*, reporting a calm empty fleet.
+The usual ways to watch a Claude Code fleet read something Claude Code never promised would
+stay put: transcript files, terminal panes, undocumented paths. Those break on an update,
+and — worse — they break *quietly*, reporting a calm empty fleet.
 
 tarmac reads two things instead:
 
@@ -129,7 +134,7 @@ deliberately not configurable, and all of it works with no configuration at all.
 |---|---|---|---|---|
 | freshness threshold | `--stale-after 90s` \| `15m` \| `2h` | `TARMAC_STALE_AFTER` | `"staleAfterMs": 90000` | `10m` |
 | port | `--port 8080` | `TARMAC_PORT` | `"port": 8080` | `4477` |
-| snapshots dir (read side) | `--snapshots-dir DIR` | `TARMAC_SNAPSHOTS_DIR` | `"snapshotsDir": "DIR"` | the path frozen into the installed wrapper — failing that, `$XDG_STATE_HOME/tarmac/snapshots`, else `<home>/.local/state/tarmac/snapshots` |
+| snapshots dir (read side) | `--snapshots-dir DIR` | `TARMAC_SNAPSHOTS_DIR` | `"snapshotsDir": "DIR"` | the path frozen into the installed wrapper — failing that `$XDG_STATE_HOME/tarmac/snapshots`, when it is absolute *and* the target home is your own, else `<home>/.local/state/tarmac/snapshots` |
 
 **Flag beats environment beats config file beats default**, settled per setting; `serve`
 opens by printing each effective value and where it came from. Nothing is silently dropped
