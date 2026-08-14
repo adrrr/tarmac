@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PRUNE_MARKER, renderWrapper, SNAPSHOT_TTL_MIN } from '../src/wrapper.ts';
 import { wideningLocale } from './locales.ts';
+import { settle, waitFor } from './sweep.ts';
 
 // The wrapper was developed on macOS, where /bin/sh is bash wearing a POSIX hat and
 // forgives a great deal. On Debian and Ubuntu — the primary target of a public npx tool —
@@ -103,7 +104,7 @@ for (const shell of SHELLS) {
   // One test per shell, exercising the constructs where implementations actually diverge:
   // `${var#pattern}` with a quoted pattern, `${var%%pattern}`, `[!…]` bracket negation,
   // `${#var}`, and `$(cat)` on a payload with embedded quotes.
-  test(`the wrapper behaves identically under ${shell.label}`, () => {
+  test(`the wrapper behaves identically under ${shell.label}`, async () => {
     const ok = runUnder(shell, payload(), 'echo CHAINED');
     assert.match(ok.stdout, /CHAINED/, 'the chained display still renders');
     assert.equal(ok.status, 0);
@@ -177,12 +178,21 @@ for (const shell of SHELLS) {
     // `-exec … +` under whichever implementation this machine ships — GNU find on Ubuntu,
     // BSD find on macOS, busybox find on Alpine are three different programs, and the two
     // the CI matrix has are exercised right here.
+    //
+    // …and `cmd &` under this shell, which is the other half of what is asked here since #8:
+    // the sweep is detached, so what this shell has to get right is starting a child that
+    // outlives it and returning without it. That is why the wait below is a wait and not a
+    // read: a directory listed the instant the shell exits says nothing about either.
     const swept = runUnder(shell, payload(), 'echo CHAINED', {
       [`${DEAD}.json`]: SNAPSHOT_TTL_MIN + 60,
       [`${QUIET}.json`]: SNAPSHOT_TTL_MIN - 60,
     });
     assert.match(swept.stdout, /CHAINED/, 'the display renders on a sweeping frame too');
     assert.equal(swept.status, 0);
+    await waitFor(
+      () => !fs.existsSync(path.join(swept.snapDir, `${DEAD}.json`)),
+      `the sweep ${shell.label} detached to remove the dead session`,
+    );
     assert.deepEqual(
       listSnapshots(swept.snapDir),
       [`${QUIET}.json`, `${SID}.json`].sort(),
@@ -202,6 +212,7 @@ for (const shell of SHELLS) {
       try {
         assert.match(blocked.stdout, /CHAINED/, 'the display renders even when nothing can be written');
         assert.equal(blocked.status, 0, 'and the status line still exits 0');
+        await settle();
         assert.deepEqual(listSnapshots(blocked.snapDir), [`${DEAD}.json`], 'a dir we cannot stamp is not swept');
 
         // …and it does all of that SILENTLY. Redirections are applied left to right, so
