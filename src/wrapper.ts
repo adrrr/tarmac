@@ -69,14 +69,15 @@ export const SNAPSHOT_TTL_MIN = 48 * 60;
  * because two of the three consumers are shell; the third derives its regex from it.
  *
  * It is the canonical UUID, 8-4-4-4-12 hex: every fixture in this repo, every file in the
- * live fleet's snapshot directory, and every transcript Claude Code names after a session.
- * The statusline payload documents `session_id` only as a "unique session identifier", so
- * that is an observation and not a promise — and the direction of the bet is deliberate. An
- * id that is not a UUID is refused at write time, which surfaces as a live session with
+ * snapshot directory of the fleet this was built for, every transcript file observed. The
+ * statusline payload documents `session_id` only as a "unique session identifier", so that
+ * is an observation and not a promise — and the direction of the bet is deliberate. An id
+ * that is not a UUID is refused at write time, which surfaces as a live session with
  * `absent` telemetry: a state `fleet.ts` already names and shows. The other bet — file
  * whatever arrives, and widen the deleters to match — would put every stem of 8..64
- * characters of `[0-9A-Za-z-]` within reach of `rm`, in a directory the docs invite you to
- * share with another statusline and that people keep in git. A missing row is recoverable.
+ * characters of `[0-9A-Za-z-]` within reach of `rm`, in a directory whose location comes
+ * from `XDG_STATE_HOME` and can therefore be `~/.claude` itself, where the legacy purge
+ * already deletes and where people keep a git repository. A missing row is recoverable.
  *
  * Bracket expressions, not `?`: `?` matches a leading dot (fnmatch without FNM_PERIOD), so
  * the old glob reached dotfiles the writer's own charset forbids it to produce (#7).
