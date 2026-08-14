@@ -24,7 +24,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   could never have produced** was unlinked by a status line — the same reach the legacy purge
   had inside `~/.claude`. Both were one divergent constant, and there is now one: a session id
   is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal in either case, read by the writer, by
-  the sweep, by the purge and by the reaper from `SID_GLOB`.
+  the sweep, by the purge and by the reaper from `SID_GLOB`. Written as an enumeration of the
+  sixteen digits rather than as `[0-9a-fA-F]`, because a bracket RANGE is collated by the
+  locale: under `en_US.UTF-8`, bash, ksh and BSD `find` all read `a-f` as reaching `é` and
+  fullwidth `ａ`, while the regex derived from the same string is ASCII code points — one
+  constant meaning two sets depending on the `LANG` of whoever's terminal drew the frame.
 
   The alignment is towards the **writer**, not the deleters. Widening a deleter to the old
   charset would have put every stem of eight characters or more within reach of `rm`, in a
