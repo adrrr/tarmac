@@ -8,6 +8,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 > Issue references below (`#16`, `#19`, `#20`, …) point at the pre-V1 development
 > history, which is not part of this repository's tracker.
 
+## [Unreleased]
+
+### Fixed
+
+- `uninstall` now removes the wrapper-owned `.tarmac-last-prune` housekeeping marker while
+  preserving every snapshot file. A foreign `statusLine` keeps both the wrapper and marker,
+  and settings restoration completes before marker cleanup can fail. (#9)
+
 ## [0.2.0] - 2026-08-14
 
 ### Added
