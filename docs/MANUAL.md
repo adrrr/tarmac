@@ -15,6 +15,7 @@ confident `0`.
 | the key is there but null | `— no turn yet` (a session that has not taken a turn) |
 | the key is gone or retyped | `— schema drift`, and a warning if it happened to every session |
 | no snapshot for a live session | `— not chained` |
+| a live session whose id it will never file under | `— not chained`, and a count saying how many — never "run tarmac install" |
 | a reading older than the threshold | the value, **dated** — a stale number is still true, of an earlier moment |
 | a status string it does not know | that string, never "idle" |
 | a snapshot directory it could not read | the errno, not "run tarmac install" |
