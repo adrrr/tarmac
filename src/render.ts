@@ -54,9 +54,11 @@ export function renderPlan(plan: Plan): string {
     if (plan.gitRepo !== null) rows.push(['git', gitHint(plan.gitRepo, clearing)]);
   } else {
     rows.push(['restore', `${plan.mode} — ${restoreMeaning(plan.mode)}`]);
-    // Snapshot payloads survive uninstall, but the wrapper's prune marker has no owner once
-    // the wrapper is gone. Name both facts so the plan matches the operation exactly.
-    rows.push(['snapshots', `${plan.snapshots}   (snapshot files stay; tarmac's prune marker is removed)`]);
+    // Foreign statusLine ownership keeps our wrapper in place, so its marker stays too. In
+    // every restoring mode the wrapper leaves and the marker has no owner. Name both facts
+    // so the plan matches the operation exactly.
+    const marker = plan.mode === 'foreign' ? "tarmac's prune marker stays" : "tarmac's prune marker is removed";
+    rows.push(['snapshots', `${plan.snapshots}   (snapshot files stay; ${marker})`]);
   }
   rows.push(['undo', plan.undo]);
 

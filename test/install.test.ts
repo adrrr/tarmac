@@ -256,6 +256,7 @@ test('the printed uninstall plan warns when it would restore nothing', () => {
   const text = renderPlan(planUninstall({ home }));
   assert.match(text, /foreign/);
   assert.match(text, /nothing/i, 'and what "foreign" means, in words');
+  assert.match(text, /prune marker stays/i, 'and that the wrapper still owns its marker');
 });
 
 test('the printed uninstall plan distinguishes snapshot files from the prune marker', () => {
@@ -969,7 +970,11 @@ test('a foreign statusLine keeps the wrapper and its prune marker', () => {
   assert.equal(fs.existsSync(marker), true);
 });
 
-test('a prune marker removal failure cannot prevent settings restoration', () => {
+test('a prune marker removal failure cannot prevent settings restoration', (t) => {
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: 0555 does not deny anything, the case cannot be built here');
+    return;
+  }
   const original = '{"model":"opus"}';
   const home = fakeHome(original);
   install({ home });
