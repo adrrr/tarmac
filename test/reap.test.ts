@@ -105,15 +105,28 @@ const FOREIGN_FIXTURES: Array<{ label: string; name: string; guards: string }> =
     name: `.tarmac-abcdefgh.important-backup.tmp`,
     guards: '`\\d+` — a pid is digits',
   },
+  // The sid half of the matcher, one fixture per weakening — and since #7 the sid is a rule
+  // of one fixed length rather than a range, so the two fixtures that used to guard "the
+  // bounds of {8,64}" collapse into one. `abc` is hex throughout: it survives only because
+  // its LENGTH is wrong, which is what a sid widened to `[0-9a-fA-F-]+` would stop noticing.
   {
-    label: 'a sid shorter than the wrapper would ever write',
+    label: 'a sid of the right characters and the wrong length',
     name: `.tarmac-abc.7.tmp`,
-    guards: 'the lower bound of {8,64}',
+    guards: 'the fixed length of the sid rule',
+  },
+  // …and the reaper had a sid set of its OWN before #7 — 8..64 of `[0-9A-Za-z-]`, hand-copied
+  // from a rule the wrapper has since narrowed. Wider than the writer is the same divergence
+  // the snapshot sweep was carrying, one file down: a name we can no longer produce, unlinked
+  // because it resembles one we used to.
+  {
+    label: 'a sid the wrapper accepted before #7 and can no longer write',
+    name: `.tarmac-abcdefgh.7.tmp`,
+    guards: 'the sid rule the wrapper enforces before it writes anything',
   },
   {
-    label: 'a sid longer than the wrapper would ever write',
-    name: `.tarmac-${'a'.repeat(80)}.7.tmp`,
-    guards: 'the upper bound of {8,64}',
+    label: 'a UUID-shaped sid carrying a character that is not hex',
+    name: `.tarmac-ea6a607g-42e0-4773-af4d-ae5f5938d819.7.tmp`,
+    guards: 'the hex classes of the sid rule',
   },
 ];
 
@@ -167,12 +180,11 @@ test('the wrapper writes temp files under the very prefix the reaper matches', (
 // wrapper LEAVES BEHIND and what the reaper TAKES AWAY, so this one runs the real script
 // and reproduces the crash it cleans up after: a `mv` that reports success without moving
 // is the terminal dying in the gap between the write and the rename.
-// Run at both ends of the sid contract and in the middle: a reaper narrowed to the shape of
-// a UUID would still pass on a UUID, and go on ignoring every orphan of a shorter session.
+// Run at both spellings the sid contract has: since #7 that contract IS the UUID, and hex
+// has two of them. What the wrapper leaves behind is what the reaper takes away, in either.
 for (const { what, sid } of [
-  { what: 'the shortest sid', sid: 'abcdefgh' },
   { what: 'a UUID', sid: SID },
-  { what: 'the longest sid', sid: 'a'.repeat(64) },
+  { what: 'the same id upper-cased', sid: SID.toUpperCase() },
 ])
 test(`the reaper removes the very file an interrupted wrapper leaves behind (${what})`, () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-accord-'));

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PRUNE_MARKER, renderWrapper, SNAPSHOT_TTL_MIN } from '../src/wrapper.ts';
+import { wideningLocale } from './locales.ts';
 
 // The wrapper was developed on macOS, where /bin/sh is bash wearing a POSIX hat and
 // forgives a great deal. On Debian and Ubuntu — the primary target of a public npx tool —
@@ -23,6 +24,11 @@ const CANDIDATES: Shell[] = [
   { label: '/bin/sh', cmd: '/bin/sh', prefix: [] }, // whatever this machine calls sh
   { label: 'ksh', cmd: 'ksh', prefix: [] }, // a third, independent POSIX implementation
   { label: 'busybox sh', cmd: 'busybox', prefix: ['sh'] }, // /bin/sh on Alpine
+  // Not a fourth POSIX implementation for its own sake: bash IS `/bin/sh` on macOS and on the
+  // RHEL family, and it is the implementation whose bracket RANGES widen under a UTF-8 locale.
+  // On Debian and Ubuntu `/bin/sh` is dash, so without naming bash the collation case below
+  // cannot be built there at all — the CI leg would pass by being unable to ask.
+  { label: 'bash', cmd: 'bash', prefix: [] },
 ];
 
 function runsHere(shell: Shell): boolean {
@@ -31,6 +37,7 @@ function runsHere(shell: Shell): boolean {
 }
 
 const SHELLS = CANDIDATES.filter(runsHere);
+
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 const DEAD = 'ffffffff-1111-2222-3333-444444444444';
 const QUIET = 'ffffffff-5555-6666-7777-888888888888';
@@ -53,6 +60,7 @@ function runUnder(
   chain: string | null,
   seed?: Record<string, number>,
   readOnlyDir = false,
+  env?: Record<string, string>,
 ): RunResult {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-posix-'));
   const snapDir = path.join(root, 'snapshots');
@@ -67,7 +75,11 @@ function runUnder(
   }
   const file = path.join(root, 'statusline.sh');
   fs.writeFileSync(file, renderWrapper({ snapshotDir: snapDir, chainCommand: chain }));
-  const r = spawnSync(shell.cmd, [...shell.prefix, file], { input, encoding: 'utf8' });
+  const r = spawnSync(shell.cmd, [...shell.prefix, file], {
+    input,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
   assert.equal(r.error, undefined, `${shell.label} failed to run the wrapper`);
   return { stdout: r.stdout, stderr: r.stderr, status: r.status, snapDir };
 }
@@ -84,6 +96,9 @@ const payload = (over: Record<string, unknown> = {}): string =>
 const listSnapshots = (dir: string): string[] =>
   fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n !== PRUNE_MARKER).sort() : [];
 
+/** Shells for which the collation case above was really built — see the guard at the end. */
+const exercised = new Set<string>();
+
 for (const shell of SHELLS) {
   // One test per shell, exercising the constructs where implementations actually diverge:
   // `${var#pattern}` with a quoted pattern, `${var%%pattern}`, `[!…]` bracket negation,
@@ -99,17 +114,45 @@ for (const shell of SHELLS) {
       'byte-for-byte the payload it was handed',
     );
 
-    // `[!0-9a-zA-Z-]` — POSIX bracket negation. bash and ksh also read `[^…]` as a negation;
-    // dash does NOT, it reads `^` as an ordinary member of the set. Writing `[^…]` here is
-    // therefore a portability bug, but note which way it fails: under dash the set becomes
-    // {^, 0-9, a-zA-Z, -} and `*[set]*` means "contains one of these", so a valid uuid
-    // matches and is nulled too. The filter gets strictly MORE restrictive, never leakier —
-    // no traversal, just a wrapper that silently stops filing anything. The assertion above
-    // (the happy path) is what catches it; this one still passes. See `git log` for the
-    // correction to b958fa9, which claimed the opposite.
+    // The sid rule is a positional bracket pattern, matched by `case`, and the happy path
+    // above only proves this shell lets a UUID THROUGH. What each shell has to be asked
+    // separately is what it keeps OUT, and the two refusals below are not the same question:
+    //   • `../../evil` is refused on shape, which any implementation gets right;
+    //   • `ea6a607g-…` has the exact shape of a session id and one character that is not a
+    //     hex digit, so it is refused only if this shell reads the CHARACTER SET the same way
+    //     `find` and the TypeScript do. A shell that read it loosely would file the snapshot
+    //     and no deleter in this repo could ever take it away again — #7, one shell at a time.
     const traversal = runUnder(shell, payload({ session_id: '../../evil' }), 'echo CHAINED');
     assert.match(traversal.stdout, /CHAINED/);
     assert.deepEqual(listSnapshots(traversal.snapDir), [], 'a traversing id writes nothing');
+
+    const notHex = runUnder(shell, payload({ session_id: 'ea6a607g-42e0-4773-af4d-ae5f5938d819' }), 'echo CHAINED');
+    assert.match(notHex.stdout, /CHAINED/);
+    assert.deepEqual(listSnapshots(notHex.snapDir), [], 'a sid shaped right but not hex writes nothing');
+
+    // …and `g` is outside `a-f` in every collation there is, so the fixture above cannot see
+    // the one way this set ever actually widened. A bracket RANGE is collated by the locale:
+    // spelled `[0-9a-fA-F]`, `a-f` reaches `é` and fullwidth `ａ` under `en_US.UTF-8` — in
+    // bash and in ksh, though NOT in dash, which is why this has to be asked of each shell by
+    // name rather than of `#!/bin/sh` on whichever machine happens to run the suite. The regex
+    // derived from the same string is ASCII code points, so a widening here is one constant
+    // meaning two sets, chosen by the `LANG` of whoever's terminal drew the frame. The rule is
+    // an enumeration of the sixteen digits for exactly this reason, and this is the test that
+    // holds it there.
+    const wide = wideningLocale(shell.cmd, shell.prefix);
+    if (wide) {
+      exercised.add(shell.label);
+      const nonAscii = runUnder(
+        shell,
+        payload({ session_id: 'éa6a607c-42e0-4773-af4d-ae5f5938d819' }),
+        'echo CHAINED',
+        undefined,
+        false,
+        { LC_ALL: wide },
+      );
+      assert.match(nonAscii.stdout, /CHAINED/);
+      assert.deepEqual(listSnapshots(nonAscii.snapDir), [], `a non-ASCII sid writes nothing under ${wide}`);
+    }
 
     // Two ids: the `case` fallthrough and the `[ … ] && sid=''` guard.
     const ambiguous = runUnder(
@@ -182,6 +225,26 @@ for (const shell of SHELLS) {
 // the honest report of that. But a skip still exits 0 — so on the paths where the claim has
 // to HOLD rather than merely be attempted (CI, and `prepublishOnly` before a release),
 // TARMAC_REQUIRE_DASH turns the gap into a failure instead of a line that scrolls past.
+// The same shape as the dash guard below, for the same reason, one property further out.
+// The collation assertion inside each shell's test is conditional — it can only run where a
+// locale exists under which that shell really does widen `a-f`. A condition that is silently
+// false is a test that silently is not one, and this one was: written against a NAME list
+// with `C.UTF-8` in it, it resolved to a locale that collates by code point, ran, and passed
+// with the range spelling fully restored. The list is gone; this makes its absence audible.
+test('the collation case was built for at least one shell', (t) => {
+  if (exercised.size > 0) {
+    assert.ok(true);
+    return;
+  }
+  // A skip, not a failure, and the difference from the dash guard below is real: dash is one
+  // `apt install` away, whereas a locale whose collation reaches past ASCII is a property of
+  // the images this suite runs on — a minimal container may legitimately carry only `C` and
+  // `C.UTF-8`, both of which collate by code point. Failing there would be blaming the runner
+  // for a case it cannot build. The regression this protects against is NOT left to a skip:
+  // `test/wrapper.test.ts` asserts, on every machine, that the rule contains no range at all.
+  t.skip('no installed locale makes any shell here read `a-f` past ASCII: the case cannot be built on this machine');
+});
+
 test('dash — the /bin/sh of Debian and Ubuntu — was exercised', (t) => {
   if (!SHELLS.some((s) => s.label === 'dash')) {
     const why = 'dash is not installed here: POSIX conformance was NOT proven on this machine';

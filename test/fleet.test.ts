@@ -109,6 +109,37 @@ test('summarises coverage so a blind sensor is visible, not silent', () => {
   assert.equal(health.drift, 1);
 });
 
+// Since #7 the wrapper files a snapshot only for a session id shaped like the UUID Claude
+// Code emits, so "no telemetry" now has two causes that look identical on the row and are
+// opposite in what the user should do: a frame not yet drawn, which one frame fixes, and an
+// id this tool will never file, which no install and no frame will ever fix. Counting them
+// apart is what stops `list` from printing remediation that cannot work.
+test('counts the live sessions whose id it can never file a snapshot for', () => {
+  const sessions = [
+    session({ sessionId: 'ea6a607c-42e0-4773-af4d-ae5f5938d819' }),
+    session({ sessionId: 'test-session-abc' }),
+    session({ sessionId: null }),
+  ];
+  const { health } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  assert.equal(health.covered, 0, 'none of them has telemetry');
+  assert.equal(health.unfilable, 1, 'and exactly one of them never will');
+});
+
+// …and it counts only the ones that are actually BLIND. A session can be unfilable and
+// covered at once: the residue `docs/MANUAL.md` documents — a snapshot filed by a pre-upgrade
+// wrapper under a non-UUID name — is still read, because the reader keys on the `session_id`
+// inside the file, not on the filename. Counted without that clause, such a session inflates
+// `unfilable` past the number of blind ones, and the renderers — which read the two as
+// "how many of the blind will never be filed" — then explain away a DIFFERENT session's
+// missing telemetry and drop the `tarmac install` advice from the one session it was for.
+test('does not count a session whose legacy snapshot is still being read', () => {
+  const sessions = [session({ sessionId: 'ea6a607c-42e0-4773-af4d-ae5f5938d819' }), session({ sessionId: 'test-session-abc' })];
+  const snapshots = new Map([['test-session-abc', telemetry({ sessionId: 'test-session-abc', ctxState: 'ok' })]]);
+  const { health } = buildFleet({ sessions, snapshots, now: NOW });
+  assert.equal(health.covered, 1, 'the legacy file still reads');
+  assert.equal(health.unfilable, 0, 'so nothing here is blind for want of a filable id');
+});
+
 test('flags total drift as a schema break, not a per-session hiccup', () => {
   const sessions = [session({ sessionId: 'a' }), session({ sessionId: 'b' })];
   const snapshots = new Map([

@@ -368,11 +368,18 @@ function readLegacyDir(p: TarmacPaths): { ours: string[]; kept: number } | null 
 /**
  * The three names the wrapper writes into its snapshot directory, and nothing else.
  *
- * `SNAPSHOT_NAME` is the PRUNER's shape (8-4-4-4-12), deliberately narrower than the ids the
- * writer accepts (`[0-9a-zA-Z-]{8,64}` — it refuses to guess what an id may look like). One
- * choice, made once, and it is what produces the residue this branch states: a session id
- * wider than a UUID is written here and swept by neither the pruner nor this. Widening it
- * would mean deleting, from inside a git repository, by a shape rather than by a signature.
+ * `SNAPSHOT_NAME` is the writer's own rule now, not a second reading of it (#7): this purge
+ * deletes from inside `~/.claude`, a directory people version-control, and a `<sid>.json` is
+ * recognised by SHAPE alone — so the shape had better be one the wrapper can actually
+ * produce, or this deletes by resemblance in the worst place to be wrong about it.
+ *
+ * `TEMP_PREFIX` is deliberately the whole test for a temp file, and deliberately looser than
+ * `reap.ts`'s `<prefix><sid>.<pid>.tmp`. The two answer different questions. `reap` runs on
+ * every `serve` tick, in a directory a reader may have been pointed at and another program
+ * may own, so it takes only the exact name this wrapper emits. This runs once, at install,
+ * behind `tarmacWasInstalledHere` — provenance already proven — over a directory whose whole
+ * purpose was to be ours, and its job is to leave nothing behind so the directory itself can
+ * go. There, a name only tarmac ever writes is signature enough.
  */
 const isPayloadName = (name: string): boolean =>
   SNAPSHOT_NAME.test(name) || name.startsWith(TEMP_PREFIX) || name === PRUNE_MARKER;

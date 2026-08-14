@@ -31,6 +31,7 @@ export const row = (over: Partial<FleetRow> = {}): FleetRow => ({
 export const health = (over: Partial<FleetHealth> = {}): FleetHealth => ({
   sessions: 1,
   covered: 1,
+  unfilable: 0,
   drift: 0,
   stale: 0,
   discovered: 1,

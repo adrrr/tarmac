@@ -15,6 +15,7 @@ confident `0`.
 | the key is there but null | `— no turn yet` (a session that has not taken a turn) |
 | the key is gone or retyped | `— schema drift`, and a warning if it happened to every session |
 | no snapshot for a live session | `— not chained` |
+| a live session whose id it will never file under | `— not chained`, and a count saying how many — never "run tarmac install" |
 | a reading older than the threshold | the value, **dated** — a stale number is still true, of an earlier moment |
 | a status string it does not know | that string, never "idle" |
 | a snapshot directory it could not read | the errno, not "run tarmac install" |
@@ -80,12 +81,29 @@ every night grows one dead file per session per night, forever. The sweep is amo
 because it sits in the render path of your status line: a frame costs one `find` on a single
 marker file (`.tarmac-last-prune`), and the directory itself is swept at most once an hour.
 
-It deletes by the same rule as the temp files: **only what it wrote**. The sweep matches the
-shape of a session id — `????????-????-????-????-????????????.json`, the UUID Claude Code
-emits — at the top level of the snapshots directory `install` made for it, and nothing else: not a subdirectory, not a directory or symlink wearing that name, and
-not your `settings.json` or `fleet.json` sitting next to it. (`--snapshots-dir` is a
-*reader's* lens for `list` and `serve` — pointing those at a directory another statusline owns
-deletes nothing, because no reader deletes anything.)
+It deletes by the same rule as the temp files: **only what it wrote** — and that is one rule,
+not two. A session id is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal; the wrapper
+refuses to file a payload whose `session_id` is anything else, and the sweep unlinks exactly
+that shape at the top level of the snapshots directory `install` made for it, and nothing
+else: not a subdirectory, not a directory or symlink wearing that name, not a dotfile wearing
+it either, and not your `settings.json` or `fleet.json` sitting next to it. (`--snapshots-dir`
+is a *reader's* lens for `list` and `serve` — pointing those at a directory another statusline
+owns deletes nothing, because no reader deletes anything.)
+
+A session whose id is not a UUID therefore gets no snapshot at all, and `list` shows it as a
+live session with no reading — and says so in those words, rather than telling you to run
+`tarmac install`: for that session the install is already right, the frame is already drawn,
+and the wrapper is declining on purpose. That is the deliberate half of the trade; the
+alternative is a sweep whose reach is every filename of eight characters or more.
+
+Two loose ends, if you ran a version before this one. A snapshot already on disk under a
+non-UUID name is still *read* — the reader takes any `*.json` and keys on the `session_id`
+inside it — but no sweep will ever remove it. And a temp file left by an interrupted frame of
+the older wrapper, `.tarmac-<non-UUID sid>.<pid>.tmp`, is no longer collected at all: the
+reaper now matches only names the current writer can produce, so that is coverage *lost* over
+the existing stock, not merely a sweep that skips it. Neither is worth a migration — the shape
+has never been observed, and these are files of installs that were never published — but both
+are yours to delete by hand. Nothing will write another of either.
 
 One consequence worth knowing: a session that is alive but has drawn no status line for 48h
 loses its snapshot too, and `list` then shows it as a session with no reading rather than a
@@ -131,6 +149,13 @@ every session diffs forever (#20). So:
 If you read the snapshots with something other than tarmac, this is a **breaking change of
 path**: `tarmac list --json` reports the effective directory as `health.snapshotsDir`, and
 `tarmac serve` prints it on startup.
+
+`health.unfilable` is the other field worth reading from that JSON: the number of live
+sessions whose id is not the UUID the wrapper files under, counted among the ones reporting
+no context — never among the covered, because a snapshot an older wrapper filed under a
+non-UUID name is still read. It is what separates "no frame drawn yet", which `tarmac
+install` and one frame fix, from "no frame will ever produce one", which nothing fixes. Both
+renderers say which of the two they are looking at rather than defaulting to install advice.
 
 ## Staying open
 
