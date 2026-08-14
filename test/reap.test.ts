@@ -105,20 +105,19 @@ const FOREIGN_FIXTURES: Array<{ label: string; name: string; guards: string }> =
     name: `.tarmac-abcdefgh.important-backup.tmp`,
     guards: '`\\d+` — a pid is digits',
   },
+  // The sid half of the matcher, one fixture per weakening — and since #7 the sid is a rule
+  // of one fixed length rather than a range, so the two fixtures that used to guard "the
+  // bounds of {8,64}" collapse into one. `abc` is hex throughout: it survives only because
+  // its LENGTH is wrong, which is what a sid widened to `[0-9a-fA-F-]+` would stop noticing.
   {
-    label: 'a sid shorter than the wrapper would ever write',
+    label: 'a sid of the right characters and the wrong length',
     name: `.tarmac-abc.7.tmp`,
-    guards: 'the length of the sid rule',
+    guards: 'the fixed length of the sid rule',
   },
-  {
-    label: 'a sid longer than the wrapper would ever write',
-    name: `.tarmac-${'a'.repeat(80)}.7.tmp`,
-    guards: 'the length of the sid rule',
-  },
-  // #7: the reaper had its own sid set — 8..64 of `[0-9A-Za-z-]`, hand-copied from a rule the
-  // wrapper has since narrowed. Wider than the writer is the same divergence the snapshot
-  // sweep was carrying, one file down: a name we can no longer produce, unlinked because it
-  // resembles one we used to.
+  // …and the reaper had a sid set of its OWN before #7 — 8..64 of `[0-9A-Za-z-]`, hand-copied
+  // from a rule the wrapper has since narrowed. Wider than the writer is the same divergence
+  // the snapshot sweep was carrying, one file down: a name we can no longer produce, unlinked
+  // because it resembles one we used to.
   {
     label: 'a sid the wrapper accepted before #7 and can no longer write',
     name: `.tarmac-abcdefgh.7.tmp`,
