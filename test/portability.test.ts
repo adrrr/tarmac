@@ -24,6 +24,11 @@ const CANDIDATES: Shell[] = [
   { label: '/bin/sh', cmd: '/bin/sh', prefix: [] }, // whatever this machine calls sh
   { label: 'ksh', cmd: 'ksh', prefix: [] }, // a third, independent POSIX implementation
   { label: 'busybox sh', cmd: 'busybox', prefix: ['sh'] }, // /bin/sh on Alpine
+  // Not a fourth POSIX implementation for its own sake: bash IS `/bin/sh` on macOS and on the
+  // RHEL family, and it is the implementation whose bracket RANGES widen under a UTF-8 locale.
+  // On Debian and Ubuntu `/bin/sh` is dash, so without naming bash the collation case below
+  // cannot be built there at all — the CI leg would pass by being unable to ask.
+  { label: 'bash', cmd: 'bash', prefix: [] },
 ];
 
 function runsHere(shell: Shell): boolean {
@@ -231,10 +236,13 @@ test('the collation case was built for at least one shell', (t) => {
     assert.ok(true);
     return;
   }
-  const why =
-    'no installed locale makes any shell here read `a-f` past ASCII: the enumeration was NOT proven on this machine';
-  if (process.env.TARMAC_REQUIRE_DASH) assert.fail(why);
-  t.skip(why);
+  // A skip, not a failure, and the difference from the dash guard below is real: dash is one
+  // `apt install` away, whereas a locale whose collation reaches past ASCII is a property of
+  // the images this suite runs on — a minimal container may legitimately carry only `C` and
+  // `C.UTF-8`, both of which collate by code point. Failing there would be blaming the runner
+  // for a case it cannot build. The regression this protects against is NOT left to a skip:
+  // `test/wrapper.test.ts` asserts, on every machine, that the rule contains no range at all.
+  t.skip('no installed locale makes any shell here read `a-f` past ASCII: the case cannot be built on this machine');
 });
 
 test('dash — the /bin/sh of Debian and Ubuntu — was exercised', (t) => {

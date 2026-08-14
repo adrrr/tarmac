@@ -8,6 +8,7 @@ import {
   PRUNE_EVERY_MIN,
   PRUNE_MARKER,
   renderWrapper,
+  SID_GLOB,
   SNAPSHOT_GLOB,
   SNAPSHOT_NAME,
   SNAPSHOT_TTL_MIN,
@@ -292,6 +293,30 @@ test('never removes a *.json that is not shaped like a session id', () => {
   runWrapper({ root, snapDir, input: payload() });
   assert.equal(fs.existsSync(deadFile(snapDir)), false, 'ours is still swept');
   assert.deepEqual(contents(snapDir), [...Object.keys(foreign), `${SID}.json`].sort());
+});
+
+// The collation property, asserted on the CONSTANT rather than on behaviour — because the
+// behavioural version of it (`test/portability.test.ts`) can only run where the machine has a
+// locale under which some shell reads `a-f` past ASCII, and a minimal image carrying only `C`
+// and `C.UTF-8` has none. There the behavioural test honestly skips, and a range spelling
+// would sail through. This one cannot skip: a range is a range on every machine there is, and
+// the rule may not contain one. The `-` between GROUPS is the separator of the UUID itself and
+// is checked to be exactly where the shape says.
+test('the sid rule enumerates its characters and never ranges over them', () => {
+  const groups = SID_GLOB.split('-');
+  assert.deepEqual(
+    groups.map((g) => g.length / '[0123456789abcdefABCDEF]'.length),
+    [8, 4, 4, 4, 12],
+    'the 8-4-4-4-12 shape, in whole character classes',
+  );
+  for (const group of groups) {
+    assert.equal(
+      group.replaceAll('[0123456789abcdefABCDEF]', ''),
+      '',
+      'every class is the sixteen digits spelled out — a range here is collated by the locale, ' +
+        'so the same string would mean one set to bash and another to the regex derived from it',
+    );
+  }
 });
 
 // `SNAPSHOT_GLOB` and `SNAPSHOT_NAME` are both built from `SID_GLOB`, which is why they can
