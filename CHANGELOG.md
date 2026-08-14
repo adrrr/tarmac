@@ -15,6 +15,36 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - `uninstall` now removes the wrapper-owned `.tarmac-last-prune` housekeeping marker while
   preserving every snapshot file. A foreign `statusLine` keeps both the wrapper and marker,
   and settings restoration completes before marker cleanup can fail. (#9)
+- **The wrapper now writes exactly what it can delete.** The writer took any `session_id` of
+  8 to 64 characters of `[0-9A-Za-z-]`; the amortized sweep, the legacy purge and the temp
+  reaper each matched a different, hand-copied set. That diverged in both directions at once.
+  A session id wider than a UUID was filed and then invisible to the sweep — one dead file per
+  session per night, forever, for that session, with nothing saying so. And the sweep's glob
+  was written with `?`, which matches a leading dot, so a `.bcdefgh-….json` **that the writer
+  could never have produced** was unlinked by a status line — the same reach the legacy purge
+  had inside `~/.claude`. Both were one divergent constant, and there is now one: a session id
+  is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal in either case, read by the writer, by
+  the sweep, by the purge and by the reaper from `SID_GLOB`. Written as an enumeration of the
+  sixteen digits rather than as `[0-9a-fA-F]`, because a bracket RANGE is collated by the
+  locale: under `en_US.UTF-8`, bash, ksh and BSD `find` all read `a-f` as reaching `é` and
+  fullwidth `ａ`, while the regex derived from the same string is ASCII code points — one
+  constant meaning two sets depending on the `LANG` of whoever's terminal drew the frame.
+
+  The alignment is towards the **writer**, not the deleters. Widening a deleter to the old
+  charset would have put every stem of eight characters or more within reach of `rm`, in a
+  directory the manual invites you to share with another statusline and that people keep in
+  git; a name is not provenance. The cost of the direction chosen is named: a session whose id
+  is not a UUID now gets no snapshot, and appears in `list` as a live session with `absent`
+  telemetry — a state the fleet join already has, on screen, rather than a leak on disk.
+  Two residues on any machine that ran an earlier version, stated rather than glossed: a
+  snapshot filed under a non-UUID name is still read but will never be swept, and a temp file
+  left under one, `.tarmac-<sid>.<pid>.tmp`, is no longer collected at all — coverage lost
+  over the existing stock, not just a sweep that skips it. Neither gets a migration: the shape
+  has never been observed (every fixture here, every transcript Claude Code names), and these
+  would be files of installs never published. And the cost is now *said*: `list` and `serve` no longer answer a session of that
+  kind with "run `tarmac install` and give them one TUI frame" — advice already taken, which
+  no frame can satisfy. They report how many session ids the wrapper will never file, which is
+  the difference between telemetry that is late and telemetry that is not coming. (#7)
 
 ## [0.2.0] - 2026-08-14
 

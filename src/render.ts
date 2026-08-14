@@ -168,7 +168,14 @@ export function renderTable({ rows, health }: Fleet): string {
   if (health.snapshotsError) warns.push(`! snapshots unavailable — ${health.snapshotsError}`);
   else if (health.schemaBroken) warns.push('! every snapshot drifted — the statusline payload schema moved');
   else if (health.covered < health.sessions)
-    warns.push(`! statusline chained on ${health.covered}/${health.sessions} sessions`);
+    warns.push(
+      // The count travels, for the same reason `unreadable` does one line up: without it
+      // this line reads as "run install", and for a session id the wrapper declines to file
+      // that is advice already taken which can never work.
+      health.unfilable > 0
+        ? `! statusline chained on ${health.covered}/${health.sessions} sessions — ${health.unfilable} session(s) with an id tarmac never files`
+        : `! statusline chained on ${health.covered}/${health.sessions} sessions`,
+    );
   if (health.stale > 0)
     warns.push(`! ${health.stale} reading(s) marked "!" are older than ${formatDuration(health.staleAfterMs)} (--stale-after)`);
   const skewed = rows.filter(ahead).length;
@@ -246,8 +253,13 @@ export function renderLive({ rows, health }: Fleet): string {
       `Every snapshot drifted — Claude Code's statusline schema has probably moved. Context readings are dead until the payload shape is re-checked.`,
     );
   } else if (health.covered < health.sessions) {
+    const blind = health.sessions - health.covered;
     warnings.push(
-      `Statusline chained on ${health.covered}/${health.sessions} sessions — the rest report no context. Run \`tarmac install\` and give them one TUI frame.`,
+      health.unfilable === 0
+        ? `Statusline chained on ${health.covered}/${health.sessions} sessions — the rest report no context. Run \`tarmac install\` and give them one TUI frame.`
+        : health.unfilable >= blind
+          ? `Statusline chained on ${health.covered}/${health.sessions} sessions — the rest carry a session id that is not the UUID tarmac files snapshots under, so no frame will ever produce one. Installing again will not change that.`
+          : `Statusline chained on ${health.covered}/${health.sessions} sessions — ${blind} report no context, and ${health.unfilable} of them will never be filed: the session id is not the UUID tarmac files snapshots under. For the others, run \`tarmac install\` and give them one TUI frame.`,
     );
   }
   if (health.unknownStatus > 0) {

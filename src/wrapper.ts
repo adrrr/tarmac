@@ -16,13 +16,16 @@
 // below is in the POSIX shell command language, and `test/portability.test.ts` runs this
 // script under every POSIX shell present on the machine to keep it that way.
 //
-// Two invariants, both tested by running the real script:
+// Three invariants, all tested by running the real script:
 //   RULE 1 — never break the display. Missing chain, failing chain, unwritable directory:
 //            the status line still renders and the exit code is still 0. Telemetry loses,
 //            display wins, always.
 //   RULE 2 — never write outside the snapshot directory. `session_id` is external input
 //            that becomes a filename, so anything that is not UUID-shaped is REFUSED, not
 //            sanitised: a guessed name would be read back later as if it were certain.
+//   RULE 3 — the sweep may remove exactly what the writer may write, no more and no less.
+//            One rule, `SID_GLOB`, read by both — because when those two sets are merely
+//            written to agree, they stop agreeing quietly, in both directions at once (#7).
 
 /**
  * Prefix of every temp file the wrapper writes, and the ONLY thing that proves tarmac
@@ -61,22 +64,56 @@ export const PRUNE_EVERY_MIN = 60;
 export const SNAPSHOT_TTL_MIN = 48 * 60;
 
 /**
- * The names the sweep below is allowed to remove: the 8-4-4-4-12 session id Claude Code
- * emits, which is every fixture here and every file the live fleet directory holds. NOT
- * `*.json` — that would take a `settings.json` or a `fleet.json` sitting next to them, data
- * this script never wrote, deleted from inside a status line.
+ * A session id — ONE rule, and the only one the writer below, the sweep below and the
+ * TypeScript that reads this directory are allowed to know. Written as a shell pattern
+ * because two of the three consumers are shell; the third derives its regex from it.
  *
- * The wrapper WRITES ids wider than this on purpose (it refuses to guess what an id may look
- * like), so such a file is written and never pruned. That is the only direction this trade
- * may fail in.
+ * It is the canonical UUID, 8-4-4-4-12 hex: every fixture in this repo, every file in the
+ * snapshot directory of the fleet this was built for, every transcript file observed. The
+ * statusline payload documents `session_id` only as a "unique session identifier", so that
+ * is an observation and not a promise — and the direction of the bet is deliberate. An id
+ * that is not a UUID is refused at write time, which surfaces as a live session with
+ * `absent` telemetry: a state `fleet.ts` already names and shows. The other bet — file
+ * whatever arrives, and widen the deleters to match — would put every stem of 8..64
+ * characters of `[0-9A-Za-z-]` within reach of `rm`, in a directory whose location comes
+ * from `XDG_STATE_HOME` and can therefore be `~/.claude` itself, where the legacy purge
+ * already deletes and where people keep a git repository. A missing row is recoverable.
+ *
+ * Bracket expressions, not `?`: `?` matches a leading dot (fnmatch without FNM_PERIOD), so
+ * the old glob reached dotfiles the writer's own charset forbids it to produce (#7).
+ *
+ * And an ENUMERATION, not the range `[0-9a-fA-F]`: a range is collated by the locale, which
+ * for a status line is whatever the TUI that spawned it carries. Under `en_US.UTF-8` — the
+ * ordinary case on macOS, where `/bin/sh` is bash — `a-f` reaches `é`, `ç` and fullwidth `ａ`
+ * in bash, in ksh and in BSD `find`, while the regex below is ASCII code points and always
+ * will be. That is one string meaning two different sets depending on `LANG`, which is this
+ * whole rule undone: a sid filed in a Terminal, refused under `LC_ALL=C`, and a file written
+ * by the first frame that no TypeScript consumer here can ever recognise. Sixteen digits
+ * spelled out roughly doubles the pattern — 356 characters to 772 — and costs nothing
+ * measurable per frame.
  */
-export const SNAPSHOT_GLOB = '????????-????-????-????-????????????.json';
+const HEX = '[0123456789abcdefABCDEF]';
+export const SID_GLOB = [8, 4, 4, 4, 12].map((n) => HEX.repeat(n)).join('-');
 
 /**
- * The same set, in Node — derived from the glob itself so the shell that deletes and the
- * TypeScript that deletes can never drift apart. `?` is any single character, `.` is literal.
+ * The names the sweep below is allowed to remove: the sid rule, and a `.json`. NOT `*.json` —
+ * that would take a `settings.json` or a `fleet.json` sitting next to them, data this script
+ * never wrote, deleted from inside a status line.
  */
-export const SNAPSHOT_NAME = new RegExp(`^${SNAPSHOT_GLOB.replace(/\./g, '\\.').replace(/\?/g, '.')}$`);
+export const SNAPSHOT_GLOB = `${SID_GLOB}.json`;
+
+/**
+ * The same rule, in Node — the pattern goes in RAW, because a bracket expression means the
+ * same set in both languages and `-` is literal in both. Only the extension is spelled twice,
+ * once per language, which is the one thing a translation could get wrong and so the one
+ * thing that is written out rather than derived.
+ *
+ * `SID_NAME` is the sid alone: `fleet.ts` asks it whether a LIVE session's id is one the
+ * wrapper would ever file, which is the difference between "no frame drawn yet" and "no frame
+ * will ever help" — two states that look identical on a row.
+ */
+export const SID_NAME = new RegExp(`^${SID_GLOB}$`);
+export const SNAPSHOT_NAME = new RegExp(`^${SID_GLOB}\\.json$`);
 
 export interface WrapperOptions {
   snapshotDir: string;
@@ -122,16 +159,15 @@ case "$payload" in
     esac
     ;;
 esac
-# refuse anything that is not UUID-shaped — this value becomes a filename
+# Refuse anything that is not a session id — this value becomes a filename, and it is the
+# same rule the sweep below deletes by: what this line declines to write, that one cannot
+# unlink, and the reverse. An empty sid matches nothing here, so it stays empty.
 case "$sid" in
-  ''|*[!0-9a-zA-Z-]*) sid='' ;;
+  ${SID_GLOB}) ;;
+  *) sid='' ;;
 esac
 # refuse an ambiguous payload outright
 [ "$payload_has_two_ids" = 1 ] && sid=''
-if [ -n "$sid" ]; then
-  len=\${#sid}
-  if [ "$len" -lt 8 ] || [ "$len" -gt 64 ]; then sid=''; fi
-fi
 
 # --- drop the snapshot (best effort, atomic: temp file + rename in the same dir) ---
 if [ -n "$sid" ] && mkdir -p "$TARMAC_DIR" 2>/dev/null; then

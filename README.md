@@ -149,6 +149,11 @@ symptom is a healthy, empty fleet, the one failure a fleet monitor may not have.
 else reading those payloads can ask where they are: `tarmac list --json` reports the path as
 `health.snapshotsDir`. Full rules and edge cases: [`docs/MANUAL.md`](docs/MANUAL.md).
 
+`tarmac list --json` also reports `health.unfilable`: how many live sessions carry an id
+tarmac will never file a snapshot under, so a reader can tell telemetry that is *late* from
+telemetry that is *not coming*. See [`docs/MANUAL.md`](docs/MANUAL.md) for what makes an id
+filable.
+
 ## What it deliberately does not do
 
 - **No "waiting for you" signal.** The obvious missing column — which session is blocked on
