@@ -99,20 +99,21 @@ for (const shell of SHELLS) {
       'byte-for-byte the payload it was handed',
     );
 
-    // The sid rule is a positional bracket pattern — `[0-9a-fA-F]` per hex digit — matched
-    // by `case`, and range expressions inside a bracket are the part of a pattern shells
-    // have historically read differently. Both directions are pinned here, because only
-    // both together say the set is the RIGHT one: the happy path above proves a UUID still
-    // gets through, and these two prove nothing else does. A shell that read the ranges
-    // loosely would file `abcdefgh.json` and be caught here rather than in production, where
-    // the symptom is a file no sweep in this repo can ever remove.
+    // The sid rule is a positional bracket pattern, matched by `case`, and the happy path
+    // above only proves this shell lets a UUID THROUGH. What each shell has to be asked
+    // separately is what it keeps OUT, and the two refusals below are not the same question:
+    //   • `../../evil` is refused on shape, which any implementation gets right;
+    //   • `ea6a607g-…` has the exact shape of a session id and one character that is not a
+    //     hex digit, so it is refused only if this shell reads the CHARACTER SET the same way
+    //     `find` and the TypeScript do. A shell that read it loosely would file the snapshot
+    //     and no deleter in this repo could ever take it away again — #7, one shell at a time.
     const traversal = runUnder(shell, payload({ session_id: '../../evil' }), 'echo CHAINED');
     assert.match(traversal.stdout, /CHAINED/);
     assert.deepEqual(listSnapshots(traversal.snapDir), [], 'a traversing id writes nothing');
 
-    const notAUuid = runUnder(shell, payload({ session_id: 'abcdefgh' }), 'echo CHAINED');
-    assert.match(notAUuid.stdout, /CHAINED/);
-    assert.deepEqual(listSnapshots(notAUuid.snapDir), [], 'an id that is not a UUID writes nothing');
+    const notHex = runUnder(shell, payload({ session_id: 'ea6a607g-42e0-4773-af4d-ae5f5938d819' }), 'echo CHAINED');
+    assert.match(notHex.stdout, /CHAINED/);
+    assert.deepEqual(listSnapshots(notHex.snapDir), [], 'a sid shaped right but not hex writes nothing');
 
     // Two ids: the `case` fallthrough and the `[ … ] && sid=''` guard.
     const ambiguous = runUnder(

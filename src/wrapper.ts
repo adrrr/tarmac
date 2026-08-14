@@ -81,8 +81,17 @@ export const SNAPSHOT_TTL_MIN = 48 * 60;
  *
  * Bracket expressions, not `?`: `?` matches a leading dot (fnmatch without FNM_PERIOD), so
  * the old glob reached dotfiles the writer's own charset forbids it to produce (#7).
+ *
+ * And an ENUMERATION, not the range `[0-9a-fA-F]`: a range is collated by the locale, which
+ * for a status line is whatever the TUI that spawned it carries. Under `en_US.UTF-8` — the
+ * ordinary case on macOS, where `/bin/sh` is bash — `a-f` reaches `é`, `ç` and fullwidth `ａ`
+ * in bash, in ksh and in BSD `find`, while the regex below is ASCII code points and always
+ * will be. That is one string meaning two different sets depending on `LANG`, which is this
+ * whole rule undone: a sid filed in a Terminal, refused under `LC_ALL=C`, and a file written
+ * by the first frame that no TypeScript consumer here can ever recognise. Sixteen digits
+ * spelled out cost 400 characters of pattern and nothing measurable per frame.
  */
-const HEX = '[0-9a-fA-F]';
+const HEX = '[0123456789abcdefABCDEF]';
 export const SID_GLOB = [8, 4, 4, 4, 12].map((n) => HEX.repeat(n)).join('-');
 
 /**

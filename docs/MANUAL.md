@@ -89,9 +89,14 @@ it either, and not your `settings.json` or `fleet.json` sitting next to it. (`--
 is a *reader's* lens for `list` and `serve` — pointing those at a directory another statusline
 owns deletes nothing, because no reader deletes anything.)
 
-A session whose id is not a UUID therefore gets no snapshot at all, and `list` shows it with
-no reading rather than with a stale one. That is the deliberate half of the trade: the
-alternative is a sweep whose reach is every filename of eight characters or more.
+A session whose id is not a UUID therefore gets no snapshot at all, and `list` shows it as a
+live session with no reading. That is the deliberate half of the trade: the alternative is a
+sweep whose reach is every filename of eight characters or more.
+
+The one loose end, if you ran a version before this one: a snapshot already on disk under a
+non-UUID name is still *read* — the reader takes any `*.json` and keys on the `session_id`
+inside it — but no sweep will ever remove it. Delete it by hand if it bothers you; nothing
+will file another.
 
 One consequence worth knowing: a session that is alive but has drawn no status line for 48h
 loses its snapshot too, and `list` then shows it as a session with no reading rather than a

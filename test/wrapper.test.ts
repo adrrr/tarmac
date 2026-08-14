@@ -33,15 +33,29 @@ interface RunWrapperOptions {
   snapDir: string;
   chain?: string;
   input: string;
+  /** Added to the child's environment — the locale is part of what a pattern MEANS. */
+  env?: Record<string, string>;
 }
 
 /** Writes the wrapper to disk and runs it with `input` on stdin. Returns its stdout. */
-function runWrapper({ snapDir, chain, input, root }: RunWrapperOptions): string {
+function runWrapper({ snapDir, chain, input, root, env }: RunWrapperOptions): string {
   const file = path.join(root, 'statusline.sh');
   fs.writeFileSync(file, renderWrapper({ snapshotDir: snapDir, chainCommand: chain ?? null }));
   fs.chmodSync(file, 0o755);
-  const stdout = execFileSync(file, { input, encoding: 'utf8' });
+  const stdout = execFileSync(file, { input, encoding: 'utf8', env: { ...process.env, ...env } });
   return stdout;
+}
+
+/** The first of `names` this machine actually has, so a locale test can skip honestly. */
+function installedLocale(names: string[]): string | undefined {
+  let available: string;
+  try {
+    available = execFileSync('locale', ['-a'], { encoding: 'utf8' });
+  } catch {
+    return undefined;
+  }
+  const have = new Set(available.split('\n').map((l) => l.trim().toLowerCase()));
+  return names.find((n) => have.has(n.toLowerCase()));
 }
 
 /**
@@ -174,6 +188,32 @@ for (const { what, sid, accepted } of SIDS) {
   });
 }
 
+// A bracket RANGE is collated by the locale, and the wrapper's locale is whatever the TUI
+// that spawns it happens to carry. `[0-9a-fA-F]` reaches `é`, `ç` and fullwidth `ａ` under
+// `en_US.UTF-8` — in bash (which is `/bin/sh` on macOS), in ksh, and in BSD `find` — while
+// the JS regex derived from that same string is ASCII code points and always will be. One
+// string, two sets, and which one you get depends on the environment of the frame: the same
+// sid is filed in a Terminal and refused under `LC_ALL=C`, and a file written under one is
+// beyond every TypeScript deleter under both. That is #7 walking back in through `LANG`, so
+// the rule is an ENUMERATION of the sixteen hex digits, which no collation can widen.
+test('the sid rule is not widened by the locale the frame runs under', (t) => {
+  const utf8 = installedLocale(['en_US.UTF-8', 'C.UTF-8', 'en_US.utf8']);
+  if (!utf8) {
+    t.skip('no UTF-8 locale on this machine: the case this pins cannot be built here');
+    return;
+  }
+  const { root, snapDir } = sandbox();
+  const out = runWrapper({
+    root,
+    snapDir,
+    chain: 'echo OK',
+    input: payload({ session_id: 'éa6a607c-42e0-4773-af4d-ae5f5938d819' }),
+    env: { LC_ALL: utf8 },
+  });
+  assert.match(out, /OK/, 'the display renders either way');
+  assert.deepEqual(fs.existsSync(snapDir) ? contents(snapDir) : [], [], 'nothing was filed');
+});
+
 test('a snapshot dir path containing spaces and quotes is handled', () => {
   const { root } = sandbox();
   const weird = path.join(root, "od d's dir");
@@ -304,6 +344,13 @@ test('the glob the shell deletes by and the regex TypeScript deletes by are one 
     'ea6a607c42e04773af4dae5f5938d819.json',
     `${SID}.jsonx`,
     `x${SID}.json`,
+    // The one character the translation actually touches. Delete the `.replace` that escapes
+    // it and every other name here still agrees — the regex's `.` matches the glob's literal
+    // `.` — while `<sid>Xjson` becomes a snapshot to TypeScript and a stranger to `find`.
+    `${SID}Xjson`,
+    // …and the one character class it must NOT touch: an enumeration, so no locale can pull
+    // a non-ASCII character into the set on one side of the pair and not the other.
+    'éa6a607c-42e0-4773-af4d-ae5f5938d819.json',
     'abcdefgh.json',
     'fleet-config.json',
     `${TEMP_PREFIX}${SID}.42.tmp`,
