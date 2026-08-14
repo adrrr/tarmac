@@ -99,17 +99,20 @@ for (const shell of SHELLS) {
       'byte-for-byte the payload it was handed',
     );
 
-    // `[!0-9a-zA-Z-]` — POSIX bracket negation. bash and ksh also read `[^…]` as a negation;
-    // dash does NOT, it reads `^` as an ordinary member of the set. Writing `[^…]` here is
-    // therefore a portability bug, but note which way it fails: under dash the set becomes
-    // {^, 0-9, a-zA-Z, -} and `*[set]*` means "contains one of these", so a valid uuid
-    // matches and is nulled too. The filter gets strictly MORE restrictive, never leakier —
-    // no traversal, just a wrapper that silently stops filing anything. The assertion above
-    // (the happy path) is what catches it; this one still passes. See `git log` for the
-    // correction to b958fa9, which claimed the opposite.
+    // The sid rule is a positional bracket pattern — `[0-9a-fA-F]` per hex digit — matched
+    // by `case`, and range expressions inside a bracket are the part of a pattern shells
+    // have historically read differently. Both directions are pinned here, because only
+    // both together say the set is the RIGHT one: the happy path above proves a UUID still
+    // gets through, and these two prove nothing else does. A shell that read the ranges
+    // loosely would file `abcdefgh.json` and be caught here rather than in production, where
+    // the symptom is a file no sweep in this repo can ever remove.
     const traversal = runUnder(shell, payload({ session_id: '../../evil' }), 'echo CHAINED');
     assert.match(traversal.stdout, /CHAINED/);
     assert.deepEqual(listSnapshots(traversal.snapDir), [], 'a traversing id writes nothing');
+
+    const notAUuid = runUnder(shell, payload({ session_id: 'abcdefgh' }), 'echo CHAINED');
+    assert.match(notAUuid.stdout, /CHAINED/);
+    assert.deepEqual(listSnapshots(notAUuid.snapDir), [], 'an id that is not a UUID writes nothing');
 
     // Two ids: the `case` fallthrough and the `[ … ] && sid=''` guard.
     const ambiguous = runUnder(
