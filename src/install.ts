@@ -888,16 +888,27 @@ function installedBackupOrRefuse(p: TarmacPaths): Backup {
   return backup;
 }
 
+function removePruneMarker(snapshots: string | null): void {
+  if (snapshots === null) return;
+  const marker = path.join(snapshots, PRUNE_MARKER);
+  if (isPlainFile(marker)) fs.rmSync(marker, { force: true });
+}
+
 export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
   const root = requireHome(home);
   const p = paths(root);
   const backup = installedBackupOrRefuse(p);
+
+  // Read this before removing the wrapper: it is the source of truth when the install used
+  // XDG_STATE_HOME, and the marker is the only file in that directory uninstall owns.
+  const snapshots = installedSnapshotsDir(p);
 
   const currentText = fs.existsSync(p.settings) ? fs.readFileSync(p.settings, 'utf8') : null;
   let mode: UninstallMode;
 
   if (currentText === backup.installedText) {
     // untouched since install → put the original bytes back, or remove the file we created
+    removePruneMarker(snapshots);
     if (backup.originalText === null) {
       fs.rmSync(p.settings, { force: true });
       mode = 'absent';
@@ -916,6 +927,7 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
       // executing a file that no longer exists, at every frame, with no way back.
       return { mode: 'foreign' };
     }
+    removePruneMarker(snapshots);
     writeAtomic(p.settings, JSON.stringify(settings, null, 2) + '\n');
     mode = 'surgical';
   }

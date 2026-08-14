@@ -912,12 +912,40 @@ test('install then uninstall twice over leaves the original untouched', () => {
   assert.equal(settingsOf(home), original);
 });
 
-test('snapshots collected before an uninstall are left on disk', () => {
+test('snapshots survive uninstall while the prune marker leaves with the wrapper', () => {
   const home = fakeHome('{}');
   install({ home });
   fs.writeFileSync(path.join(paths(home).snapshots, 'x.json'), '{}');
+  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
   uninstall({ home });
   assert.ok(fs.existsSync(path.join(paths(home).snapshots, 'x.json')));
+  assert.equal(fs.existsSync(path.join(paths(home).snapshots, PRUNE_MARKER)), false);
+});
+
+test('uninstall leaves a symlink wearing the prune marker name alone', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  const target = path.join(home, 'someone-elses-file');
+  fs.writeFileSync(target, 'keep');
+  fs.symlinkSync(target, path.join(paths(home).snapshots, PRUNE_MARKER));
+
+  uninstall({ home });
+
+  assert.equal(fs.readFileSync(target, 'utf8'), 'keep');
+  assert.equal(fs.lstatSync(path.join(paths(home).snapshots, PRUNE_MARKER)).isSymbolicLink(), true);
+});
+
+test('uninstall removes the marker from the directory frozen in the wrapper', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  const snapshots = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-uninstall-')), 'snapshots');
+  fs.mkdirSync(snapshots);
+  fs.writeFileSync(path.join(snapshots, PRUNE_MARKER), '');
+  fs.writeFileSync(paths(home).wrapper, renderWrapper({ snapshotDir: snapshots, chainCommand: null }), { mode: 0o755 });
+
+  uninstall({ home });
+
+  assert.equal(fs.existsSync(path.join(snapshots, PRUNE_MARKER)), false);
 });
 
 // ── where the snapshots live: outside `.claude`, which people version-control ──────────
