@@ -1,0 +1,65 @@
+[
+  {
+    "pid": 74258,
+    "cwd": "/Users/jane/alpha",
+    "kind": "interactive",
+    "startedAt": 1786151112616,
+    "sessionId": "076a66aa-0f71-4594-8fcc-d6e7e65a8268",
+    "name": "alpha-7a",
+    "status": "idle"
+  },
+  {
+    "pid": 53387,
+    "cwd": "/Users/jane/bravo",
+    "kind": "interactive",
+    "startedAt": 1786199710895,
+    "sessionId": "01ea8673-c6f3-4ad8-8e36-e1f33f6bb8b8",
+    "name": "bravo-77",
+    "status": "idle"
+  },
+  {
+    "pid": 62331,
+    "cwd": "/Users/jane/charlie",
+    "kind": "interactive",
+    "startedAt": 1786237206010,
+    "sessionId": "2c03ff36-bb6c-43b4-a158-8d6266a7fbb7",
+    "name": "charlie-a3",
+    "status": "idle"
+  },
+  {
+    "pid": 62785,
+    "cwd": "/Users/jane/delta",
+    "kind": "interactive",
+    "startedAt": 1786237267240,
+    "sessionId": "950f9491-0cee-4a4c-82f2-eefb37b51a21",
+    "name": "delta-32",
+    "status": "idle"
+  },
+  {
+    "pid": 65601,
+    "cwd": "/Users/jane/projects/echo-tracker",
+    "kind": "interactive",
+    "startedAt": 1786237328934,
+    "sessionId": "ae9fec42-4d5a-4fab-93ab-31941a61772a",
+    "name": "echo-tracker-11",
+    "status": "busy"
+  },
+  {
+    "pid": 66368,
+    "cwd": "/Users/jane/foxtrot",
+    "kind": "interactive",
+    "startedAt": 1786237391635,
+    "sessionId": "06872d3a-b9c0-41ed-a979-1aa8fe85da43",
+    "name": "foxtrot-42",
+    "status": "idle"
+  },
+  {
+    "pid": 66956,
+    "cwd": "/Users/jane/golf",
+    "kind": "interactive",
+    "startedAt": 1786237453919,
+    "sessionId": "ea6a607c-42e0-4773-af4d-ae5f5938d819",
+    "name": "golf-eb",
+    "status": "busy"
+  }
+]

@@ -1,0 +1,63 @@
+{
+    "session_id": "6212072e-5578-43f6-9163-7e1d876d7a4d",
+    "transcript_path": "/Users/jane/.claude/projects/-Users-jane-apollo/6212072e-5578-43f6-9163-7e1d876d7a4d.jsonl",
+    "cwd": "/Users/jane/apollo",
+    "prompt_id": "0cee4a04-5cce-4365-980c-c22706f6b1ed",
+    "effort": {
+        "level": "max"
+    },
+    "session_name": "Draft the r\u00e9sum\u00e9 parser",
+    "model": {
+        "id": "claude-fable-5",
+        "display_name": "Fable 5"
+    },
+    "workspace": {
+        "current_dir": "/Users/jane/apollo",
+        "project_dir": "/Users/jane/apollo",
+        "added_dirs": [],
+        "repo": {
+            "host": "github.com",
+            "owner": "octocat",
+            "name": "apollo"
+        }
+    },
+    "version": "2.1.220",
+    "output_style": {
+        "name": "default"
+    },
+    "cost": {
+        "total_cost_usd": 12.3456789012345,
+        "total_duration_ms": 48812571,
+        "total_api_duration_ms": 14314713,
+        "total_lines_added": 4121,
+        "total_lines_removed": 340
+    },
+    "context_window": {
+        "total_input_tokens": 496248,
+        "total_output_tokens": 1024,
+        "context_window_size": 1000000,
+        "current_usage": {
+            "input_tokens": 2,
+            "output_tokens": 1024,
+            "cache_creation_input_tokens": 1553,
+            "cache_read_input_tokens": 494693
+        },
+        "used_percentage": 50,
+        "remaining_percentage": 50
+    },
+    "exceeds_200k_tokens": true,
+    "fast_mode": false,
+    "thinking": {
+        "enabled": true
+    },
+    "rate_limits": {
+        "five_hour": {
+            "used_percentage": 17,
+            "resets_at": 1786212000
+        },
+        "seven_day": {
+            "used_percentage": 42,
+            "resets_at": 1786690800
+        }
+    }
+}

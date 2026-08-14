@@ -1,0 +1,13 @@
+{
+  // Publish project: src only, flat JS into dist/. No bundler, no transform beyond what
+  // tsc does — what ships is readable JavaScript one file per module.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["src"]
+}
