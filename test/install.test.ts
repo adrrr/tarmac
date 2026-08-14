@@ -258,6 +258,15 @@ test('the printed uninstall plan warns when it would restore nothing', () => {
   assert.match(text, /nothing/i, 'and what "foreign" means, in words');
 });
 
+test('the printed uninstall plan distinguishes snapshot files from the prune marker', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  const text = renderPlan(planUninstall({ home }));
+  assert.match(text, /snapshot files stay/i);
+  assert.match(text, /prune marker is removed/i);
+  assert.doesNotMatch(text, /left exactly as they are/i);
+});
+
 const escapeForTest = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // ── the command line ──────────────────────────────────────────────────────────────────
@@ -946,6 +955,35 @@ test('uninstall removes the marker from the directory frozen in the wrapper', ()
   uninstall({ home });
 
   assert.equal(fs.existsSync(path.join(snapshots, PRUNE_MARKER)), false);
+});
+
+test('a foreign statusLine keeps the wrapper and its prune marker', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  const marker = path.join(paths(home).snapshots, PRUNE_MARKER);
+  fs.writeFileSync(marker, '');
+  fs.writeFileSync(paths(home).settings, JSON.stringify({ statusLine: { type: 'command', command: 'other.sh' } }));
+
+  assert.equal(uninstall({ home }).mode, 'foreign');
+  assert.equal(fs.existsSync(paths(home).wrapper), true);
+  assert.equal(fs.existsSync(marker), true);
+});
+
+test('a prune marker removal failure cannot prevent settings restoration', () => {
+  const original = '{"model":"opus"}';
+  const home = fakeHome(original);
+  install({ home });
+  const marker = path.join(paths(home).snapshots, PRUNE_MARKER);
+  fs.writeFileSync(marker, '');
+  fs.chmodSync(paths(home).snapshots, 0o555);
+
+  try {
+    assert.throws(() => uninstall({ home }), /EACCES|EPERM/);
+    assert.equal(settingsOf(home), original);
+    assert.equal(fs.existsSync(paths(home).wrapper), true, 'wrapper remains when cleanup cannot finish');
+  } finally {
+    fs.chmodSync(paths(home).snapshots, 0o755);
+  }
 });
 
 // ── where the snapshots live: outside `.claude`, which people version-control ──────────

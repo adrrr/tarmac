@@ -908,7 +908,6 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
 
   if (currentText === backup.installedText) {
     // untouched since install → put the original bytes back, or remove the file we created
-    removePruneMarker(snapshots);
     if (backup.originalText === null) {
       fs.rmSync(p.settings, { force: true });
       mode = 'absent';
@@ -927,12 +926,15 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
       // executing a file that no longer exists, at every frame, with no way back.
       return { mode: 'foreign' };
     }
-    removePruneMarker(snapshots);
     writeAtomic(p.settings, JSON.stringify(settings, null, 2) + '\n');
     mode = 'surgical';
   }
 
-  // Snapshots are data the user may still want; only what we generated goes.
+  // Restore settings before touching runtime state: even an unreadable snapshots directory
+  // must not strand statusLine on the wrapper we are uninstalling.
+  removePruneMarker(snapshots);
+
+  // Snapshot payloads are data the user may still want; only what we generated goes.
   fs.rmSync(p.wrapper, { force: true });
   fs.rmSync(p.backup, { force: true });
   return { mode };

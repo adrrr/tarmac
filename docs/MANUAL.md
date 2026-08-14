@@ -91,8 +91,10 @@ One consequence worth knowing: a session that is alive but has drawn no status l
 loses its snapshot too, and `list` then shows it as a session with no reading rather than a
 stale one. The next frame it draws puts the file back.
 
-Your snapshots survive `uninstall`; they are your data, and the wrapper that pruned them
-leaves with it.
+Your snapshot files survive `uninstall`; they are your data. Tarmac removes only
+`.tarmac-last-prune`, the housekeeping marker that has no owner once the pruning wrapper
+leaves with it. If the current `statusLine` is foreign, uninstall leaves both the wrapper and
+its marker in place so that command never points at a missing file.
 
 ### Where the snapshots live, and why not in `.claude`
 
