@@ -1,0 +1,40 @@
+{
+  "name": "@adrrr/tarmac",
+  "version": "0.1.2",
+  "description": "Fleet observability for Claude Code — reads documented surfaces only, never an internal format",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "observability",
+    "dashboard",
+    "cli",
+    "fleet",
+    "statusline",
+    "context-window"
+  ],
+  "license": "MIT",
+  "author": "adrrr",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "tarmac": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run typecheck && node --test \"test/*.test.ts\"",
+    "fixtures:capture": "node scripts/capture-fixtures.ts",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build && TARMAC_REQUIRE_DASH=1 npm test && node dist/cli.js --help > /dev/null"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "typescript": "7.0.2"
+  }
+}

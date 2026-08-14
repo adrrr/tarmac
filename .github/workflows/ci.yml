@@ -1,0 +1,112 @@
+# What one Mac running `npm test` cannot check, and the package sells anyway.
+#
+#   • dash — `test/portability.test.ts` finds dash on the dev machine by luck and SKIPS its
+#     assertion when it is absent; a skip exits 0, so a dash-less runner reports a green
+#     build that proved nothing. On Ubuntu `/bin/sh` IS dash, and `TARMAC_REQUIRE_DASH=1`
+#     turns the gap back into a failure.
+#   • `engines: node >=20` — the suite runs `src/*.ts` through type stripping, which needs
+#     Node ≥ 22.18. Nothing in it ever executes `dist/`, the thing `npx @adrrr/tarmac` runs.
+#     The `artifact` job below is the only evidence behind that field.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push supersedes the first; nothing is learned by finishing the older run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test · node ${{ matrix.node }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        env:
+          # The whole reason this matrix includes Ubuntu.
+          TARMAC_REQUIRE_DASH: '1'
+
+  artifact:
+    name: artifact · node 20 · the published dist/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # Not a nice-to-have: this is the first and only time the emitted JavaScript is run,
+      # on the oldest runtime `engines` promises.
+      - name: the built CLI answers on Node 20
+        run: node dist/cli.js --help > /dev/null
+
+      - name: install, list and uninstall round trip in a throwaway home
+        run: |
+          set -eu
+          home="$(mktemp -d)"
+          printf '#!/bin/sh\n[ "$1" = agents ] && echo "[]"\n' > "$home/claude"
+          chmod +x "$home/claude"
+          node dist/cli.js install --home "$home" --yes
+          test -f "$home/.claude/tarmac/statusline.sh"
+          # #20, on the artefact rather than on the sources: nothing tarmac writes at runtime
+          # may land in the directory people version-control.
+          test -d "$home/.local/state/tarmac/snapshots"
+          test ! -e "$home/.claude/tarmac/snapshots"
+          node dist/cli.js list --home "$home" --claude-bin "$home/claude"
+          node dist/cli.js uninstall --home "$home" --yes
+          test ! -e "$home/.claude/tarmac/statusline.sh"
+
+      # A third opinion on the generated wrapper, next to the runtime tests (which run it
+      # under every shell present) and the static bashism audit (which reads its source).
+      # shellcheck is preinstalled on the Ubuntu runners, so this costs nothing.
+      - name: shellcheck the generated wrapper under dash
+        run: |
+          set -eu
+          gen() {
+            node -e "import('./dist/wrapper.js').then(m => process.stdout.write(m.renderWrapper($1)))"
+          }
+          gen "{ snapshotDir: '/tmp/tarmac-snaps', chainCommand: null }" > /tmp/wrapper-bare.sh
+          # Absolute, not `~/bin/…`: the chain is a value the wrapper hands to `sh -c`, which
+          # expands the tilde itself — but shellcheck sees only the quoted assignment and
+          # reports SC2088 on a sample string. The generated code is what is under test here.
+          gen "{ snapshotDir: '/tmp/tarmac-snaps', chainCommand: '/opt/bin/my-line.sh --colour' }" > /tmp/wrapper-chained.sh
+          shellcheck --shell=dash /tmp/wrapper-bare.sh /tmp/wrapper-chained.sh
+
+      # Exactly dist/, README, LICENSE, package.json — nothing else may reach the registry.
+      #
+      # Checked in BOTH directions. A one-sided "nothing unexpected" test passes on an empty
+      # listing, and an empty listing is what every failure here produces: a glob that matches
+      # no tarball, a tar that errors, a `files:` typo that packs nothing. `pipefail` is what
+      # makes the pipeline itself report those — `set -e` alone reads only `sort`'s status.
+      - name: the package carries what it should, and nothing else
+        run: |
+          set -euo pipefail
+          tgz="$(npm pack --silent | tail -1)"
+          test -s "$tgz"
+          tar -tzf "$tgz" | sed 's|^package/||' | sort > /tmp/packed.txt
+          cat /tmp/packed.txt
+          # `dist/.+\.js`, not `[a-z]+`: a module named rate-limits.ts is not a packaging bug.
+          unexpected="$(grep -vE '^(dist/.+\.js|README\.md|LICENSE|package\.json)$' /tmp/packed.txt || true)"
+          if [ -n "$unexpected" ]; then echo "unexpected in the tarball:"; echo "$unexpected"; exit 1; fi
+          for required in dist/cli.js dist/wrapper.js README.md LICENSE package.json; do
+            grep -qx "$required" /tmp/packed.txt || { echo "missing from the tarball: $required"; exit 1; }
+          done
+          modules="$(grep -c '^dist/.*\.js$' /tmp/packed.txt)"
+          test "$modules" -ge 15 || { echo "only $modules modules packed — dist/ looks truncated"; exit 1; }

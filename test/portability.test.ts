@@ -1,0 +1,241 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { PRUNE_MARKER, renderWrapper, SNAPSHOT_TTL_MIN } from '../src/wrapper.ts';
+
+// The wrapper was developed on macOS, where /bin/sh is bash wearing a POSIX hat and
+// forgives a great deal. On Debian and Ubuntu — the primary target of a public npx tool —
+// /bin/sh is dash, which forgives nothing. Everything below runs the REAL generated script
+// under every POSIX shell this machine has, and audits its source for constructs no dash
+// implements.
+
+interface Shell {
+  label: string;
+  cmd: string;
+  prefix: string[];
+}
+
+const CANDIDATES: Shell[] = [
+  { label: 'dash', cmd: 'dash', prefix: [] }, // /bin/sh on Debian, Ubuntu
+  { label: '/bin/sh', cmd: '/bin/sh', prefix: [] }, // whatever this machine calls sh
+  { label: 'ksh', cmd: 'ksh', prefix: [] }, // a third, independent POSIX implementation
+  { label: 'busybox sh', cmd: 'busybox', prefix: ['sh'] }, // /bin/sh on Alpine
+];
+
+function runsHere(shell: Shell): boolean {
+  const r = spawnSync(shell.cmd, [...shell.prefix, '-c', 'exit 0'], { stdio: 'ignore' });
+  return !r.error && r.status === 0;
+}
+
+const SHELLS = CANDIDATES.filter(runsHere);
+const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
+const DEAD = 'ffffffff-1111-2222-3333-444444444444';
+const QUIET = 'ffffffff-5555-6666-7777-888888888888';
+
+interface RunResult {
+  stdout: string;
+  stderr: string;
+  status: number | null;
+  snapDir: string;
+}
+
+/**
+ * Writes the wrapper and runs it under `shell` explicitly, ignoring its shebang. `seed`
+ * backdates files into the snapshot dir first — ages in minutes — so the prune has
+ * something of a known age to decide about.
+ */
+function runUnder(
+  shell: Shell,
+  input: string,
+  chain: string | null,
+  seed?: Record<string, number>,
+  readOnlyDir = false,
+): RunResult {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-posix-'));
+  const snapDir = path.join(root, 'snapshots');
+  if (seed || readOnlyDir) {
+    fs.mkdirSync(snapDir, { recursive: true });
+    for (const [name, ageMin] of Object.entries(seed ?? {})) {
+      fs.writeFileSync(path.join(snapDir, name), '{}');
+      const when = new Date(Date.now() - ageMin * 60_000);
+      fs.utimesSync(path.join(snapDir, name), when, when);
+    }
+    if (readOnlyDir) fs.chmodSync(snapDir, 0o555);
+  }
+  const file = path.join(root, 'statusline.sh');
+  fs.writeFileSync(file, renderWrapper({ snapshotDir: snapDir, chainCommand: chain }));
+  const r = spawnSync(shell.cmd, [...shell.prefix, file], { input, encoding: 'utf8' });
+  assert.equal(r.error, undefined, `${shell.label} failed to run the wrapper`);
+  return { stdout: r.stdout, stderr: r.stderr, status: r.status, snapDir };
+}
+
+const payload = (over: Record<string, unknown> = {}): string =>
+  JSON.stringify({
+    session_id: SID,
+    model: { id: 'claude-fable-5', display_name: 'Fable 5' },
+    context_window: { used_percentage: 26 },
+    ...over,
+  });
+
+/** What the dir holds, minus the prune's own marker — bookkeeping, not telemetry. */
+const listSnapshots = (dir: string): string[] =>
+  fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n !== PRUNE_MARKER).sort() : [];
+
+for (const shell of SHELLS) {
+  // One test per shell, exercising the constructs where implementations actually diverge:
+  // `${var#pattern}` with a quoted pattern, `${var%%pattern}`, `[!…]` bracket negation,
+  // `${#var}`, and `$(cat)` on a payload with embedded quotes.
+  test(`the wrapper behaves identically under ${shell.label}`, () => {
+    const ok = runUnder(shell, payload(), 'echo CHAINED');
+    assert.match(ok.stdout, /CHAINED/, 'the chained display still renders');
+    assert.equal(ok.status, 0);
+    assert.deepEqual(listSnapshots(ok.snapDir), [`${SID}.json`], 'the payload is filed under its session id');
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(ok.snapDir, `${SID}.json`), 'utf8')),
+      JSON.parse(payload()),
+      'byte-for-byte the payload it was handed',
+    );
+
+    // `[!0-9a-zA-Z-]` — POSIX bracket negation. bash and ksh also read `[^…]` as a negation;
+    // dash does NOT, it reads `^` as an ordinary member of the set. Writing `[^…]` here is
+    // therefore a portability bug, but note which way it fails: under dash the set becomes
+    // {^, 0-9, a-zA-Z, -} and `*[set]*` means "contains one of these", so a valid uuid
+    // matches and is nulled too. The filter gets strictly MORE restrictive, never leakier —
+    // no traversal, just a wrapper that silently stops filing anything. The assertion above
+    // (the happy path) is what catches it; this one still passes. See `git log` for the
+    // correction to b958fa9, which claimed the opposite.
+    const traversal = runUnder(shell, payload({ session_id: '../../evil' }), 'echo CHAINED');
+    assert.match(traversal.stdout, /CHAINED/);
+    assert.deepEqual(listSnapshots(traversal.snapDir), [], 'a traversing id writes nothing');
+
+    // Two ids: the `case` fallthrough and the `[ … ] && sid=''` guard.
+    const ambiguous = runUnder(
+      shell,
+      JSON.stringify({ parent: { session_id: SID }, session_id: SID, model: { display_name: 'X' } }),
+      'echo CHAINED',
+    );
+    assert.match(ambiguous.stdout, /CHAINED/);
+    assert.deepEqual(listSnapshots(ambiguous.snapDir), [], 'an ambiguous payload writes nothing');
+
+    // No chain: the second `${var#…}` / `${var%%…}` pair, on a different key.
+    const bare = runUnder(shell, payload(), null);
+    assert.match(bare.stdout, /Fable 5/, 'falls back to the model name');
+    assert.equal(bare.status, 0);
+
+    // RULE 1 under every shell: a failing chain never breaks the display or the exit code.
+    const broken = runUnder(shell, payload(), 'echo PARTIAL; exit 3');
+    assert.match(broken.stdout, /PARTIAL/);
+    assert.equal(broken.status, 0, 'the status line always exits 0');
+
+    // The prune: `$( … )` and `:` under this shell, and `find` with `-prune`, `-mmin` and
+    // `-exec … +` under whichever implementation this machine ships — GNU find on Ubuntu,
+    // BSD find on macOS, busybox find on Alpine are three different programs, and the two
+    // the CI matrix has are exercised right here.
+    const swept = runUnder(shell, payload(), 'echo CHAINED', {
+      [`${DEAD}.json`]: SNAPSHOT_TTL_MIN + 60,
+      [`${QUIET}.json`]: SNAPSHOT_TTL_MIN - 60,
+    });
+    assert.match(swept.stdout, /CHAINED/, 'the display renders on a sweeping frame too');
+    assert.equal(swept.status, 0);
+    assert.deepEqual(
+      listSnapshots(swept.snapDir),
+      [`${QUIET}.json`, `${SID}.json`].sort(),
+      'the dead session is swept, the quiet one and this frame are kept',
+    );
+    assert.equal(fs.existsSync(path.join(swept.snapDir, PRUNE_MARKER)), true, 'and the sweep is dated');
+
+    // A snapshot dir that has become unwritable — and the reason this case is HERE rather
+    // than only in wrapper.test.ts, which runs the script through its own `#!/bin/sh` and
+    // therefore under bash on macOS. POSIX says a redirection error on a SPECIAL built-in
+    // (`:` is one) shall abort a non-interactive shell: `: > "$marker"` on a read-only
+    // directory exits dash 2 and ksh 1 with the status line never printed, while bash
+    // shrugs and carries on. RULE 1, broken on exactly the platform the package targets.
+    // Skipped under root, which ignores 0555: the fixture would not be the state it claims.
+    if (process.getuid?.() !== 0) {
+      const blocked = runUnder(shell, payload(), 'echo CHAINED', { [`${DEAD}.json`]: SNAPSHOT_TTL_MIN + 60 }, true);
+      try {
+        assert.match(blocked.stdout, /CHAINED/, 'the display renders even when nothing can be written');
+        assert.equal(blocked.status, 0, 'and the status line still exits 0');
+        assert.deepEqual(listSnapshots(blocked.snapDir), [`${DEAD}.json`], 'a dir we cannot stamp is not swept');
+
+        // …and it does all of that SILENTLY. Redirections are applied left to right, so
+        // `> "$tmp" 2>/dev/null` attempts the file while stderr is STILL the user's
+        // terminal: the shell prints its own `cannot create …: Permission denied` as part
+        // of performing that redirection, and the `2>` meant to swallow it only takes
+        // effect afterwards. Exit code and display are untouched — `printf` is a regular
+        // built-in, so a failed redirection only fails the command — which is precisely why
+        // nothing else here catches it. But this runs on every frame of the TUI, so it is
+        // one line of noise per frame on the terminal of a script whose first rule is to be
+        // invisible. Only `2>/dev/null > "$tmp"` is quiet.
+        assert.equal(blocked.stderr, '', 'nothing at all reaches the user terminal');
+      } finally {
+        fs.chmodSync(blocked.snapDir, 0o755);
+      }
+    }
+  });
+}
+
+// A machine with no dash cannot prove the claim this suite exists to make, and a skip is
+// the honest report of that. But a skip still exits 0 — so on the paths where the claim has
+// to HOLD rather than merely be attempted (CI, and `prepublishOnly` before a release),
+// TARMAC_REQUIRE_DASH turns the gap into a failure instead of a line that scrolls past.
+test('dash — the /bin/sh of Debian and Ubuntu — was exercised', (t) => {
+  if (!SHELLS.some((s) => s.label === 'dash')) {
+    const why = 'dash is not installed here: POSIX conformance was NOT proven on this machine';
+    if (process.env.TARMAC_REQUIRE_DASH) assert.fail(why);
+    t.skip(why);
+    return;
+  }
+  assert.ok(true);
+});
+
+// Running the script proves today's behaviour; this keeps the next edit honest, and fails
+// on constructs that would only misbehave on an input the runtime tests do not cover.
+const BASHISMS: Array<[RegExp, string]> = [
+  [/\[\[/, '[[ … ]] test'],
+  [/\(\(/, '(( … )) arithmetic command'],
+  [/<<</, '<<< here-string'],
+  [/&>/, '&> redirection'],
+  [/\$'/, "$'…' ANSI-C quoting"],
+  [/\bfunction\s+\w+/, 'function keyword'],
+  [/\blocal\b/, 'local (dash implements it, POSIX does not require it)'],
+  [/\b(declare|typeset)\b/, 'declare/typeset'],
+  [/\bsource\b/, 'source (use .)'],
+  [/\b(pushd|popd)\b/, 'pushd/popd'],
+  [/\becho\s+-[en]/, 'echo -e / -n (use printf)'],
+  [/==/, '== inside test (POSIX is =)'],
+  [/\$\{[A-Za-z_][A-Za-z0-9_]*\[/, 'array subscript'],
+  [/\$\{[A-Za-z_][A-Za-z0-9_]*(\^\^|,,)/, 'case-conversion expansion'],
+  [/\$\{[A-Za-z_][A-Za-z0-9_]*\/[^}]/, '${var/x/y} substitution'],
+  [/\$(RANDOM|SECONDS|BASH[A-Z_]*)\b/, 'bash-only variable'],
+  [/\bset\s+-o\s+pipefail\b/, 'set -o pipefail'],
+  // This wrapper is entirely `${var#…}` / `${var%%…}` string surgery, so substring
+  // expansion is exactly the shortcut a future edit reaches for. dash: "Bad substitution".
+  [/\$\{[A-Za-z_][A-Za-z0-9_]*:\d/, '${var:offset:length} substring expansion'],
+  [/[A-Za-z_][A-Za-z0-9_]*\+=/, '+= append assignment'],
+  [/<\(/, '<(…) process substitution'],
+  [/\$\(</, '$(< file) read'],
+  [/printf\s+["']?[^"'\s]*%q/, 'printf %q'],
+  [/\blet\s+[A-Za-z_]/, 'let arithmetic'],
+  [/\bread\s+-[A-Za-z]*a/, 'read -a into an array'],
+  [/\btrap\b[^\n]*\bERR\b/, 'trap … ERR'],
+  [/\b(mapfile|readarray)\b/, 'mapfile/readarray'],
+];
+
+test('the generated wrapper source contains no bashism', () => {
+  // Generated with no chain: whatever the user's own statusline command contains is THEIR
+  // shell code, handed to `sh -c` exactly as Claude Code would have run it, and not ours
+  // to police.
+  const src = renderWrapper({ snapshotDir: "/tmp/od d's dir", chainCommand: null });
+  for (const [pattern, what] of BASHISMS) {
+    assert.equal(pattern.test(src), false, `wrapper uses ${what} — not POSIX sh, breaks on dash`);
+  }
+});
+
+test('the wrapper declares the shell it was written for', () => {
+  const src = renderWrapper({ snapshotDir: '/tmp/s', chainCommand: null });
+  assert.match(src.split('\n')[0], /^#!\/bin\/sh$/, 'a #!/bin/bash shebang would be a lie on Debian');
+});

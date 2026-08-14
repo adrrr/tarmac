@@ -1,0 +1,37 @@
+{
+  // Typecheck project: covers src, test AND scripts, emits nothing. `tsconfig.build.json`
+  // narrows the include back to `src`, so dev tooling never reaches dist/.
+  //
+  // Relative imports are written with their real `.ts` extension so that Node runs the
+  // sources directly (type stripping, no build step to run the suite) while
+  // `rewriteRelativeImportExtensions` turns them into `.js` in the published output.
+  // `erasableSyntaxOnly` keeps us inside the subset Node can strip — no enums, no
+  // parameter properties, no namespaces — so no TypeScript construct carries runtime
+  // semantics that only one of the two would apply. It does NOT make the two outputs
+  // identical in general: tsc still downlevels plain JavaScript to `target`, so a
+  // `using` declaration would be rewritten here and run natively under Node. Nothing in
+  // src does that today; if that changes, raise `target` rather than trust this comment.
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "isolatedModules": true,
+
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "test", "scripts"]
+}
