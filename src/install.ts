@@ -888,10 +888,20 @@ function installedBackupOrRefuse(p: TarmacPaths): Backup {
   return backup;
 }
 
+function removePruneMarker(snapshots: string | null): void {
+  if (snapshots === null) return;
+  const marker = path.join(snapshots, PRUNE_MARKER);
+  if (isPlainFile(marker)) fs.rmSync(marker, { force: true });
+}
+
 export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
   const root = requireHome(home);
   const p = paths(root);
   const backup = installedBackupOrRefuse(p);
+
+  // Read this before removing the wrapper: it is the source of truth when the install used
+  // XDG_STATE_HOME, and the marker is the only file in that directory uninstall owns.
+  const snapshots = installedSnapshotsDir(p);
 
   const currentText = fs.existsSync(p.settings) ? fs.readFileSync(p.settings, 'utf8') : null;
   let mode: UninstallMode;
@@ -920,7 +930,11 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
     mode = 'surgical';
   }
 
-  // Snapshots are data the user may still want; only what we generated goes.
+  // Restore settings before touching runtime state: even an unreadable snapshots directory
+  // must not strand statusLine on the wrapper we are uninstalling.
+  removePruneMarker(snapshots);
+
+  // Snapshot payloads are data the user may still want; only what we generated goes.
   fs.rmSync(p.wrapper, { force: true });
   fs.rmSync(p.backup, { force: true });
   return { mode };
