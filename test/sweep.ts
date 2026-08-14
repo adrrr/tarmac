@@ -50,5 +50,13 @@ export async function waitFor(pred: () => boolean, what: string, timeoutMs = 10_
  * over a handful of entries. This window is four orders of magnitude more than that walk
  * needs, which is what makes "still there afterwards" mean "no sweep was ever started"
  * rather than "we looked too early".
+ *
+ * In every one of its call sites the refusal is ALSO decided synchronously, inside the frame —
+ * a marker that is a symlink, a marker that is a directory, a `touch` that fails on a 0555
+ * directory, a marker still fresh — so "the frame returned without stamping" is an instant
+ * proof that no child was ever forked, and those tests assert that too. This window guards the
+ * other half: that a child forked wrongly does not get to delete something unnoticed. It is
+ * the one assertion here that can be too short and never too long, which is why it is a
+ * companion to a synchronous check and never the only thing a test rests on.
  */
 export const settle = (): Promise<void> => sleep(500);

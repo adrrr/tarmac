@@ -4,7 +4,7 @@
 // frame that sweeps pays for the whole backlog at once, and on a directory carrying the
 // snapshots of every session since the day tarmac was installed that is a directory walk
 // plus ten thousand unlinks, in the render path, before the status line is printed. Measured
-// at ~0.5 s on 20 000 files. The line still renders and the exit code is still 0 — RULE 1 is
+// at 0.5 s in #8, and at 0.6-0.9 s by the harness below. The line still renders and the exit code is still 0 — RULE 1 is
 // intact — so nothing in the suite could see it: every other test here asks what the sweep
 // does, none asked what the frame COSTS.
 //
@@ -90,6 +90,10 @@ const coldLeft = (dir: string): number =>
 
 test(`a frame stays under ${BUDGET_MS}ms with ${STOCK} snapshots to sweep`, async (t) => {
   const dir = stockedDir();
+  // 20 000 files is a new order of magnitude for this suite, and the runner that keeps them
+  // is the runner that has to stay quick for everything else — including the timing tests in
+  // `sweep-detached.test.ts`, which node runs concurrently with this file.
+  t.after(() => fs.rmSync(path.dirname(dir), { recursive: true, force: true }));
   const wrapper = wrapperFor(dir);
   const draw = (): string => execFileSync(wrapper, { input: payload, encoding: 'utf8' });
 

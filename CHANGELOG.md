@@ -15,17 +15,20 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - **The hourly sweep no longer happens inside a frame.** Amortization made the sweep cheap on
   average, and the average was never the problem: the ONE frame that swept paid for the whole
   backlog at once. On an install that had never pruned — 20 000 snapshots, half of them dead —
-  that frame measured **587 ms**, a directory walk plus ten thousand unlinks in front of the
+  that frame measured **0.6-0.9 s**, a directory walk plus ten thousand unlinks in front of the
   status line. It rendered, and it exited 0, so nothing in the suite could see it: every test
   asked what the sweep *did*, none asked what the frame *cost*. The frame now dates the marker
-  and hands the walk to a detached child: **15 ms** on the same stock, with the ordinary frames
-  around it unchanged at ~11 ms, and the backlog gone a moment later. Bounding the work per
+  and hands the walk to a detached child: **~15 ms** on the same stock, with the ordinary frames
+  around it unchanged at ~11 ms, and the backlog gone a moment later. (Figures from
+  `test/sweep-perf.test.ts`, which prints its own on whatever machine runs it.) Bounding the work per
   sweep was the alternative and it only spreads the same cost — one capped batch an hour, over
   weeks of frames that each still stop to walk the directory. Nothing on the nominal path (a
   frame with no sweep due) changed at all: it is still one `find` on one marker file. Two
   things follow, and both are stated in the manual: a `ps` during that first sweep shows a
   stray `find` that belongs to tarmac, and snapshots disappear shortly *after* the frame
-  rather than by the time the line is drawn. (#8)
+  rather than by the time the line is drawn — which also means a chained status line reading
+  the same directory now runs beside the sweep rather than after it, and can see a cold
+  snapshot vanish mid-frame. (#8)
 - `uninstall` now removes the wrapper-owned `.tarmac-last-prune` housekeeping marker while
   preserving every snapshot file. A foreign `statusLine` keeps both the wrapper and marker,
   and settings restoration completes before marker cleanup can fail. (#9)

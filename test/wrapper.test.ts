@@ -202,10 +202,13 @@ test('a snapshot dir path containing spaces and quotes is handled', () => {
 // Since #8 it is also DETACHED: the frame starts the sweep and returns, so nothing below may
 // read the directory the instant `runWrapper` comes back. What the sweep did is waited for;
 // what it must NOT do is asserted behind a barrier, and the barrier is a cold snapshot the
-// sweep is bound to take — `find … -exec rm -f {} +` removes everything it matched in one
-// call, so once the canary is gone the batch is over and what is still there was kept on
-// purpose. Only the cases where NO sweep may start at all have nothing to wait for, and
-// those use `settle()`.
+// sweep is bound to take: once the canary is gone, the `rm` that was going to take it has
+// run, and what is still there was kept on purpose. That holds because these fixtures are a
+// handful of files. `-exec … +` fills an argv buffer and execs MID-WALK — measured here at
+// ~3 000 names per call — so a fixture of thousands of cold files would split into several
+// batches and the canary would stop meaning "the walk is over". Keep them small, or make the
+// canary the last name `find` reaches. Only the cases where NO sweep may start at all have
+// nothing to wait for, and those use `settle()`.
 
 const DEAD = 'ffffffff-1111-2222-3333-444444444444';
 const QUIET = 'ffffffff-5555-6666-7777-888888888888';

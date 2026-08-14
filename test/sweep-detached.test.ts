@@ -13,7 +13,7 @@
 // unqualified, by design, so the PATH is part of its contract with the machine. The stub
 // delegates to the real one, so what is deleted is still decided by the real expression.
 
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -39,6 +39,12 @@ const payload = JSON.stringify({
 /** The real `find`, resolved before the stub shadows it — the stub cannot ask for itself. */
 const REAL_FIND = execFileSync('/bin/sh', ['-c', 'command -v find'], { encoding: 'utf8' }).trim();
 
+/** Every sandbox built here, so the 20 000-file era of this suite does not live in TMPDIR forever. */
+const roots: string[] = [];
+after(() => {
+  for (const root of roots) fs.rmSync(root, { recursive: true, force: true });
+});
+
 interface Rig {
   snapDir: string;
   wrapper: string;
@@ -57,6 +63,7 @@ interface Rig {
  */
 function rig(): Rig {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-detach-'));
+  roots.push(root);
   const snapDir = path.join(root, 'snapshots');
   fs.mkdirSync(snapDir, { recursive: true });
 
@@ -106,6 +113,13 @@ exec ${REAL_FIND} "$@"
   };
 }
 
+/**
+ * The sweep log is written by the CHILD, so it is waited for and never read on the line after
+ * the frame — that read is a race between a fork and a `printf`, and it loses about one run
+ * in fifteen on a loaded machine. `waitFor` is the barrier; the count is asserted through it.
+ */
+const sweepStarted = (r: Rig): Promise<void> => waitFor(() => r.sweeps().length === 1, 'the sweep to record that it started');
+
 /** One frame. Returns what the status line printed and what it cost. */
 function frame(r: Rig): { out: string; ms: number } {
   const started = process.hrtime.bigint();
@@ -121,9 +135,9 @@ test('the frame does not wait for the sweep, and the sweep finishes anyway', asy
 
   const { out, ms } = frame(r);
 
-  assert.equal(r.sweeps().length, 1, 'sanity: this frame was a sweeping one');
   assert.ok(ms < FRAME_BUDGET_MS, `the frame waited for the sweep: ${ms.toFixed(0)}ms of a ${SWEEP_MS}ms sweep`);
   assert.match(out, /CHAINED/, 'the display rendered');
+  await sweepStarted(r);
   assert.equal(fs.existsSync(dead), true, 'sanity: the sweep is still running, so nothing is gone yet');
 
   await waitFor(() => !fs.existsSync(dead), 'the detached sweep to remove the cold snapshot');
@@ -133,21 +147,23 @@ test('the frame does not wait for the sweep, and the sweep finishes anyway', asy
 // A detached child that keeps the frame's stdout is the same bug wearing a different hat:
 // the frame returns on time, and whatever the sweep prints lands in the status line — or
 // holds the pipe open long after the shell exited, which is the wait above by another route.
-test('nothing the sweep prints reaches the status line', () => {
+test('nothing the sweep prints reaches the status line', async () => {
   const r = rig();
   warmUpFrames(() => frame(r));
   r.arm();
 
   const { out } = frame(r);
-  assert.equal(r.sweeps().length, 1, 'sanity: this frame was a sweeping one');
+  await sweepStarted(r);
   assert.doesNotMatch(out, /SWEEP-NOISE/, 'the sweep printed into the display');
   assert.equal(out.trim(), 'CHAINED', 'the status line is exactly what the chain printed');
 });
 
-// Amortization has to survive detachment, and this is where it could quietly stop: the
-// marker is stamped by the FRAME, before the fork, so a second frame arriving while the
-// first sweep is still walking the directory sees a fresh marker and starts nothing. Stamp
-// it inside the child instead and every frame drawn during a slow sweep starts another one.
+// Amortization has to survive detachment, and this is where it could quietly stop: a frame
+// drawn while the first sweep is still walking the directory must start nothing. That is the
+// property pinned here, and it is pinned by counting sweeps, not by inspecting where the
+// stamp is written — a `touch` moved to the HEAD of the child lands a millisecond after the
+// fork and this test stays green; only a stamp moved to the END of it goes red here. Where
+// the stamping has to live is asserted directly, and synchronously, in the test below.
 test('a frame drawn while a sweep is in flight does not start a second one', async () => {
   const r = rig();
   warmUpFrames(() => frame(r));
@@ -161,16 +177,19 @@ test('a frame drawn while a sweep is in flight does not start a second one', asy
     Math.max(second.ms, third.ms) < FRAME_BUDGET_MS,
     'the frames that followed the sweeping one were not slowed either',
   );
-  assert.equal(r.sweeps().length, 1, 'three frames, one sweep');
 
+  // Counted only once the first sweep has finished its work: a second one, had a frame
+  // started it, would have written its own line the moment it was forked — a second before
+  // this — so by here the log is complete.
   await waitFor(() => !fs.existsSync(path.join(r.snapDir, `${DEAD}.json`)), 'the one sweep to finish its work');
+  assert.equal(r.sweeps().length, 1, 'three frames, one sweep');
   assert.match(first.out, /CHAINED/);
 });
 
 // The marker is what the next hour is measured from, and it is written before the sweep so
 // that a sweep that cannot finish is not retried on the very next frame. Detaching moves the
 // work, not the bookkeeping.
-test('the marker is restamped by the frame, not by the sweep it started', () => {
+test('the marker is restamped by the frame, not by the sweep it started', async () => {
   const r = rig();
   warmUpFrames(() => frame(r));
   r.arm();
@@ -180,5 +199,5 @@ test('the marker is restamped by the frame, not by the sweep it started', () => 
   frame(r);
 
   assert.ok(fs.statSync(marker).mtimeMs > before, 'the frame dated the sweep before returning');
-  assert.equal(r.sweeps().length, 1);
+  await sweepStarted(r);
 });
