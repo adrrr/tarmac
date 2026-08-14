@@ -4,7 +4,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { PRUNE_EVERY_MIN, PRUNE_MARKER, renderWrapper, SNAPSHOT_TTL_MIN, TEMP_PREFIX } from '../src/wrapper.ts';
+import {
+  PRUNE_EVERY_MIN,
+  PRUNE_MARKER,
+  renderWrapper,
+  SNAPSHOT_GLOB,
+  SNAPSHOT_NAME,
+  SNAPSHOT_TTL_MIN,
+  TEMP_PREFIX,
+} from '../src/wrapper.ts';
 
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 const payload = (over: Record<string, unknown> = {}): string =>
@@ -276,6 +284,49 @@ test('never removes a *.json that is not shaped like a session id', () => {
   runWrapper({ root, snapDir, input: payload() });
   assert.equal(fs.existsSync(deadFile(snapDir)), false, 'ours is still swept');
   assert.deepEqual(contents(snapDir), [...Object.keys(foreign), `${SID}.json`].sort());
+});
+
+// `SNAPSHOT_NAME` is DERIVED from `SNAPSHOT_GLOB` — the only translation is escaping the `.`
+// of the extension — and that is correct only while the glob holds nothing but bracket
+// expressions and literals. Put a `?` back in and the two languages quietly stop meaning the
+// same thing: `?` is "any one character" to `find` and "the previous atom is optional" to a
+// regex, which is not a widening or a narrowing but a different set, in the two places that
+// delete. Deriving one from the other makes drift unlikely, not impossible, so the two are
+// run against the same names — the real `find`, with the real glob.
+test('the glob the shell deletes by and the regex TypeScript deletes by are one set', () => {
+  const { root: dir } = sandbox();
+  const names = [
+    `${SID}.json`,
+    `${SID.toUpperCase()}.json`,
+    `.${SID.slice(1)}.json`,
+    'ea6a607g-42e0-4773-af4d-ae5f5938d819.json',
+    'ea6a607c-42e0-4773-af4d-ae5f5938d81.json',
+    'ea6a607c42e04773af4dae5f5938d819.json',
+    `${SID}.jsonx`,
+    `x${SID}.json`,
+    'abcdefgh.json',
+    'fleet-config.json',
+    `${TEMP_PREFIX}${SID}.42.tmp`,
+    PRUNE_MARKER,
+  ];
+  for (const name of names) fs.writeFileSync(path.join(dir, name), '{}');
+  // What landed, not what was asked for: on a case-insensitive filesystem the two spellings
+  // of the same id are one file, and the question here is whether the two matchers agree
+  // about a DIRECTORY — whichever directory the host actually built.
+  const onDisk = fs.readdirSync(dir);
+
+  const found = execFileSync(
+    'find',
+    [`${dir}/.`, '!', '-name', '.', '-prune', '-name', SNAPSHOT_GLOB, '-type', 'f'],
+    { encoding: 'utf8' },
+  )
+    .split('\n')
+    .filter(Boolean)
+    .map((f) => path.basename(f))
+    .sort();
+
+  assert.deepEqual(found, onDisk.filter((n) => SNAPSHOT_NAME.test(n)).sort());
+  assert.ok(found.length > 0, 'sanity: a matcher that matches nothing agrees with anything');
 });
 
 // #7, second direction. `?` matches a leading dot — `find`'s fnmatch is not called with
