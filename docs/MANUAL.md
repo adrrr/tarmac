@@ -85,13 +85,16 @@ That hourly sweep runs **beside** the frame rather than inside it. The frame sta
 the marker and goes straight on to your status line; the walk and the unlinks happen in a
 detached child that nothing waits for. So on an install that has never pruned — where the
 first sweep has months of dead snapshots to get through — the frame that triggers it still
-costs about what every other frame costs, and the backlog disappears a moment later. Three
-consequences worth knowing: a `ps` during that first sweep shows a stray `find` that belongs
-to tarmac (it keeps the process group of the session that started it, so shutting Claude Code
-down takes it with it, and the remainder waits for the next sweep); the files it removes are
-gone shortly *after* the frame, not by the time the line is drawn; and your own status line,
-if you chained one that reads the same directory, now runs beside that sweep rather than after
-it, so it can see a snapshot older than 48h disappear mid-frame.
+costs about what every other frame costs, and the backlog disappears a moment later.
+
+Three consequences worth knowing. A `ps` during that first sweep shows a stray `find` that
+belongs to tarmac, and it is genuinely on its own: closing Claude Code does not take it with
+it, and neither does a Ctrl-C — the shell has an asynchronous command ignore that. It ends
+when it is done, which is seconds, or with a signal sent to the process group; whatever it had
+not reached waits for the next sweep. The files it removes are gone shortly *after* the frame,
+not by the time the line is drawn. And your own status line, if you chained one that reads the
+same directory, now runs beside that sweep rather than after it, so it can see a snapshot
+older than 48h disappear mid-read.
 
 It deletes by the same rule as the temp files: **only what it wrote** — and that is one rule,
 not two. A session id is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal; the wrapper

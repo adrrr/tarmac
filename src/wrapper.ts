@@ -202,38 +202,49 @@ fi
 # And DETACHED, because amortized is an average and the average was never the problem: on an
 # install that has never pruned, the one frame that sweeps pays for the entire backlog at
 # once — a directory walk plus ten thousand unlinks on 20 000 snapshots, measured at 0.5 s in
-# the report and at 0.6-0.9 s by \`test/sweep-perf.test.ts\`, in front of the status line (#8). Bounding the work per sweep instead would only spread that
-# cost, at one bounded batch an hour, over weeks of frames that each still stop to walk the
+# the report and at 0.6-0.9 s by \`test/sweep-perf.test.ts\`, in front of the status line (#8).
+# Bounding the work per sweep instead would only spread that cost, at one bounded batch an
+# hour, over weeks of frames that each still stop to walk the
 # same directory; the frame has no business waiting for any of it. So the sweep is handed to a
 # child and the frame goes on to the chain: the frame's cost becomes one fork, whatever the
 # directory holds, and NOTHING on the nominal path — a frame with no sweep due — changes at all.
 # What that costs, all of it on the sweep's side of the fork:
 #   • the child outlives the frame. It is orphaned when the shell exits and reaped by init;
 #     nothing waits for it, so no zombie can accumulate in the TUI's process tree.
-#   • if the session dies mid-sweep, the sweep either finishes on its own (it holds no state
-#     but the marker, already stamped) or is killed with the process group — in which case
-#     what is left is what the next hour's sweep will find, which is where it was heading.
+#   • if the session dies mid-sweep, the sweep normally finishes on its own: it holds no state
+#     but the marker, already stamped, and an orphan is not interrupted by the death of its
+#     parent. It does NOT go away with a Ctrl-C either — POSIX has the shell set SIGINT and
+#     SIGQUIT to ignored in an asynchronous list where job control is off, which is here. Only
+#     a signal aimed at the process group (a SIGHUP or a SIGTERM from whatever supervises the
+#     TUI) takes it, and then what is left is what the next hour's sweep will find, which is
+#     where it was heading anyway.
 #   • the redirections are not hygiene, they are the point. A child that inherits the frame's
 #     stdout puts whatever it prints INTO the status line, and holds the pipe open after this
 #     shell has exited — the reader waits on EOF, so the frame would still block, having only
 #     moved where. \`</dev/null\` is the belt to those braces: POSIX already hands an
 #     asynchronous list \`/dev/null\` for stdin wherever job control is off — every shell that
 #     will ever run this — and stdin was drained by \`\$(cat)\` at the top anyway.
-#   • two frames can still both decide to sweep in the microseconds around the \`touch\`, as
-#     they always could; a second frame drawn WHILE a sweep runs sees a stamped marker and
-#     starts nothing, because the stamping stayed in the frame rather than moving into the
-#     child. Across HOURS they can overlap — a sweep slower than the window is joined by the
+#   • two frames that reach the marker check together both sweep, as they always could. The
+#     window is not the \`touch\` — it is the \`find\` that reads the marker's age, a whole
+#     process, which is why two frames drawn simultaneously fork two sweeps almost every time.
+#     Detaching improves that case rather than widening it: what used to be two frozen frames
+#     is now two detached walks. What matters is that a frame drawn AFTER a sweep has started
+#     sees a stamped marker and starts nothing, which is the ordinary case and the reason the
+#     stamping stayed in the frame rather than moving into the child. Across HOURS they can
+#     overlap — a sweep slower than the window is joined by the
 #     next one — and that is harmless: \`rm -f\` on a name another sweep already unlinked is
 #     not an error, and the marker is the only state either of them writes.
 #   • a \`find\` that HANGS (a stale network mount, a directory that never answers) is no longer
 #     one frozen frame; it is one orphaned process per hour that nothing here reaps. The trade
 #     is deliberate — a frozen frame breaks RULE 1, an idle process does not — but it is
 #     unbounded over time in a way the blocking shape was not.
-#   • the chain now runs BESIDE the sweep instead of after it, so a chained status line reading
-#     this same directory can watch a file vanish under it mid-frame. Every reader in this repo
-#     already tolerates that (a snapshot that disappears between \`readdir\` and \`readFile\` is
-#     read as absent), and one that does not was already racing every other session's frames
-#     for the same file.
+#   • the chain now runs BESIDE the sweep instead of after it, so anything reading this same
+#     directory can watch a file vanish under it mid-frame. Nothing here breaks on that — the
+#     display is untouched and no data is lost — but it is not free either: \`snapshots.ts\`
+#     counts a file that disappears between its \`readdir\` and its \`readFile\` as UNREADABLE,
+#     and \`list\`/\`serve\` report that as "the schema may have moved". Same window on the
+#     blocking shape (a sweep and a reader have always been able to overlap), so this is not
+#     a regression, and it is the READER's to fix: #17.
 #
 # Two known holes, both of them the safe way round, and both inherited from the fleet script
 # this transposes:

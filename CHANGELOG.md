@@ -18,7 +18,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   that frame measured **0.6-0.9 s**, a directory walk plus ten thousand unlinks in front of the
   status line. It rendered, and it exited 0, so nothing in the suite could see it: every test
   asked what the sweep *did*, none asked what the frame *cost*. The frame now dates the marker
-  and hands the walk to a detached child: **~15 ms** on the same stock, with the ordinary frames
+  and hands the walk to a detached child: **16.7 ms** on the same stock, with the ordinary frames
   around it unchanged at ~11 ms, and the backlog gone a moment later. (Figures from
   `test/sweep-perf.test.ts`, which prints its own on whatever machine runs it.) Bounding the work per
   sweep was the alternative and it only spreads the same cost — one capped batch an hour, over
