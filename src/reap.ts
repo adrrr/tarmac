@@ -17,14 +17,19 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { TEMP_PREFIX } from './wrapper.ts';
+import { SID_GLOB, TEMP_PREFIX } from './wrapper.ts';
 
 /** Exported so a test can build the same expectation from the same constant, escaped. */
 export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// `<TEMP_PREFIX><sid>.<pid>.tmp` — the sid charset and length are the ones the wrapper
-// enforces before it agrees to use the value as a filename, and the pid is what `$$` emits.
-const TEMP_NAME = new RegExp(`^${escapeRe(TEMP_PREFIX)}[0-9A-Za-z-]{8,64}\\.\\d+\\.tmp$`);
+// `<TEMP_PREFIX><sid>.<pid>.tmp` — the pid is what `$$` emits, and the sid is the wrapper's
+// own rule, read from the constant rather than transcribed: a set of its own is how this
+// matcher came to accept names the writer had stopped producing (#7).
+//
+// `SID_GLOB` goes in RAW, unlike the prefix: it is a shell pattern made of bracket
+// expressions and literal `-`, which is already valid regex meaning the same set. Escaping
+// it would turn the classes into literal brackets and match nothing at all.
+const TEMP_NAME = new RegExp(`^${escapeRe(TEMP_PREFIX)}${SID_GLOB}\\.\\d+\\.tmp$`);
 
 /** An hour is orders of magnitude beyond any real frame, and cheap to be wrong about. */
 const DEFAULT_OLDER_THAN_MS = 60 * 60_000;

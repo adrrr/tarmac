@@ -1138,6 +1138,22 @@ test('a file nothing here wrote keeps the legacy directory, and itself', () => {
   assert.equal(legacy?.kept, 2);
 });
 
+// #7, in the TypeScript half of the same rule. `SNAPSHOT_NAME` was derived from a glob of
+// `?`, and `?` became `.` in the regex — a class that matches a leading dot as happily as
+// `find`'s fnmatch does. So a `.aaaaaaa-….json` counted as a payload OF OURS and was deleted
+// from a directory people version-control, on the strength of a name the writer's own charset
+// forbids it to produce. "A name is not provenance" cuts hardest here, where the purge is
+// deleting inside `~/.claude`.
+test('a dotfile wearing a session id name is not a payload, and survives the purge', () => {
+  const home = fakeHome('{}');
+  oldInstall(home);
+  const dir = legacyLitter(home, { '.aaaaaaa-1111-1111-1111-111111111111.json': 'not ours' });
+  const { legacy } = install({ home });
+  assert.equal(legacy?.payloads, 4, 'the four real payloads, and only those');
+  assert.equal(legacy?.kept, 1, 'the dotfile keeps the directory alive');
+  assert.deepEqual(fs.readdirSync(dir), ['.aaaaaaa-1111-1111-1111-111111111111.json']);
+});
+
 test('an install with nothing to clear says so, rather than inventing a directory', () => {
   const home = fakeHome('{}');
   assert.equal(install({ home }).legacy, null);

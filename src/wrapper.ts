@@ -61,22 +61,39 @@ export const PRUNE_EVERY_MIN = 60;
 export const SNAPSHOT_TTL_MIN = 48 * 60;
 
 /**
- * The names the sweep below is allowed to remove: the 8-4-4-4-12 session id Claude Code
- * emits, which is every fixture here and every file the live fleet directory holds. NOT
- * `*.json` — that would take a `settings.json` or a `fleet.json` sitting next to them, data
- * this script never wrote, deleted from inside a status line.
+ * A session id — ONE rule, and the only one the writer below, the sweep below and the
+ * TypeScript that reads this directory are allowed to know. Written as a shell pattern
+ * because two of the three consumers are shell; the third derives its regex from it.
  *
- * The wrapper WRITES ids wider than this on purpose (it refuses to guess what an id may look
- * like), so such a file is written and never pruned. That is the only direction this trade
- * may fail in.
+ * It is the canonical UUID, 8-4-4-4-12 hex: every fixture in this repo, every file in the
+ * live fleet's snapshot directory, and every transcript Claude Code names after a session.
+ * The statusline payload documents `session_id` only as a "unique session identifier", so
+ * that is an observation and not a promise — and the direction of the bet is deliberate. An
+ * id that is not a UUID is refused at write time, which surfaces as a live session with
+ * `absent` telemetry: a state `fleet.ts` already names and shows. The other bet — file
+ * whatever arrives, and widen the deleters to match — would put every stem of 8..64
+ * characters of `[0-9A-Za-z-]` within reach of `rm`, in a directory the docs invite you to
+ * share with another statusline and that people keep in git. A missing row is recoverable.
+ *
+ * Bracket expressions, not `?`: `?` matches a leading dot (fnmatch without FNM_PERIOD), so
+ * the old glob reached dotfiles the writer's own charset forbids it to produce (#7).
  */
-export const SNAPSHOT_GLOB = '????????-????-????-????-????????????.json';
+const HEX = '[0-9a-fA-F]';
+export const SID_GLOB = [8, 4, 4, 4, 12].map((n) => HEX.repeat(n)).join('-');
+
+/**
+ * The names the sweep below is allowed to remove: the sid rule, and a `.json`. NOT `*.json` —
+ * that would take a `settings.json` or a `fleet.json` sitting next to them, data this script
+ * never wrote, deleted from inside a status line.
+ */
+export const SNAPSHOT_GLOB = `${SID_GLOB}.json`;
 
 /**
  * The same set, in Node — derived from the glob itself so the shell that deletes and the
- * TypeScript that deletes can never drift apart. `?` is any single character, `.` is literal.
+ * TypeScript that deletes can never drift apart. A bracket expression means the same thing
+ * in both languages; only the `.` of the extension separates them.
  */
-export const SNAPSHOT_NAME = new RegExp(`^${SNAPSHOT_GLOB.replace(/\./g, '\\.').replace(/\?/g, '.')}$`);
+export const SNAPSHOT_NAME = new RegExp(`^${SNAPSHOT_GLOB.replace(/\./g, '\\.')}$`);
 
 export interface WrapperOptions {
   snapshotDir: string;
@@ -122,16 +139,15 @@ case "$payload" in
     esac
     ;;
 esac
-# refuse anything that is not UUID-shaped — this value becomes a filename
+# Refuse anything that is not a session id — this value becomes a filename, and it is the
+# same rule the sweep below deletes by: what this line declines to write, that one cannot
+# unlink, and the reverse. An empty sid matches nothing here, so it stays empty.
 case "$sid" in
-  ''|*[!0-9a-zA-Z-]*) sid='' ;;
+  ${SID_GLOB}) ;;
+  *) sid='' ;;
 esac
 # refuse an ambiguous payload outright
 [ "$payload_has_two_ids" = 1 ] && sid=''
-if [ -n "$sid" ]; then
-  len=\${#sid}
-  if [ "$len" -lt 8 ] || [ "$len" -gt 64 ]; then sid=''; fi
-fi
 
 # --- drop the snapshot (best effort, atomic: temp file + rename in the same dir) ---
 if [ -n "$sid" ] && mkdir -p "$TARMAC_DIR" 2>/dev/null; then
