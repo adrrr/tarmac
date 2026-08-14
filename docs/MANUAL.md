@@ -90,8 +90,10 @@ is a *reader's* lens for `list` and `serve` — pointing those at a directory an
 owns deletes nothing, because no reader deletes anything.)
 
 A session whose id is not a UUID therefore gets no snapshot at all, and `list` shows it as a
-live session with no reading. That is the deliberate half of the trade: the alternative is a
-sweep whose reach is every filename of eight characters or more.
+live session with no reading — and says so in those words, rather than telling you to run
+`tarmac install`: for that session the install is already right, the frame is already drawn,
+and the wrapper is declining on purpose. That is the deliberate half of the trade; the
+alternative is a sweep whose reach is every filename of eight characters or more.
 
 The one loose end, if you ran a version before this one: a snapshot already on disk under a
 non-UUID name is still *read* — the reader takes any `*.json` and keys on the `session_id`

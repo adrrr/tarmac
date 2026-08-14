@@ -31,6 +31,20 @@ function runsHere(shell: Shell): boolean {
 }
 
 const SHELLS = CANDIDATES.filter(runsHere);
+
+/** The first of `names` this machine actually has, so a locale test can skip honestly. */
+function installedLocale(names: string[]): string | undefined {
+  let available: string;
+  try {
+    available = spawnSync('locale', ['-a'], { encoding: 'utf8' }).stdout ?? '';
+  } catch {
+    return undefined;
+  }
+  const have = new Set(available.split('\n').map((l) => l.trim().toLowerCase()));
+  return names.find((n) => have.has(n.toLowerCase()));
+}
+
+const UTF8 = installedLocale(['en_US.UTF-8', 'C.UTF-8', 'en_US.utf8']);
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 const DEAD = 'ffffffff-1111-2222-3333-444444444444';
 const QUIET = 'ffffffff-5555-6666-7777-888888888888';
@@ -53,6 +67,7 @@ function runUnder(
   chain: string | null,
   seed?: Record<string, number>,
   readOnlyDir = false,
+  env?: Record<string, string>,
 ): RunResult {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-posix-'));
   const snapDir = path.join(root, 'snapshots');
@@ -67,7 +82,11 @@ function runUnder(
   }
   const file = path.join(root, 'statusline.sh');
   fs.writeFileSync(file, renderWrapper({ snapshotDir: snapDir, chainCommand: chain }));
-  const r = spawnSync(shell.cmd, [...shell.prefix, file], { input, encoding: 'utf8' });
+  const r = spawnSync(shell.cmd, [...shell.prefix, file], {
+    input,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
   assert.equal(r.error, undefined, `${shell.label} failed to run the wrapper`);
   return { stdout: r.stdout, stderr: r.stderr, status: r.status, snapDir };
 }
@@ -114,6 +133,28 @@ for (const shell of SHELLS) {
     const notHex = runUnder(shell, payload({ session_id: 'ea6a607g-42e0-4773-af4d-ae5f5938d819' }), 'echo CHAINED');
     assert.match(notHex.stdout, /CHAINED/);
     assert.deepEqual(listSnapshots(notHex.snapDir), [], 'a sid shaped right but not hex writes nothing');
+
+    // …and `g` is outside `a-f` in every collation there is, so the fixture above cannot see
+    // the one way this set ever actually widened. A bracket RANGE is collated by the locale:
+    // spelled `[0-9a-fA-F]`, `a-f` reaches `é` and fullwidth `ａ` under `en_US.UTF-8` — in
+    // bash and in ksh, though NOT in dash, which is why this has to be asked of each shell by
+    // name rather than of `#!/bin/sh` on whichever machine happens to run the suite. The regex
+    // derived from the same string is ASCII code points, so a widening here is one constant
+    // meaning two sets, chosen by the `LANG` of whoever's terminal drew the frame. The rule is
+    // an enumeration of the sixteen digits for exactly this reason, and this is the test that
+    // holds it there.
+    if (UTF8) {
+      const nonAscii = runUnder(
+        shell,
+        payload({ session_id: 'éa6a607c-42e0-4773-af4d-ae5f5938d819' }),
+        'echo CHAINED',
+        undefined,
+        false,
+        { LC_ALL: UTF8 },
+      );
+      assert.match(nonAscii.stdout, /CHAINED/);
+      assert.deepEqual(listSnapshots(nonAscii.snapDir), [], `a non-ASCII sid writes nothing under ${UTF8}`);
+    }
 
     // Two ids: the `case` fallthrough and the `[ … ] && sid=''` guard.
     const ambiguous = runUnder(

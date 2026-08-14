@@ -102,11 +102,17 @@ export const SID_GLOB = [8, 4, 4, 4, 12].map((n) => HEX.repeat(n)).join('-');
 export const SNAPSHOT_GLOB = `${SID_GLOB}.json`;
 
 /**
- * The same set, in Node — derived from the glob itself so the shell that deletes and the
- * TypeScript that deletes can never drift apart. A bracket expression means the same thing
- * in both languages; only the `.` of the extension separates them.
+ * The same rule, in Node — the pattern goes in RAW, because a bracket expression means the
+ * same set in both languages and `-` is literal in both. Only the extension is spelled twice,
+ * once per language, which is the one thing a translation could get wrong and so the one
+ * thing that is written out rather than derived.
+ *
+ * `SID_NAME` is the sid alone: `fleet.ts` asks it whether a LIVE session's id is one the
+ * wrapper would ever file, which is the difference between "no frame drawn yet" and "no frame
+ * will ever help" — two states that look identical on a row.
  */
-export const SNAPSHOT_NAME = new RegExp(`^${SNAPSHOT_GLOB.replace(/\./g, '\\.')}$`);
+export const SID_NAME = new RegExp(`^${SID_GLOB}$`);
+export const SNAPSHOT_NAME = new RegExp(`^${SID_GLOB}\\.json$`);
 
 export interface WrapperOptions {
   snapshotDir: string;

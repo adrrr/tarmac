@@ -38,7 +38,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   telemetry — a state the fleet join already has, on screen, rather than a leak on disk.
   Existing snapshots and temp files bearing a non-UUID id are no longer swept; the shape has
   never been observed in the wild (every fixture here, and every transcript Claude Code
-  names). (#7)
+  names). And the cost is now *said*: `list` and `serve` no longer answer a session of that
+  kind with "run `tarmac install` and give them one TUI frame" — advice already taken, which
+  no frame can satisfy. They report how many session ids the wrapper will never file, which is
+  the difference between telemetry that is late and telemetry that is not coming. (#7)
 
 ## [0.2.0] - 2026-08-14
 

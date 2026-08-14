@@ -14,6 +14,7 @@
 import path from 'node:path';
 import { DEFAULT_STALE_AFTER_MS } from './config.ts';
 import { guardVersions } from './schema.ts';
+import { SID_NAME } from './wrapper.ts';
 import type { SchemaGuard } from './schema.ts';
 import type { DiscoveryHealth, Session } from './sessions.ts';
 import type { CtxState, Snapshot } from './snapshots.ts';
@@ -45,6 +46,12 @@ export interface FleetRow {
 export interface FleetHealth {
   sessions: number;
   covered: number;
+  /**
+   * Live sessions whose id is not a shape the wrapper files a snapshot under, so their
+   * telemetry is not late — it is never coming. Counted apart from `covered` because the
+   * two states differ only in what the user should do about them.
+   */
+  unfilable: number;
   drift: number;
   stale: number;
   discovered: number;
@@ -118,6 +125,8 @@ export function buildFleet({
   rows.sort((a, b) => rank(a) - rank(b) || (b.ctxPct ?? -1) - (a.ctxPct ?? -1));
 
   const covered = rows.filter((r) => r.ctxState !== 'absent').length;
+  // A null id is `noSessionId`'s business — a discovery failure, not a naming one.
+  const unfilable = rows.filter((r) => r.sessionId !== null && !SID_NAME.test(r.sessionId)).length;
   const drift = rows.filter((r) => r.ctxState === 'drift').length;
   // Having a snapshot and having a cost are different facts, and only the second one is
   // allowed to feed the total.
@@ -135,6 +144,7 @@ export function buildFleet({
     health: {
       sessions: rows.length,
       covered,
+      unfilable,
       drift,
       stale: rows.filter((r) => r.stale).length,
       // Discovery's own blind spots. Dropping them turns a renamed `sessionId` into the

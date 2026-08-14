@@ -33,20 +33,18 @@ interface RunWrapperOptions {
   snapDir: string;
   chain?: string;
   input: string;
-  /** Added to the child's environment — the locale is part of what a pattern MEANS. */
-  env?: Record<string, string>;
 }
 
 /** Writes the wrapper to disk and runs it with `input` on stdin. Returns its stdout. */
-function runWrapper({ snapDir, chain, input, root, env }: RunWrapperOptions): string {
+function runWrapper({ snapDir, chain, input, root }: RunWrapperOptions): string {
   const file = path.join(root, 'statusline.sh');
   fs.writeFileSync(file, renderWrapper({ snapshotDir: snapDir, chainCommand: chain ?? null }));
   fs.chmodSync(file, 0o755);
-  const stdout = execFileSync(file, { input, encoding: 'utf8', env: { ...process.env, ...env } });
+  const stdout = execFileSync(file, { input, encoding: 'utf8' });
   return stdout;
 }
 
-/** The first of `names` this machine actually has, so a locale test can skip honestly. */
+/** The first of `names` this machine actually has, or nothing — see the differential test. */
 function installedLocale(names: string[]): string | undefined {
   let available: string;
   try {
@@ -57,6 +55,8 @@ function installedLocale(names: string[]): string | undefined {
   const have = new Set(available.split('\n').map((l) => l.trim().toLowerCase()));
   return names.find((n) => have.has(n.toLowerCase()));
 }
+
+const UTF8 = installedLocale(['en_US.UTF-8', 'C.UTF-8', 'en_US.utf8']);
 
 /**
  * Everything in the snapshot dir except the prune marker — subtracted by NAME, not by
@@ -188,32 +188,6 @@ for (const { what, sid, accepted } of SIDS) {
   });
 }
 
-// A bracket RANGE is collated by the locale, and the wrapper's locale is whatever the TUI
-// that spawns it happens to carry. `[0-9a-fA-F]` reaches `é`, `ç` and fullwidth `ａ` under
-// `en_US.UTF-8` — in bash (which is `/bin/sh` on macOS), in ksh, and in BSD `find` — while
-// the JS regex derived from that same string is ASCII code points and always will be. One
-// string, two sets, and which one you get depends on the environment of the frame: the same
-// sid is filed in a Terminal and refused under `LC_ALL=C`, and a file written under one is
-// beyond every TypeScript deleter under both. That is #7 walking back in through `LANG`, so
-// the rule is an ENUMERATION of the sixteen hex digits, which no collation can widen.
-test('the sid rule is not widened by the locale the frame runs under', (t) => {
-  const utf8 = installedLocale(['en_US.UTF-8', 'C.UTF-8', 'en_US.utf8']);
-  if (!utf8) {
-    t.skip('no UTF-8 locale on this machine: the case this pins cannot be built here');
-    return;
-  }
-  const { root, snapDir } = sandbox();
-  const out = runWrapper({
-    root,
-    snapDir,
-    chain: 'echo OK',
-    input: payload({ session_id: 'éa6a607c-42e0-4773-af4d-ae5f5938d819' }),
-    env: { LC_ALL: utf8 },
-  });
-  assert.match(out, /OK/, 'the display renders either way');
-  assert.deepEqual(fs.existsSync(snapDir) ? contents(snapDir) : [], [], 'nothing was filed');
-});
-
 test('a snapshot dir path containing spaces and quotes is handled', () => {
   const { root } = sandbox();
   const weird = path.join(root, "od d's dir");
@@ -326,13 +300,14 @@ test('never removes a *.json that is not shaped like a session id', () => {
   assert.deepEqual(contents(snapDir), [...Object.keys(foreign), `${SID}.json`].sort());
 });
 
-// `SNAPSHOT_NAME` is DERIVED from `SNAPSHOT_GLOB` — the only translation is escaping the `.`
-// of the extension — and that is correct only while the glob holds nothing but bracket
-// expressions and literals. Put a `?` back in and the two languages quietly stop meaning the
-// same thing: `?` is "any one character" to `find` and "the previous atom is optional" to a
-// regex, which is not a widening or a narrowing but a different set, in the two places that
-// delete. Deriving one from the other makes drift unlikely, not impossible, so the two are
-// run against the same names — the real `find`, with the real glob.
+// `SNAPSHOT_GLOB` and `SNAPSHOT_NAME` are both built from `SID_GLOB`, which is why they can
+// agree at all — a bracket expression means the same set to fnmatch and to a regex, and `-`
+// is literal in both. But sharing a source is not the same as meaning the same thing. Two
+// ways they can still part: put a `?` back into `SID_GLOB` and it is "any one character" to
+// `find` and "the previous atom is optional" to a regex — not a widening or a narrowing but a
+// different set, in the two places that delete; or spell the extension `.json` in the regex,
+// where the `.` is a wildcard, rather than `\.json`. So the two are run against the same
+// names — the real `find`, with the real glob — instead of being trusted to correspond.
 test('the glob the shell deletes by and the regex TypeScript deletes by are one set', () => {
   const { root: dir } = sandbox();
   const names = [
@@ -344,9 +319,9 @@ test('the glob the shell deletes by and the regex TypeScript deletes by are one 
     'ea6a607c42e04773af4dae5f5938d819.json',
     `${SID}.jsonx`,
     `x${SID}.json`,
-    // The one character the translation actually touches. Delete the `.replace` that escapes
-    // it and every other name here still agrees — the regex's `.` matches the glob's literal
-    // `.` — while `<sid>Xjson` becomes a snapshot to TypeScript and a stranger to `find`.
+    // The one character each side has to spell in its own language. Unescape it in the regex
+    // and every other name here still agrees — a regex `.` matches the glob's literal `.` —
+    // while `<sid>Xjson` becomes a snapshot to TypeScript and a stranger to `find`.
     `${SID}Xjson`,
     // …and the one character class it must NOT touch: an enumeration, so no locale can pull
     // a non-ASCII character into the set on one side of the pair and not the other.
@@ -362,10 +337,13 @@ test('the glob the shell deletes by and the regex TypeScript deletes by are one 
   // about a DIRECTORY — whichever directory the host actually built.
   const onDisk = fs.readdirSync(dir);
 
+  // Under a UTF-8 locale where one exists: a bracket RANGE would collate `é` INTO `a-f` here
+  // — in BSD `find` as much as in bash — while the regex never would. Ambient locale would
+  // leave that half of the pair asked in `C`, where the question cannot fail.
   const found = execFileSync(
     'find',
     [`${dir}/.`, '!', '-name', '.', '-prune', '-name', SNAPSHOT_GLOB, '-type', 'f'],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', env: { ...process.env, ...(UTF8 ? { LC_ALL: UTF8 } : {}) } },
   )
     .split('\n')
     .filter(Boolean)

@@ -36,6 +36,7 @@ const row = (over: Partial<FleetRow> = {}): FleetRow => ({
 const health = (over: Partial<FleetHealth> = {}): FleetHealth => ({
   sessions: 1,
   covered: 1,
+  unfilable: 0,
   drift: 0,
   stale: 0,
   discovered: 1,
@@ -116,6 +117,16 @@ test('says nothing about a version it has checked', () => {
 test('warns when the statusline covers only part of the fleet', () => {
   const out = renderTable(fleet([row()], { sessions: 3, covered: 1 }));
   assert.match(out, /! statusline chained on 1\/3 sessions/);
+});
+
+// The same shape as the `unreadable` warning below: a count is what tells two identical-looking
+// causes apart. Since #7 a session whose id is not the UUID the wrapper files under reports no
+// context FOREVER, and the bare coverage line reads as "run install" — advice that is already
+// done and cannot work. The number has to travel, or the honest half of that trade is invisible.
+test('says how many sessions carry an id it will never file, next to the coverage', () => {
+  const out = renderTable(fleet([row({ ctxState: 'absent', ctxPct: null })], { sessions: 3, covered: 1, unfilable: 2 }));
+  assert.match(out, /! statusline chained on 1\/3 sessions/);
+  assert.match(out, /2 .*(never|cannot|not)/i, 'the two that will never be filed are named');
 });
 
 // C1: `readSnapshots` has always counted the payloads it could not key to a session — a

@@ -109,6 +109,22 @@ test('summarises coverage so a blind sensor is visible, not silent', () => {
   assert.equal(health.drift, 1);
 });
 
+// Since #7 the wrapper files a snapshot only for a session id shaped like the UUID Claude
+// Code emits, so "no telemetry" now has two causes that look identical on the row and are
+// opposite in what the user should do: a frame not yet drawn, which one frame fixes, and an
+// id this tool will never file, which no install and no frame will ever fix. Counting them
+// apart is what stops `list` from printing remediation that cannot work.
+test('counts the live sessions whose id it can never file a snapshot for', () => {
+  const sessions = [
+    session({ sessionId: 'ea6a607c-42e0-4773-af4d-ae5f5938d819' }),
+    session({ sessionId: 'test-session-abc' }),
+    session({ sessionId: null }),
+  ];
+  const { health } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  assert.equal(health.covered, 0, 'none of them has telemetry');
+  assert.equal(health.unfilable, 1, 'and exactly one of them never will');
+});
+
 test('flags total drift as a schema break, not a per-session hiccup', () => {
   const sessions = [session({ sessionId: 'a' }), session({ sessionId: 'b' })];
   const snapshots = new Map([
