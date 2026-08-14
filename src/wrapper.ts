@@ -201,7 +201,7 @@ fi
 #
 # And DETACHED, because amortized is an average and the average was never the problem: on an
 # install that has never pruned, the one frame that sweeps pays for the entire backlog at
-# once — a directory walk plus ten thousand unlinks, measured at 0.93 s on 20 000 snapshots,
+# once — a directory walk plus ten thousand unlinks, measured at 0.65-0.85 s on 20 000 snapshots,
 # in front of the status line (#8). Bounding the work per sweep instead would only spread that
 # cost, at one bounded batch an hour, over weeks of frames that each still stop to walk the
 # same directory; the frame has no business waiting for any of it. So the sweep is handed to a
