@@ -81,6 +81,15 @@ every night grows one dead file per session per night, forever. The sweep is amo
 because it sits in the render path of your status line: a frame costs one `find` on a single
 marker file (`.tarmac-last-prune`), and the directory itself is swept at most once an hour.
 
+That hourly sweep runs **beside** the frame rather than inside it. The frame starts it, dates
+the marker and goes straight on to your status line; the walk and the unlinks happen in a
+detached child that nothing waits for. So on an install that has never pruned — where the
+first sweep has months of dead snapshots to get through — the frame that triggers it still
+costs about what every other frame costs, and the backlog disappears a moment later. Two
+consequences worth knowing: a `ps` during that first sweep shows a stray `find` that belongs
+to tarmac, and the files it removes are gone shortly *after* the frame, not by the time the
+line is drawn.
+
 It deletes by the same rule as the temp files: **only what it wrote** — and that is one rule,
 not two. A session id is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal; the wrapper
 refuses to file a payload whose `session_id` is anything else, and the sweep unlinks exactly
