@@ -14,6 +14,14 @@
   ],
   "license": "MIT",
   "author": "adrrr",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adrrr/tarmac.git"
+  },
+  "homepage": "https://github.com/adrrr/tarmac#readme",
+  "bugs": {
+    "url": "https://github.com/adrrr/tarmac/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"

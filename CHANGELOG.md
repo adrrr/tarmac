@@ -8,7 +8,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 > Issue references below (`#16`, `#19`, `#20`, …) point at the pre-V1 development
 > history, which is not part of this repository's tracker.
 
-## [Unreleased]
+## [0.2.0] - 2026-08-14
+
+### Added
+
+- `repository`, `homepage` and `bugs` links in `package.json` — the npm page now points at
+  the public repository ([github.com/adrrr/tarmac](https://github.com/adrrr/tarmac)), which
+  is also where issues live from this release on.
 
 ### Changed
 
