@@ -20,10 +20,25 @@ test('a node carries its project, its session name and its context', () => {
   assert.match(html, /62/);
 });
 
-// The arc is the percentage. Drawn with pathLength="100", so the two numbers in the dash
-// array read as "62 filled, 38 empty" instead of a slice of some circumference.
+// The arc is the percentage, as a fraction of the circle's real circumference.
+//
+// `pathLength="100"` would say the same thing in far prettier markup — 62 filled, 38 empty —
+// but it is an attribute browsers have not always honoured on basic shapes, and the way it
+// fails is the way this project cannot afford: the dash array is ignored, the arc closes,
+// and every session on the page reads 100% context. So the arithmetic is done here, where
+// the suite can check it.
 test('the ring is drawn to the size of the reading', () => {
-  assert.match(one({ ctxPct: 62 }), /pathLength="100"[^>]*stroke-dasharray="62 38"/);
+  const html = one({ ctxPct: 62 });
+  const dash = /stroke-dasharray="([\d.]+) ([\d.]+)"/.exec(html);
+  assert.ok(dash, 'the arc carries a dash array');
+  const [filled, empty] = [Number(dash[1]), Number(dash[2])];
+  assert.ok(Math.abs(filled / (filled + empty) - 0.62) < 0.001, `${filled} of ${filled + empty} is not 62%`);
+  assert.doesNotMatch(html, /pathLength/, 'nothing normalises the circle out from under it');
+});
+
+test('a full context window fills the ring, and no more', () => {
+  const dash = /stroke-dasharray="([\d.]+) ([\d.]+)"/.exec(one({ ctxPct: 100 }))!;
+  assert.equal(Number(dash[2]), 0);
 });
 
 test('a session with no reading gets a dash and the reason, never a ring', () => {

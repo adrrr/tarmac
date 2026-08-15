@@ -714,13 +714,7 @@ export function renderMap(fleet: Fleet): string {
  * uses for the same conditions.
  */
 function renderNode({ row: r, role, state, reading, pulse }: MapNode): string {
-  const ring =
-    r.ctxPct === null
-      ? ''
-      : // pathLength normalises the circle to 100 units, so the dash array IS the percentage —
-        // no circumference to recompute the day the radius changes.
-        `<circle class="arc" cx="40" cy="40" r="30" pathLength="100" transform="rotate(-90 40 40)"` +
-        ` stroke-dasharray="${Math.min(100, r.ctxPct)} ${100 - Math.min(100, r.ctxPct)}"/>`;
+  const ring = r.ctxPct === null ? '' : arc(r.ctxPct);
   const value =
     r.ctxPct === null
       ? `<span class="why"><b>—</b>${esc(CTX_WHY[r.ctxState] ?? 'no reading')}</span>`
@@ -738,7 +732,7 @@ function renderNode({ row: r, role, state, reading, pulse }: MapNode): string {
   const under = role === 'agent' ? (r.kind ?? 'agent') : r.name;
   return `<article class="node" data-role="${role}" data-state="${state}" data-reading="${reading}">
       <div class="dial">
-        <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? '<circle class="halo" cx="40" cy="40" r="30"/>' : ''}<circle class="track" cx="40" cy="40" r="30"/>${ring}</svg>
+        <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? `<circle class="halo" cx="40" cy="40" r="${DIAL_R}"/>` : ''}<circle class="track" cx="40" cy="40" r="${DIAL_R}"/>${ring}</svg>
         <div class="val">${value}</div>
       </div>
       <div class="who">${role === 'agent' ? '<span class="tie" aria-hidden="true">&#8627;</span>' : ''}<span class="shape">${SHAPE[state]}</span><span class="project">${esc(title)}</span></div>
@@ -747,6 +741,29 @@ function renderNode({ row: r, role, state, reading, pulse }: MapNode): string {
       ${asOf}
     </article>`;
 }
+
+/** The dial's geometry. One radius, named once, so the arithmetic below cannot drift from it. */
+const DIAL_R = 30;
+const DIAL_C = 2 * Math.PI * DIAL_R;
+
+/**
+ * The filled part of the ring, as a fraction of the circle's real circumference.
+ *
+ * `pathLength="100"` would say the same thing in far prettier markup — "62 filled, 38 empty"
+ * — but it is an attribute browsers have not always honoured on basic shapes, and the way it
+ * fails is the one this page cannot afford: the dash array is ignored, the arc closes, and
+ * every session reads as a full context window. Two decimals is well under a pixel at this
+ * radius, and it keeps the markup diffable.
+ */
+function arc(pct: number): string {
+  const filled = (Math.min(100, Math.max(0, pct)) / 100) * DIAL_C;
+  return (
+    `<circle class="arc" cx="40" cy="40" r="${DIAL_R}" transform="rotate(-90 40 40)"` +
+    ` stroke-dasharray="${round2(filled)} ${round2(DIAL_C - filled)}"/>`
+  );
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 function ctxCell(r: FleetRow): string {
   if (r.ctxPct === null) {
