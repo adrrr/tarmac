@@ -127,7 +127,11 @@ stale one. The next frame it draws puts the file back.
 Your snapshot files survive `uninstall`; they are your data. Tarmac removes only
 `.tarmac-last-prune`, the housekeeping marker that has no owner once the pruning wrapper
 leaves with it. If the current `statusLine` is foreign, uninstall leaves both the wrapper and
-its marker in place so that command never points at a missing file.
+its marker in place so that command never points at a missing file. And when nothing says
+where that directory is — the wrapper deleted by hand, or still there but no longer carrying
+the path, with `backup.json` left behind, which uninstall still works through — uninstall
+opens no snapshots directory at all, and the plan prints `snapshots  unknown` rather than a
+path it would only have guessed at.
 
 ### Where the snapshots live, and why not in `.claude`
 

@@ -113,17 +113,18 @@ interface PlanBase {
    * the write follows it just the same, and the plan names the path the user typed.)
    */
   writes: string | null;
-  /**
-   * Where the payloads live — read from the installed wrapper when there is one. No longer
-   * guessable from the path above it, which is exactly why both plans name it.
-   */
-  snapshots: string;
   /** The exact command that undoes this one. */
   undo: string;
 }
 
 export interface InstallPlan extends PlanBase {
   action: 'install';
+  /**
+   * Where the payloads will live — the path this install is about to freeze into the wrapper.
+   * No longer guessable from the path above it, which is why the plan names it. Always known
+   * here: an install chooses the directory. An uninstall can only ask what was chosen.
+   */
+  snapshots: string;
   /** The command the wrapper will call, so the display is unchanged. */
   chained: string | null;
   alreadyInstalled: boolean;
@@ -147,6 +148,18 @@ export interface UninstallPlan extends PlanBase {
   action: 'uninstall';
   /** Which restore will run — the same four modes `uninstall` reports afterwards. */
   mode: UninstallMode;
+  /**
+   * Where the payloads this uninstall leaves behind really are — read from the installed
+   * wrapper, which is the only thing that knows.
+   *
+   * `null` when there is no answer to read: the wrapper is gone (hand-deleted, with a usable
+   * `backup.json` left over — a state `uninstall` still works through) or it no longer says
+   * where it writes. That is not the same as "the default", and the difference is the whole
+   * point: `uninstall` reads the same `null` and touches NOTHING in any snapshots directory,
+   * so a plan that filled the gap with a computed path promised a removal in a directory
+   * nobody had established. Same rule as `ctxPct`: no value is never rendered as a value.
+   */
+  snapshots: string | null;
 }
 
 export type Plan = InstallPlan | UninstallPlan;
@@ -883,8 +896,9 @@ export function planUninstall({ home, realHome = os.homedir() }: PlanOptions): U
     after,
     mode,
     // Where they REALLY are: `uninstall` leaves them behind, so the path it prints has to be
-    // the wrapper's own, not one recomputed from this shell's environment.
-    snapshots: installedSnapshotsDir(p) ?? p.snapshots,
+    // the wrapper's own, not one recomputed from this shell's environment — and when the
+    // wrapper cannot answer, neither can the plan. The same `null` `uninstall` acts on.
+    snapshots: installedSnapshotsDir(p),
     undo: undoCommand('install', root, isRealHome),
   };
 }
