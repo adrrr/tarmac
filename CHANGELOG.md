@@ -14,7 +14,8 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **A map view of the fleet, on `GET /map`.** One node per session — the arc is its context,
   the arc's weight is how much that reading may be believed, the shape by the name is its
-  state, and a single halo says a frame for it landed moments ago. It is a view over the
+  state, and a single halo says a measured reading for it landed moments ago — a percentage
+  nobody took gets a dotted, empty dial and no halo at all, however new the file it came in. It is a view over the
   fleet model the table already renders and opens no second source: `claude agents --json`
   for the sessions, the statusline snapshots for the readings, the snapshots' own timing for
   the pulse. The state and the reading stay two different clocks — a busy session with a
@@ -24,12 +25,22 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   never interpreted until now) are placed *beside* the session sharing their working
   directory rather than nested inside it: nesting would make this page show a smaller fleet
   than the table beside it, and an edge would claim a parentage `claude agents --json` does
-  not publish. Both views are rendered into the same `/live` fragment and the tabs are plain
-  links, so they cannot show readings of different ages, the view survives a reload, and the
-  page still needs no client-side rules. No history and no scrubber. (#5)
+  not publish. `interactive` is the only kind any captured payload contains, so a fleet in
+  which nothing calls itself that is read as a renamed kind rather than as a machine gone
+  entirely background — and every node prints whatever it does call itself. Both views are
+  rendered into the same `/live` fragment and the tabs are plain links, so they cannot show
+  readings of different ages, the view survives a reload, and the page still needs no
+  client-side rules. No history and no scrubber. (#5)
+- `kind` now travels on every fleet row, so it is also a new field on `GET /api/fleet` and on
+  `list --json`. Carried verbatim from `claude agents --json`, never interpreted outside the
+  map. (#5)
 
 ### Fixed
 
+- `! 0m ago` on both surfaces. A `--stale-after` under a minute — legal, and the example the
+  map's own pulse window is documented against — dated a thirty-second reading with the "!"
+  that means past the threshold and the "0m" that means brand new, in the same breath. Under
+  a minute the age now reads `<1m` rather than rounding itself into a contradiction.
 - **The hourly sweep no longer happens inside a frame.** Amortization made the sweep cheap on
   average, and the average was never the problem: the ONE frame that swept paid for the whole
   backlog at once. On an install that had never pruned — 20 000 snapshots, half of them dead —

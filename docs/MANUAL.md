@@ -223,9 +223,10 @@ at once, in four channels that never rely on colour alone:
 | What | Where it is | What it means |
 |---|---|---|
 | context | the arc | how full the window is, drawn to the size of the reading |
-| the reading's age | the arc's weight | solid: fresh. Thin, amber and dated `! 3h ago`: past the freshness threshold. Dotted empty ring: nothing was ever measured, and the dial says which kind of nothing — `not chained`, `no turn yet`, `schema drift` |
+| the reading's age | the arc's weight | solid: fresh. Thin, amber and dated `! 3h ago`: past the freshness threshold |
+| no reading at all | a dotted, empty dial | nothing was measured, and the middle says which kind of nothing — `not chained`, `no turn yet`, `schema drift` |
 | the session's state | the shape by the name | `●` busy, `○` idle, `▲` a status tarmac does not recognise |
-| a frame just landed | one halo, once | the snapshot for that session is under 10s old |
+| a reading just landed | one halo, once | a measured reading for that session is under 10s old |
 
 The state and the reading are two different clocks and are never merged. `busy` comes from
 `claude agents --json`, read at the moment you asked; the percentage comes from a file that
@@ -233,18 +234,37 @@ session's terminal wrote whenever it last drew a frame. A busy session with a tw
 reading is **both** live and stale, and the node says both — a solid green dot beside a thin
 amber arc dated `! 2h ago`.
 
-The halo is the only thing that moves, and it makes one claim: a snapshot for that session
-arrived moments ago. It never fires for a reading the freshness threshold calls stale, even
-when `--stale-after` is set below the ten-second pulse window — the threshold is the one that
-judges. Under `prefers-reduced-motion: reduce` it stops moving and stays as a faint ring: the
-movement goes, the fact it carries does not.
+"How old is the file" and "is there a number in it" are a third pair that is never merged.
+A session that has taken no turn yet, and one whose payload drifted, both have a snapshot as
+current as any on the machine and neither has a percentage: they get the dotted dial, not the
+solid ring of a session measured at 0%. That distinction matters twice a lifetime and both
+times at once — `no turn yet` is the whole fleet for a few minutes after a restart, and
+`schema drift` is the whole fleet the day Claude Code moves the payload.
+
+The halo is the only thing that moves, and it makes one claim: a reading for that session
+arrived moments ago. Three things have to be true for it — the reading is fresh, it is inside
+the ten-second window, and there is a number in it. It never fires for a reading the freshness
+threshold calls stale, even when `--stale-after` is set below that window (the threshold is
+the one that judges), and never for a snapshot that carried no measurement: a drifted fleet
+writes a file on every frame, and a fleet of empty dials beating steadily is the calm, wrong
+answer this tool exists to refuse. Under `prefers-reduced-motion: reduce` it stops moving and
+stays as a faint ring: the movement goes, the fact it carries does not.
 
 **Background agents.** `claude agents --json` prints interactive and background sessions in
 one array, and publishes nothing that ties an agent to whoever dispatched it. So the map does
-not draw one: an agent is a smaller, tinted, hooked node placed *next to* the session sharing
-its working directory — the only field both carry — and it keeps a node of its own even when
-no session matches. An edge would claim a parentage the source does not contain, and nesting
-would let this page show a smaller fleet than the table beside it.
+not draw one: an agent is a smaller, tinted node placed *next to* the session sharing its
+working directory — the only field both carry — and it keeps a node of its own, with its own
+project on it, even when no session matches. An edge would claim a parentage the source does
+not contain; nesting would let this page show a smaller fleet than the table beside it; and
+nothing points at the neighbouring node either, because the grid wraps where the viewport says
+and the fleet's sort can hand the same agent a different neighbour on the next poll.
+
+Which entries those are is decided by `kind`, and `interactive` is the only value any captured
+payload has ever contained. A fleet in which **nothing** calls itself `interactive` is read as
+a renamed kind rather than as a machine that has gone entirely background — the same tolerance
+the fleet applies to telemetry, where a signal true of every row is a change in the source.
+Whatever a node calls itself is printed on it when it is not `interactive`, so that decision is
+never invisible.
 
 There is no history and no time scrubber: every node is the fleet as of the reading in the
 header, and nothing on the page remembers an earlier one.

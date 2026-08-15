@@ -90,16 +90,16 @@ environment or config file — refuses instead, because you chose it.
 ### The map
 
 The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
-its context, the shape by the name its state, and a single halo when a frame for it landed
+its context, the shape by the name its state, and a single halo when a reading for it landed
 moments ago. It is the same reading in the same fragment, so the two views can never disagree.
 
 The rules the table follows, the map follows: a reading past the freshness threshold is drawn
 thin, amber and dated `! 3h ago` rather than as a live one, and a percentage nobody measured
-is an empty dotted dial that names which kind of nothing it is — never a ring at zero. A
-background agent is placed beside the session sharing its working directory, because the
-working directory is the only thing the two provably share; nothing is nested, and no edge is
-drawn for a relationship the sources do not publish. Details in
-[the manual](docs/MANUAL.md#the-map).
+is an empty dotted dial that names which kind of nothing it is — never a ring at zero, and
+never a halo, however new the file it came in. A background agent is placed beside the session
+sharing its working directory, because the working directory is the only thing the two provably
+share; nothing is nested, and no edge is drawn for a relationship the sources do not publish.
+Details in [the manual](docs/MANUAL.md#the-map).
 
 ## Why it does not break
 
