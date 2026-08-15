@@ -57,8 +57,18 @@ export function renderPlan(plan: Plan): string {
     // Foreign statusLine ownership keeps our wrapper in place, so its marker stays too. In
     // every restoring mode the wrapper leaves and the marker has no owner. Name both facts
     // so the plan matches the operation exactly.
+    //
+    // And when no wrapper says where it writes — hand-deleted, or no longer carrying the path
+    // — there is no directory to name: `uninstall` opens none and removes nothing there.
+    // Printing the default we would have computed, beside a promise to clear a marker out of
+    // it, is the one thing a plan may not do.
     const marker = plan.mode === 'foreign' ? "tarmac's prune marker stays" : "tarmac's prune marker is removed";
-    rows.push(['snapshots', `${plan.snapshots}   (snapshot files stay; ${marker})`]);
+    rows.push([
+      'snapshots',
+      plan.snapshots === null
+        ? 'unknown — no installed wrapper says where; nothing there is opened or removed'
+        : `${plan.snapshots}   (snapshot files stay; ${marker})`,
+    ]);
   }
   rows.push(['undo', plan.undo]);
 

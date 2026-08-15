@@ -29,6 +29,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   rather than by the time the line is drawn — which also means a chained status line reading
   the same directory now runs beside the sweep rather than after it, and can see a cold
   snapshot vanish mid-frame. (#8)
+- **The uninstall plan no longer promises a removal it cannot make.** With the wrapper
+  hand-deleted and a usable `backup.json` left behind — a state `uninstall` still works
+  through — nothing says where the snapshots are, so nothing there is opened or removed. The
+  plan filled that gap with the directory it *would* have computed and printed "tarmac's prune
+  marker is removed" beside it: a promise about a path nobody had established. The unknown now
+  travels in the plan (`snapshots: string | null`, the same `null` `uninstall` acts on) and the
+  plan says `unknown` instead of guessing. No destructive consequence either way — the failure
+  was a promise, not a deletion. (issue #15)
 - `uninstall` now removes the wrapper-owned `.tarmac-last-prune` housekeeping marker while
   preserving every snapshot file. A foreign `statusLine` keeps both the wrapper and marker,
   and settings restoration completes before marker cleanup can fail. (#9)
