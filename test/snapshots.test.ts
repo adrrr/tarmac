@@ -179,6 +179,42 @@ test('a snapshot deleted between the listing and the read is not counted unreada
   }
 });
 
+// The other end of the same rule, and the one that keeps the skip above narrow: a file we
+// were not ALLOWED to open is exactly what `unreadable` exists to say. Widen the skip to
+// "swallow every filesystem error" and nothing else in this suite notices — the corrupt
+// payload above is a `JSON.parse` failure, which carries no errno at all.
+test('a snapshot file that cannot be opened is still counted unreadable', (t) => {
+  // 0000 does not stop root, so under a root container this fixture is not the state it
+  // claims to build. Saying that out loud beats a green tick that proved nothing.
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: 0000 does not deny anything, the case cannot be built here');
+    return;
+  }
+  const dir = snapDir({ 'locked.json': JSON.stringify({ session_id: 'locked', context_window: { used_percentage: 5 } }) });
+  const file = path.join(dir, 'locked.json');
+  fs.chmodSync(file, 0o000);
+  try {
+    const res = readSnapshots(dir);
+    assert.equal(res.snapshots.size, 0);
+    assert.equal(res.unreadable, 1, '"I was not allowed to look" is not "it was deleted"');
+  } finally {
+    fs.chmodSync(file, 0o644);
+  }
+});
+
+// The deliberate half of the skip above, pinned rather than left to be discovered: `statSync`
+// follows symlinks, so a dead link named like a snapshot is ENOENT too and is skipped in the
+// same silence — except that this one is permanent, not a race. `reap.ts:75` reads the very
+// same shape the other way round, and is right to: it deletes the link, this only reads what
+// the link does not point at.
+test('a dangling symlink where a snapshot should be is skipped in silence, not counted', () => {
+  const dir = snapDir({ 'alive.json': JSON.stringify({ session_id: 'alive', context_window: { used_percentage: 7 } }) });
+  fs.symlinkSync(path.join(dir, 'swept-away.json'), path.join(dir, 'dead.json'));
+  const res = readSnapshots(dir);
+  assert.equal(res.unreadable, 0, 'nothing to read is not something it failed to read');
+  assert.equal(res.snapshots.size, 1, 'and the live snapshot beside it still reads');
+});
+
 test('a missing directory reads as empty rather than throwing', () => {
   const res = readSnapshots('/nonexistent/tarmac-snaps');
   assert.equal(res.snapshots.size, 0);

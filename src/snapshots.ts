@@ -154,11 +154,22 @@ export function readSnapshots(dir: string, { now = Date.now() }: { now?: number 
       mtimeMs = fs.statSync(file).mtimeMs;
       payload = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch (e) {
-      // A file listed a moment ago and gone now was DELETED between the two — the sweep
-      // clearing a cold snapshot out of the directory we are reading, which is its job. That
-      // is a race with our own housekeeping, not a payload we failed to parse, and counting
-      // it made tarmac drive its own format-drift warning (up to 2675 phantom unreadable on
-      // one read of a 20k directory, every hour, on every `list --watch` and `serve` redraw).
+      // ENOENT: a name listed a moment ago that resolves to nothing now. Almost always the
+      // sweep, deleting a cold snapshot out of the very directory we are reading — its job,
+      // and a race with our own housekeeping rather than a payload we failed to parse.
+      // Counting it made tarmac drive its own format-drift warning (up to 2675 phantom
+      // unreadable on one read of a 20k directory, and `list --watch` and `serve` redraw
+      // often enough to be inside that window).
+      //
+      // The cost, said out loud: `statSync` follows symlinks, so a DANGLING one named like a
+      // snapshot is ENOENT too, and it goes silent forever — a permanent state skipped as if
+      // it were a passing race. Deliberate. There is no payload behind a dead link either,
+      // and telling the two apart (an `lstat` first) buys a warning about a file `ls` already
+      // shows. Note it is the opposite call from `reap.ts:75`, which lstats PRECISELY so a
+      // dead link is not ENOENT: it deletes, and `unlink` takes a link away just fine. Reader
+      // and reaper ask different questions of the same shape.
+      //
+      // ENOENT only. A file we were not ALLOWED to open still counts, and must.
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT')
         unreadable += 1; // corrupt, half-written or unreadable: skip, but never forget
       continue;
