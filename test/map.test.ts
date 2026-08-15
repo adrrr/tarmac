@@ -71,3 +71,77 @@ test('an undated reading never pulses', () => {
 test('a session with no reading never pulses', () => {
   assert.equal(only({ snapshotAgeMs: null, ctxState: 'absent' }).pulse, false);
 });
+
+// ── agents in flight ─────────────────────────────────────────────────────────────────────
+// `claude agents --json` prints interactive sessions and background ones in the same array,
+// with `kind` as the only thing separating them and no field linking an agent to whoever
+// dispatched it. So the map gives every entry a node of its own and merely PLACES the agents
+// next to the session sharing their working directory — the one field both carry. Nesting
+// one inside the other would be an edge the source never published, and it would let the map
+// show a smaller fleet than the table on the same page.
+
+// The invariant the whole view is checked against.
+test('every session in the fleet is a node on the map, whatever its kind', () => {
+  const rows = [
+    row({ sessionId: 'a', kind: 'interactive', cwd: '/x' }),
+    row({ sessionId: 'b', kind: 'background', cwd: '/x' }),
+    row({ sessionId: 'c', kind: 'something-new', cwd: '/x' }),
+    row({ sessionId: 'd', kind: null, cwd: null }),
+  ];
+  assert.equal(buildMap(fleet(rows)).nodes.length, rows.length);
+});
+
+test('an interactive session is a session node', () => {
+  assert.equal(only({ kind: 'interactive' }).role, 'session');
+});
+
+test('a background session is an agent node', () => {
+  assert.equal(only({ kind: 'background' }).role, 'agent');
+});
+
+// The same rule the session status follows one module down: unrecognised means unknown,
+// never "the quiet one". A kind that is missing is not evidence of a background agent, and
+// demoting it would hide a terminal someone is sitting at.
+test('a session with no kind at all is a session node', () => {
+  assert.equal(only({ kind: null }).role, 'session');
+});
+
+test('an agent is placed right after the session sharing its working directory', () => {
+  const { nodes } = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/Users/jane/apollo', name: 'apollo-7a' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/Users/jane/orion', name: 'orion-11' }),
+      row({ sessionId: 'c', kind: 'background', cwd: '/Users/jane/apollo', name: 'sweep-01' }),
+    ]),
+  );
+  assert.deepEqual(nodes.map((n) => n.row.name), ['apollo-7a', 'sweep-01', 'orion-11']);
+});
+
+test('an agent whose directory matches no session comes last, and is still there', () => {
+  const { nodes } = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'background', cwd: '/Users/jane/gone', name: 'orphan-01' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/Users/jane/apollo', name: 'apollo-7a' }),
+    ]),
+  );
+  assert.deepEqual(nodes.map((n) => n.row.name), ['apollo-7a', 'orphan-01']);
+});
+
+// Two directories nobody could read are not the same directory.
+test('an unknown working directory places nothing next to anything', () => {
+  const { nodes } = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: null, name: 'a' }),
+      row({ sessionId: 'b', kind: 'background', cwd: null, name: 'nowhere-01' }),
+      row({ sessionId: 'c', kind: 'interactive', cwd: '/Users/jane/apollo', name: 'c' }),
+    ]),
+  );
+  assert.deepEqual(nodes.map((n) => n.row.name), ['a', 'c', 'nowhere-01']);
+});
+
+test('the fleet decides the order of the sessions, and the map keeps it', () => {
+  const { nodes } = buildMap(
+    fleet([row({ sessionId: 'a', name: 'first' }), row({ sessionId: 'b', name: 'second' })]),
+  );
+  assert.deepEqual(nodes.map((n) => n.row.name), ['first', 'second']);
+});
