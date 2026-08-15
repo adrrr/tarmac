@@ -121,9 +121,11 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
 }
 
 /**
- * The one kind any captured `claude agents --json` payload has ever contained. Everything
- * else it prints is, by that CLI's own help, a background session — but no payload with one
- * in it has been captured yet, so the word above is the anchor and never the list.
+ * The kind a terminal calls itself, and the anchor this module reasons from. A background
+ * entry has since been seen beside them — `kind: 'background'`, no `pid`, its word under
+ * `state` rather than `status` — so the two are no longer a reading of that CLI's help. It is
+ * still the anchor and never the list: one observed alternative is not the vocabulary, and the
+ * heuristic above asks only whether anything on this machine still calls itself `interactive`.
  *
  * An ABSENT kind is not evidence of an agent either: the same rule the session status follows
  * one module down, where unrecognised means unknown, never "the quiet one". The two mistakes

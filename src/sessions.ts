@@ -17,8 +17,9 @@ export interface Session {
   startedAt: number | null;
   /**
    * The word the entry used for what it is doing — `status` for a session with a process of
-   * its own, `state` for a background agent that has none. One field, because it is one fact,
-   * and the page quotes whichever word it came as.
+   * its own, `state` for a background agent that has none. One field, because it is one fact.
+   * It is what both surfaces print when `busy` below is `null`, so a word nothing here
+   * recognises reaches the reader as it came rather than as "unknown".
    */
   status: string | null;
   /** `null` means "unrecognised status", never "idle". */
@@ -38,17 +39,24 @@ export interface ParsedAgents {
 }
 
 /**
- * The words a captured payload has actually contained, and what each one says about whether
- * the session is working. Never a list of everything the CLI might one day print: a word that
- * is not here is `null` — "we do not know" — and that is the whole point of the file.
+ * What each word this surface prints says about the one question the boolean asks: is this
+ * session working. A word that does not answer it is absent, and absent means `null` — "we do
+ * not know" — which is the whole point of the file.
  *
- * `done` arrives on background agents, which report under `state` rather than `status`. It is
- * a finished agent, so it is not working — the same `false` an idle terminal gets, reached
- * from the other end.
+ * The first two arrive on a session with a process of its own; the other two are a background
+ * agent's `state`, which is where its word lives instead.
+ *
+ * Some words are left out ON PURPOSE rather than for want of a payload. `failed` and `stopped`
+ * are "not working", and that is the least interesting true thing about them; `blocked` and
+ * `waiting` are a session halted until a human answers something, where `false` reads as calm
+ * on a session that needs you and `true` as fine on one that has stopped. Unknown is the only
+ * bucket whose node prints the word itself, so those keep it: an amber node captioned `failed`
+ * says what neither boolean could.
  */
 const KNOWN_STATUS = new Map<string | null, boolean>([
   ['busy', true],
   ['idle', false],
+  ['working', true],
   ['done', false],
 ]);
 

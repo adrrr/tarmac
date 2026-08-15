@@ -170,6 +170,10 @@ test('an agent names its own directory, so its placement can be checked', () => 
 test('the halo says in words that a reading just landed', () => {
   assert.match(one({ snapshotAgeMs: 1000, stale: false }), /<span class="sr">a reading just landed<\/span>/);
   assert.doesNotMatch(one({ snapshotAgeMs: 4 * 3600_000, stale: true }), /just landed/);
+  // The negative that matters, and the one the words could get wrong on their own: a file
+  // landed, a reading did not. A drifted fleet writes a snapshot every frame, and "a reading
+  // just landed" on every node of it would be the calm, wrong answer said out loud.
+  assert.doesNotMatch(one({ ctxPct: null, ctxState: 'drift', snapshotAgeMs: 1200, stale: false }), /just landed/);
 });
 
 // Both views are in the fragment, and one of them is behind `display:none` — so a sentence

@@ -169,7 +169,7 @@ test('a fleet of fresh sessions is not a schema break', () => {
 });
 
 test('an unknown status counts as unknown, and is never reported as idle', () => {
-  const sessions = [session({ status: 'working', busy: null })];
+  const sessions = [session({ status: 'transmogrifying', busy: null })];
   const { rows, health } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
   assert.equal(rows[0].busy, null);
   assert.equal(health.unknownStatus, 1);

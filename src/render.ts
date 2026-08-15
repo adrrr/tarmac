@@ -755,10 +755,11 @@ export function renderMap(fleet: Fleet): string {
 }
 
 /**
- * One node. Four facts, in four channels that do not depend on colour alone: the arc is how
- * full the context is, the dial's weight is how much that reading may be believed, the shape
- * beside the name is the session's state, and the words under it are the same ones the table
- * uses for the same conditions.
+ * One node. Five facts, in five channels that do not depend on colour alone: the arc is how
+ * full the context is, the dial's weight is how much that reading may be believed, a dotted
+ * dial is no reading at all, the shape beside the name is the session's state, and the halo
+ * says one landed moments ago. The words under them are the same ones the table uses for the
+ * same conditions — including the halo's, which would otherwise live only in a drawing.
  */
 function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode): string {
   // The model owns "is there a number"; this reads its verdict rather than asking the row a

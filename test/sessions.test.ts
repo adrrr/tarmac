@@ -38,9 +38,9 @@ test('idle status maps to busy=false', () => {
 // The 3rd-blindness lesson from the fleet: a release renaming `busy` must NOT read as
 // "everything is calm". Unknown status is null, never coerced to idle.
 test('unknown status yields busy=null, never false', () => {
-  const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', status: 'working' }]));
+  const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', status: 'transmogrifying' }]));
   assert.equal(sessions[0].busy, null);
-  assert.equal(sessions[0].status, 'working');
+  assert.equal(sessions[0].status, 'transmogrifying');
 });
 
 test('missing status yields busy=null', () => {
@@ -84,6 +84,32 @@ test('`status` is read ahead of `state` when an entry carries both', () => {
   assert.equal(sessions[0].status, 'busy');
 });
 
+// `working` is the state that matters in practice, and the one this fix was nearly written
+// without. `claude agents --json` — no `--all`, which is what tarmac runs — keeps a background
+// entry with no process of its own only while it is working or blocked, and drops the finished
+// ones. So a running agent, the thing you open a dashboard to look at, is the entry that was
+// going amber and raising the banner.
+test('a running background agent is working, and a finished one is not', () => {
+  const busyFor = (state: string): boolean | null =>
+    parseAgents(JSON.stringify([{ sessionId: 'a', state }])).sessions[0].busy;
+  assert.equal(busyFor('working'), true);
+  assert.equal(busyFor('done'), false);
+});
+
+// The words that outrank their own boolean. `failed` and `stopped` are "not working" and that
+// is the least interesting true thing about them; `blocked` and `waiting` are a session halted
+// until a human answers something, where "not working" reads as calm and "working" as fine.
+// Unknown is the only bucket whose node prints the word itself, so these keep it: an amber
+// node captioned `failed` says what no boolean here could.
+test('a word the boolean would flatten stays unknown, and reaches the page as it came', () => {
+  for (const word of ['failed', 'stopped', 'blocked', 'waiting']) {
+    const { sessions, health } = parseAgents(JSON.stringify([{ sessionId: 'a', state: word }]));
+    assert.equal(sessions[0].busy, null, word);
+    assert.equal(sessions[0].status, word);
+    assert.equal(health.unknownStatus, 1, word);
+  }
+});
+
 // The 3rd-blindness rule reaches the new field too: reading `state` is not licence to guess
 // at a vocabulary no captured payload has ever shown.
 test('a state word tarmac has never seen is unknown, never idle', () => {
@@ -97,7 +123,7 @@ test('health counts what the schema failed to give us', () => {
   const { health } = parseAgents(
     JSON.stringify([
       { sessionId: 'a', status: 'idle' },
-      { sessionId: 'b', status: 'working' },
+      { sessionId: 'b', status: 'transmogrifying' },
       { pid: 3, status: 'idle' },
     ]),
   );

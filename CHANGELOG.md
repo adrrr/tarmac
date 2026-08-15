@@ -39,11 +39,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **A background agent's state is read.** `claude agents --json` prints those sessions with
   none of the keys an interactive one carries: no `pid`, no `status` — their word is under
-  `state`. Reading only `status` made every background agent on the page an amber "unknown",
+  `state`. Reading only `status` made every background agent on the page an amber "unknown"
   and raised `N session(s) report a status tarmac does not know` on a fleet where nothing was
-  wrong. `status` still wins wherever both are present, and `done` joins the two words the
-  mapping already knew as a "not working". A word neither field has ever carried is still
-  `null` — the rule that whole module exists for. (#5)
+  wrong. `status` still wins wherever both are present. `working` and `done` join the two words
+  the mapping already knew; `failed`, `stopped`, `blocked` and `waiting` deliberately do not,
+  because "not working" is the least interesting true thing about a failed agent and reads as
+  calm on one that is waiting for you — unknown is the bucket whose node prints the word
+  itself, so those keep it. A word tarmac has never seen is still `null`, never "idle". (#5)
 - `! 0m ago` on both surfaces. A `--stale-after` under a minute — legal, and the example the
   map's own pulse window is documented against — dated a thirty-second reading with the "!"
   that means past the threshold and the "0m" that means brand new, in the same breath. Under
