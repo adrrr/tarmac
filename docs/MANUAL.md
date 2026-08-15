@@ -210,6 +210,45 @@ Everything a reader interprets is rendered on the server. The browser owns two f
 rules: re-deriving "a dash, never a zero" in page JavaScript would put a second copy of it
 where the test suite cannot reach.
 
+## The map
+
+`serve` has a second view of the same fleet, on `/map`, reached by the tab in the header. The
+tabs are links rather than script, so the view survives a reload and a bookmark — and both
+views are rendered into the same fragment, out of the same reading, which is why the two can
+never disagree about a session on the same screen.
+
+One node per session, and the count matches the table's rows exactly. A node says four things
+at once, in four channels that never rely on colour alone:
+
+| What | Where it is | What it means |
+|---|---|---|
+| context | the arc | how full the window is, drawn to the size of the reading |
+| the reading's age | the arc's weight | solid: fresh. Thin, amber and dated `! 3h ago`: past the freshness threshold. Dotted empty ring: nothing was ever measured, and the dial says which kind of nothing — `not chained`, `no turn yet`, `schema drift` |
+| the session's state | the shape by the name | `●` busy, `○` idle, `▲` a status tarmac does not recognise |
+| a frame just landed | one halo, once | the snapshot for that session is under 10s old |
+
+The state and the reading are two different clocks and are never merged. `busy` comes from
+`claude agents --json`, read at the moment you asked; the percentage comes from a file that
+session's terminal wrote whenever it last drew a frame. A busy session with a two-hour-old
+reading is **both** live and stale, and the node says both — a solid green dot beside a thin
+amber arc dated `! 2h ago`.
+
+The halo is the only thing that moves, and it makes one claim: a snapshot for that session
+arrived moments ago. It never fires for a reading the freshness threshold calls stale, even
+when `--stale-after` is set below the ten-second pulse window — the threshold is the one that
+judges. `prefers-reduced-motion: reduce` turns it off entirely; nothing that matters is
+carried by the movement.
+
+**Background agents.** `claude agents --json` prints interactive and background sessions in
+one array, and publishes nothing that ties an agent to whoever dispatched it. So the map does
+not draw one: an agent is a smaller, tinted, hooked node placed *next to* the session sharing
+its working directory — the only field both carry — and it keeps a node of its own even when
+no session matches. An edge would claim a parentage the source does not contain, and nesting
+would let this page show a smaller fleet than the table beside it.
+
+There is no history and no time scrubber: every node is the fleet as of the reading in the
+header, and nothing on the page remembers an earlier one.
+
 ## Configuration
 
 Three of tarmac's numbers are opinions, not truths, so all three are yours to set. Nothing

@@ -436,11 +436,17 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node { border:1px solid var(--line); border-radius:10px; padding:.8rem .85rem .7rem;
           display:flex; flex-direction:column; align-items:center; text-align:center; }
   .node[data-state="busy"] { border-color:color-mix(in srgb, var(--busy) 45%, var(--line)); }
-  /* An agent is a smaller body in the same system, next to the session it shares a
-     directory with — never inside it. */
-  .node[data-role="agent"] { padding-top:.55rem; }
+  /* An agent is a smaller body in the same system, next to the session it shares a directory
+     with — never inside it. Tinted rather than outlined, and hooked, so it reads as the
+     session's dependent without a line claiming a parentage the source never published. */
+  .node[data-role="agent"] { padding-top:.55rem; border-color:transparent;
+          background:color-mix(in srgb, var(--line) 22%, transparent); }
   .node[data-role="agent"] .dial { width:3.6rem; height:3.6rem; }
   .node[data-role="agent"] .pct { font-size:.95rem; }
+  .node[data-role="agent"] .why { font-size:.6rem; max-width:3.4rem; }
+  .node[data-role="agent"] .why b { font-size:1rem; }
+  .node[data-role="agent"] .project { font-weight:400; }
+  .tie { color:var(--dim); font-size:.75rem; }
   .dial { position:relative; width:5.5rem; height:5.5rem; }
   .dial svg { width:100%; height:100%; display:block; overflow:visible; }
   .track { fill:none; stroke:var(--line); stroke-width:5; }
@@ -454,8 +460,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
           stroke:var(--warn); stroke-width:2.5; opacity:.7; }
   /* Nothing was measured at all. A solid empty ring reads as a confident 0%. */
   .node[data-reading="none"] .track { stroke-dasharray:2 6; stroke-linecap:round; }
+  /* Once per arrival, not forever: the fragment is replaced on every poll, so a single run
+     per swap is what makes the fleet breathe at the rate its frames actually land. A looping
+     animation would say "a frame just arrived" for five seconds after it stopped being true. */
   .halo { fill:none; stroke:var(--busy); stroke-width:2; opacity:0; transform-origin:50% 50%;
-          animation:halo 1.6s ease-out 2; }
+          animation:halo 1.6s ease-out 1; }
   .node[data-state="idle"] .halo { stroke:var(--dim); }
   @keyframes halo { from { opacity:.5; transform:scale(1); } to { opacity:0; transform:scale(1.22); } }
   /* Motion is the one thing here nobody can look away from, so it is the first thing a
@@ -732,7 +741,7 @@ function renderNode({ row: r, role, state, reading, pulse }: MapNode): string {
         <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? '<circle class="halo" cx="40" cy="40" r="30"/>' : ''}<circle class="track" cx="40" cy="40" r="30"/>${ring}</svg>
         <div class="val">${value}</div>
       </div>
-      <div class="who"><span class="shape">${SHAPE[state]}</span><span class="project">${esc(title)}</span></div>
+      <div class="who">${role === 'agent' ? '<span class="tie" aria-hidden="true">&#8627;</span>' : ''}<span class="shape">${SHAPE[state]}</span><span class="project">${esc(title)}</span></div>
       <div class="sub">${esc(under)}</div>
       <div class="sub">${esc(r.model)}${r.effort === null ? '' : ` · ${esc(r.effort)}`}</div>
       ${asOf}
