@@ -164,8 +164,20 @@ test('an agent names its own directory, so its placement can be checked', () => 
   assert.doesNotMatch(html, /&#8627;/, 'and points at nobody');
 });
 
-test('an empty fleet says so rather than drawing nothing', () => {
-  assert.match(renderMap(fleet([], { sessions: 0, covered: 0 })), /No Claude Code sessions found/);
+// The halo lives inside an `aria-hidden` <svg>, so the one thing on this page that moves was
+// also the one fact on it a reader who is not looking got nothing of. Said, not shown — the
+// same rule as the shape beside it, which already carries its word.
+test('the halo says in words that a reading just landed', () => {
+  assert.match(one({ snapshotAgeMs: 1000, stale: false }), /<span class="sr">a reading just landed<\/span>/);
+  assert.doesNotMatch(one({ snapshotAgeMs: 4 * 3600_000, stale: true }), /just landed/);
+});
+
+// Both views are in the fragment, and one of them is behind `display:none` — so a sentence
+// each rendered for itself was read twice by anything that goes through the markup rather
+// than looking at the page.
+test('an empty fleet says so once, not once per view', () => {
+  const live = renderLive(fleet([], { sessions: 0, covered: 0 }));
+  assert.equal((live.match(/No Claude Code sessions found/g) ?? []).length, 1);
 });
 
 // Everything on this page comes off a machine whose directories and session names are

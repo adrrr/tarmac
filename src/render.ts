@@ -288,23 +288,27 @@ export function renderLive(fleet: Fleet): string {
   const schema = schemaNotice(health.schemaGuard);
   if (schema) warnings.push(schema);
 
+  // Both views, every time, out of the one reading the page just asked for. The tabs are
+  // links and the shell decides which of the two is visible, so a fleet cannot be drawn as a
+  // table of one age beside a map of another.
+  //
+  // A fleet with nothing in it has no two ways to be laid out, so it gets one sentence above
+  // both of them rather than a copy inside each — the copy behind `display:none` was invisible
+  // on screen and read out all the same by anything going through the markup.
   const body =
     rows.length === 0
       ? empty(health)
-      : `<table>
+      : `<div class="view view-table"><div class="wrap"><table>
       <thead><tr>
         <th>Project</th><th>Session</th><th>State</th><th>Context</th><th>Model</th><th>Effort</th><th>Cost</th><th>Uptime</th>
       </tr></thead>
       <tbody>${rows.map(renderRow).join('')}</tbody>
-    </table>`;
+    </table></div></div>
+<div class="view view-map">${renderMap(fleet)}</div>`;
 
-  // Both views, every time, out of the one reading the page just asked for. The tabs are
-  // links and the shell decides which of the two is visible, so a fleet cannot be drawn as a
-  // table of one age beside a map of another.
   return `<div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>
 ${warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}
-<div class="view view-table"><div class="wrap">${body}</div></div>
-<div class="view view-map">${renderMap(fleet)}</div>`;
+${body}`;
 }
 
 /**
@@ -715,7 +719,9 @@ const stateWord = (state: NodeState, r: FleetRow): string =>
 const CTX_WHY: Record<string, string> = { fresh: 'no turn yet', drift: 'schema drift', absent: 'not chained' };
 
 /**
- * The map: one node per session, laid out as a grid rather than a graph.
+ * The map: one node per session, laid out as a grid rather than a graph. An empty fleet is not
+ * its business — `renderLive` says that once, above both views, rather than letting each of
+ * them render the same sentence and hide one of the two.
  *
  * There are no edges because the sources publish no relationship between two sessions — the
  * one thing they do carry is the working directory, and that is expressed by putting an
@@ -727,7 +733,6 @@ const CTX_WHY: Record<string, string> = { fresh: 'no turn yet', drift: 'schema d
  * copy of them re-derived in browser JavaScript would sit where this suite cannot reach.
  */
 export function renderMap(fleet: Fleet): string {
-  if (fleet.rows.length === 0) return empty(fleet.health);
   return `<div class="map">${buildMap(fleet).nodes.map(renderNode).join('')}</div>`;
 }
 
@@ -760,6 +765,7 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
       <div class="dial">
         <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? `<circle class="halo" cx="40" cy="40" r="${DIAL_R}"/>` : ''}<circle class="track${measured ? '' : ' unmeasured'}" cx="40" cy="40" r="${DIAL_R}"/>${pct === null ? '' : arc(pct)}</svg>
         <div class="val">${value}</div>
+        ${pulse ? `<span class="sr">a reading just landed</span>` : ''}
       </div>
       <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span></div>
       <div class="sub">${esc(r.name)}</div>
