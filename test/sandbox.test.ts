@@ -33,5 +33,8 @@ test('a test file that takes sandboxes leaves none behind', () => {
   });
 
   assert.equal(r.status, 0, `the fixture itself must pass first:\n${r.stdout}${r.stderr}`);
-  assert.deepEqual(fs.readdirSync(tmp), [], 'every sandbox that file took is gone, the locked one included');
+  // Ours only: node writes a compile cache into `$TMPDIR` on some versions and may write more
+  // later, and this test is about what the SUITE leaves behind, not about node's housekeeping.
+  const left = fs.readdirSync(tmp).filter((name) => name.startsWith('tarmac-'));
+  assert.deepEqual(left, [], 'every sandbox that file took is gone, the locked one included');
 });

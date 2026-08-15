@@ -13,7 +13,7 @@
 // unqualified, by design, so the PATH is part of its contract with the machine. The stub
 // delegates to the real one, so what is deleted is still decided by the real expression.
 
-import test, { after } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -39,12 +39,6 @@ const payload = JSON.stringify({
 /** The real `find`, resolved before the stub shadows it — the stub cannot ask for itself. */
 const REAL_FIND = execFileSync('/bin/sh', ['-c', 'command -v find'], { encoding: 'utf8' }).trim();
 
-/** Every sandbox built here, so the 20 000-file era of this suite does not live in TMPDIR forever. */
-const roots: string[] = [];
-after(() => {
-  for (const root of roots) fs.rmSync(root, { recursive: true, force: true });
-});
-
 interface Rig {
   snapDir: string;
   wrapper: string;
@@ -63,7 +57,6 @@ interface Rig {
  */
 function rig(): Rig {
   const root = tempDir('tarmac-detach-');
-  roots.push(root);
   const snapDir = path.join(root, 'snapshots');
   fs.mkdirSync(snapDir, { recursive: true });
 

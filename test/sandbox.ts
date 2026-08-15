@@ -39,6 +39,11 @@ after(() => {
       // A fixture that locked its own sandbox down (0000, 0555 — this suite builds several)
       // cannot be walked as it stands. Taking the permission back is ours to do: this process
       // made that directory, minutes ago, for this file.
+      //
+      // The retry reaches the ROOT of the sandbox only. A locked SUBdirectory left locked would
+      // still refuse to go, and this would give up on it in silence — no fixture does that
+      // today (they restore in a `finally`), so what holds here is the shape of the fixtures,
+      // not the shape of this code. Worth knowing before writing one that does not.
       try {
         fs.chmodSync(dir, 0o700);
         fs.rmSync(dir, { recursive: true, force: true });
