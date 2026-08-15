@@ -55,6 +55,23 @@ test('the two other kinds of missing keep their own words', () => {
   assert.match(one({ ctxPct: null, ctxState: 'drift', snapshotAgeMs: null }), /schema drift/);
 });
 
+// The dial that says "nothing was measured" is keyed on the measurement, never on the age of
+// the file. `fresh` and `drift` have a snapshot as current as any — and no number in it, so
+// they got the solid ring of a session measured at zero, and a halo on top of it.
+test('a session with a fresh snapshot and no number in it still reads as unmeasured', () => {
+  for (const ctxState of ['fresh', 'drift'] as const) {
+    const html = one({ ctxPct: null, ctxState, snapshotAgeMs: 1200, stale: false });
+    assert.match(html, /class="track unmeasured"/, ctxState);
+    assert.doesNotMatch(html, /class="halo"/, `${ctxState} has nothing to pulse about`);
+  }
+});
+
+test('a session measured at zero keeps the solid dial of a real reading', () => {
+  const html = one({ ctxPct: 0, ctxState: 'ok', snapshotAgeMs: 1200 });
+  assert.doesNotMatch(html, /unmeasured/);
+  assert.match(html, /class="pct">0<i>%/);
+});
+
 // The red line: a reading four hours old may not be drawn as though it were live.
 test('a stale node says so, and is marked as stale in its own markup', () => {
   const html = one({ ctxPct: 47, snapshotAgeMs: 3 * 3600_000, stale: true });
@@ -72,7 +89,16 @@ test('a live node is not marked stale and carries no age', () => {
 test('a reading dated in the future is shown undated', () => {
   const html = one({ ctxPct: 19, snapshotAgeMs: -4000 });
   assert.match(html, /data-reading="undated"/);
-  assert.match(html, /undated/);
+  assert.match(html, /class="asof stale">! undated/, 'in words, not only in an attribute');
+});
+
+// The contradiction `ctxCell` was written to prevent, on the other surface: "!" says past the
+// threshold, "0m" says brand new. `--stale-after` accepts seconds, so a 30s reading judged
+// against a 2s threshold is exactly that pair.
+test('a stale reading under a minute old is dated, never "0m ago"', () => {
+  const html = one({ ctxPct: 47, snapshotAgeMs: 30_000, stale: true });
+  assert.doesNotMatch(html, /! 0m ago/);
+  assert.match(html, /! &lt;1m ago/);
 });
 
 // The halo is the pulse: it is drawn only for a reading that just landed, so a node the
@@ -100,13 +126,42 @@ test('a busy session is marked busy, and an unknown status is not marked idle', 
 test('a background agent is drawn as an agent, and names what it is', () => {
   const html = renderMap(
     fleet([
-      row({ sessionId: 'a', kind: 'interactive', cwd: '/w', name: 'apollo-7a' }),
-      row({ sessionId: 'b', kind: 'background', cwd: '/w', name: 'sweep-01' }),
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/w', project: 'apollo', name: 'apollo-7a' }),
+      row({ sessionId: 'b', kind: 'background', cwd: '/w', project: 'apollo', name: 'sweep-01' }),
     ]),
   );
   assert.match(html, /data-role="agent"/);
   assert.match(html, /background/);
   assert.match(html, /sweep-01/);
+});
+
+// The kind is printed whenever it is not the one we know, whatever the node was drawn as.
+// The fleet-level guard can decide a lone background session is a renamed terminal, and a
+// node that says nothing about what it is would make that decision invisible.
+test('a session of an unfamiliar kind says so, even when it is drawn as a session', () => {
+  const html = one({ kind: 'background' });
+  assert.match(html, /data-role="session"/, 'nothing anchors this fleet');
+  assert.match(html, /background/, 'and it still says what it calls itself');
+});
+
+test('the kind we know is not printed on every node as noise', () => {
+  assert.doesNotMatch(one({ kind: 'interactive' }), /interactive/);
+});
+
+// An agent is PLACED next to its session, and placement is not a promise: the grid wraps, so
+// the node above an agent can be a session from another directory entirely, and the fleet's
+// own sort can hand the same agent a different neighbour on the next poll. So the agent says
+// which directory it belongs to itself, rather than pointing at whoever is beside it.
+test('an agent names its own directory, so its placement can be checked', () => {
+  const html = renderMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/w', project: 'apollo', name: 'apollo-7a' }),
+      row({ sessionId: 'b', kind: 'background', cwd: '/w', project: 'apollo', name: 'sweep-01' }),
+    ]),
+  );
+  const agent = html.slice(html.indexOf('data-role="agent"'));
+  assert.match(agent, /apollo/, 'the agent carries its project');
+  assert.doesNotMatch(html, /&#8627;/, 'and points at nobody');
 });
 
 test('an empty fleet says so rather than drawing nothing', () => {
@@ -119,6 +174,16 @@ test('a session name is escaped, not drawn', () => {
   const html = one({ name: '<img src=x onerror=alert(1)>' });
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /&lt;img/);
+});
+
+// Every one of these comes off someone else's machine: the model and the effort are strings
+// out of a JSON payload tarmac does not own, and the kind out of `claude agents --json`.
+test('every value the machine supplies is escaped', () => {
+  const nasty = '<script>alert(1)</script>';
+  for (const field of ['project', 'model', 'effort', 'kind', 'status'] as const) {
+    const html = renderMap(fleet([row({ [field]: nasty, busy: null, kind: field === 'kind' ? nasty : 'background', cwd: '/w' })]));
+    assert.doesNotMatch(html, /<script>/, field);
+  }
 });
 
 // ── the page around it ───────────────────────────────────────────────────────────────────

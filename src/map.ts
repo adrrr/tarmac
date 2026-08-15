@@ -27,7 +27,15 @@ export interface MapNode {
   role: NodeRole;
   state: NodeState;
   reading: Reading;
-  /** A frame landed for this session moments ago. The only animated thing on the page. */
+  /**
+   * Whether there is a number at all — a different question from how old the snapshot is,
+   * and the markup is not allowed to answer it from `reading`. `fresh` and `drift` both
+   * carry a snapshot file, so both are as current as a reading gets, and neither has a
+   * percentage: derived from freshness, those two drew as a full, confident, empty ring,
+   * which is this project's cardinal sin wearing the dial of the one before it.
+   */
+  measured: boolean;
+  /** A reading landed for this session moments ago. The only animated thing on the page. */
   pulse: boolean;
 }
 
@@ -60,6 +68,15 @@ export const PULSE_WITHIN_MS = 10_000;
  * keeps a node of its own, at the end.
  */
 export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = {}): FleetMap {
+  // Whether this fleet still speaks the kind we know. If NOTHING calls itself `interactive`,
+  // the word moved rather than every terminal on the machine going background at once — and
+  // the map says so by drawing them all as what they almost certainly still are. It is the
+  // tolerance `buildFleet` already applies to telemetry: a signal true of every row is a
+  // change in the source.
+  const anchored = rows.some((r) => r.kind === INTERACTIVE);
+  const roleOf = (r: FleetRow): NodeRole =>
+    !anchored || r.kind === null || r.kind === INTERACTIVE ? 'session' : 'agent';
+
   const node = (row: FleetRow): MapNode => {
     const reading = readingOf(row);
     return {
@@ -67,10 +84,17 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
       role: roleOf(row),
       state: stateOf(row),
       reading,
-      // `live` first, and not merely "young": a reading the fleet calls stale is one this
-      // page may not animate as though it were breathing — and with `--stale-after 2s` a
-      // three-second-old reading is both stale and inside the window below.
-      pulse: reading === 'live' && row.snapshotAgeMs !== null && row.snapshotAgeMs <= pulseWithinMs,
+      measured: row.ctxPct !== null,
+      // Three conditions, and each one is a way the halo could otherwise lie. `live` first,
+      // and not merely "young": a reading the fleet calls stale may not be animated as
+      // though it were breathing, and with `--stale-after 2s` a three-second-old reading is
+      // both stale and inside the window below. `measured` last: a file landing is not a
+      // reading landing, and a drifted fleet still writes a snapshot every frame.
+      pulse:
+        reading === 'live' &&
+        row.ctxPct !== null &&
+        row.snapshotAgeMs !== null &&
+        row.snapshotAgeMs <= pulseWithinMs,
     };
   };
 
@@ -97,15 +121,17 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
 }
 
 /**
- * A terminal someone is sitting at, or something else `claude agents --json` is printing.
+ * The one kind any captured `claude agents --json` payload has ever contained. Everything
+ * else it prints is, by that CLI's own help, a background session — but no payload with one
+ * in it has been captured yet, so the word above is the anchor and never the list.
  *
- * An ABSENT kind is not evidence of an agent, so it reads as a session: the same rule the
- * session status follows one module down, where unrecognised means unknown, never "the quiet
- * one". The two mistakes are not the same size either — an agent drawn as a session is a
- * node in the wrong shape, while a session drawn as an agent is a terminal someone is
- * working in, reduced to a footnote of a directory it merely shares.
+ * An ABSENT kind is not evidence of an agent either: the same rule the session status follows
+ * one module down, where unrecognised means unknown, never "the quiet one". The two mistakes
+ * are not the same size — an agent drawn as a session is a node in the wrong shape, while a
+ * session drawn as an agent is a terminal someone is working in, reduced to a footnote of a
+ * directory it merely shares.
  */
-const roleOf = (r: FleetRow): NodeRole => (r.kind === null || r.kind === 'interactive' ? 'session' : 'agent');
+export const INTERACTIVE = 'interactive';
 
 /**
  * `stale` is not recomputed here — it is the collector's verdict, reached against the
@@ -121,4 +147,4 @@ function readingOf(r: FleetRow): Reading {
   return r.stale ? 'stale' : 'live';
 }
 
-const stateOf = (r: FleetRow): NodeState => (r.busy === true ? 'busy' : r.busy === false ? 'idle' : 'unknown');
+export const stateOf = (r: FleetRow): NodeState => (r.busy === true ? 'busy' : r.busy === false ? 'idle' : 'unknown');

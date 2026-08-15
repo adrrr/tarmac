@@ -9,8 +9,8 @@
 
 import { formatDuration } from './config.ts';
 import type { Config, Source } from './config.ts';
-import { buildMap } from './map.ts';
-import type { MapNode } from './map.ts';
+import { buildMap, INTERACTIVE, stateOf } from './map.ts';
+import type { MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
 import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
 import type { Plan, UninstallMode } from './install.ts';
@@ -446,14 +446,15 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node[data-role="agent"] .why { font-size:.6rem; max-width:3.4rem; }
   .node[data-role="agent"] .why b { font-size:1rem; }
   .node[data-role="agent"] .project { font-weight:400; }
-  .tie { color:var(--dim); font-size:.75rem; }
   /* Said, not shown: the three glyphs differ in silhouette, so a reader who cannot separate
      two hues still has the state — but a screen reader is handed a bullet and nothing else. */
   .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
   .dial { position:relative; width:5.5rem; height:5.5rem; }
   .dial svg { width:100%; height:100%; display:block; overflow:visible; }
   .track { fill:none; stroke:var(--line); stroke-width:5; }
-  .arc { fill:none; stroke:var(--dim); stroke-width:5; stroke-linecap:round; }
+  /* Butt caps, not round: a rounded cap adds half a stroke width at each end, which draws a
+     1% reading at three times its extent. The prettier cap overstates every small number. */
+  .arc { fill:none; stroke:var(--dim); stroke-width:5; }
   .node[data-state="busy"] .arc { stroke:var(--busy); }
   /* A reading past the freshness threshold is drawn as what it is: thin, faded, and in the
      warning hue — never the solid arc of a live one. Its EXTENT stays true, because the
@@ -461,8 +462,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      stroke-dasharray, which is what carries the percentage. */
   .node[data-reading="stale"] .arc, .node[data-reading="undated"] .arc {
           stroke:var(--warn); stroke-width:2.5; opacity:.7; }
-  /* Nothing was measured at all. A solid empty ring reads as a confident 0%. */
-  .node[data-reading="none"] .track { stroke-dasharray:2 6; stroke-linecap:round; }
+  /* Nothing was measured. Keyed on the measurement and never on the age of the file: a
+     solid empty ring is what a session measured at 0% wears, and the two must not match. */
+  .track.unmeasured { stroke-dasharray:2 6; stroke-linecap:round; }
   /* Once per arrival, not forever: the fragment is replaced on every poll, so a single run
      per swap is what makes the fleet breathe at the rate its frames actually land. A looping
      animation would say "a frame just arrived" for five seconds after it stopped being true. */
@@ -472,7 +474,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   @keyframes halo { from { opacity:.5; transform:scale(1); } to { opacity:0; transform:scale(1.22); } }
   /* Motion is the one thing here nobody can look away from, so it is the first thing a
      reader who asked for less of it stops getting. The reading is still readable without it. */
-  @media (prefers-reduced-motion: reduce) { .halo { animation:none; opacity:.35; } }
+  /* Scaled, not merely stopped: at rest the halo sits inside the track's own stroke, so
+     "animation:none" alone left the one fact it carries invisible. */
+  @media (prefers-reduced-motion: reduce) { .halo { animation:none; opacity:.35; transform:scale(1.18); } }
   .val { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
          font-variant-numeric:tabular-nums; }
   .pct { font-size:1.25rem; font-weight:650; letter-spacing:-.01em; }
@@ -664,7 +668,7 @@ const SCRIPT = `
  */
 function renderRow(r: FleetRow): string {
   const state = stateOf(r);
-  const word = stateWord(r);
+  const word = stateWord(state, r);
   // `data-label` is not decoration: below ~46rem the columns stack, the header row is gone,
   // and a value whose column has no name is a bare "—" that could mean anything.
   // Every cell holds exactly ONE element. Stacked on a phone the label sits left and the
@@ -682,17 +686,18 @@ function renderRow(r: FleetRow): string {
   </tr>`;
 }
 
-type RowState = 'busy' | 'idle' | 'unknown';
-const stateOf = (r: FleetRow): RowState => (r.busy === true ? 'busy' : r.busy === false ? 'idle' : 'unknown');
-const SHAPE: Record<RowState, string> = { busy: '●', unknown: '▲', idle: '○' };
+const SHAPE: Record<NodeState, string> = { busy: '●', unknown: '▲', idle: '○' };
 
 /**
- * The state in words, for both surfaces. An unrecognised status is quoted as it came rather
- * than flattened to "unknown": the whole point of keeping it is that someone reading the page
- * can go and find out what `compacting` means.
+ * The state in words, for both surfaces — derived from the state the MODEL decided, never
+ * from the row a second time. Two expressions for one fact on one element is how a node ends
+ * up shaped `unknown` and captioned `idle`.
+ *
+ * An unrecognised status is quoted as it came rather than flattened to "unknown": the point
+ * of keeping it is that someone reading the page can go and find out what `compacting` means.
  */
-const stateWord = (r: FleetRow): string =>
-  r.busy === true ? 'busy' : r.busy === false ? 'idle' : (r.status ?? 'unknown');
+const stateWord = (state: NodeState, r: FleetRow): string =>
+  state === 'unknown' ? (r.status ?? 'unknown') : state;
 
 /**
  * Which kind of missing a missing percentage is. One lookup for both surfaces: the table
@@ -724,34 +729,47 @@ export function renderMap(fleet: Fleet): string {
  * beside the name is the session's state, and the words under it are the same ones the table
  * uses for the same conditions.
  */
-function renderNode({ row: r, role, state, reading, pulse }: MapNode): string {
-  const ring = r.ctxPct === null ? '' : arc(r.ctxPct);
+function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode): string {
+  // The model owns "is there a number"; this reads its verdict rather than asking the row a
+  // second question. `fresh` and `drift` are the two states where the age of the file and the
+  // presence of a reading disagree, and they are the two that matter most.
+  const pct = measured ? r.ctxPct : null;
   const value =
-    r.ctxPct === null
-      ? `<span class="why"><b>—</b>${esc(CTX_WHY[r.ctxState] ?? 'no reading')}</span>`
-      : `<span class="pct">${r.ctxPct}<i>%</i></span>`;
+    pct === null
+      ? `<span class="why"><b>&mdash;</b>${esc(CTX_WHY[r.ctxState] ?? 'no reading')}</span>`
+      : `<span class="pct">${pct}<i>%</i></span>`;
   // The reading's own age, and only when it is one the reader must not take for current.
   const asOf =
     reading === 'stale' && r.snapshotAgeMs !== null
-      ? `<div class="asof stale">! ${esc(duration(r.snapshotAgeMs))} ago</div>`
+      ? `<div class="asof stale">! ${esc(asOfAge(r.snapshotAgeMs))} ago</div>`
       : reading === 'undated'
         ? `<div class="asof stale">! undated</div>`
         : '';
-  // An agent is titled by its own name: the project above it is already on the node it was
-  // placed beside, and repeating it would read as a second session in that directory.
-  const title = role === 'agent' ? r.name : r.project;
-  const under = role === 'agent' ? (r.kind ?? 'agent') : r.name;
+  // An agent carries its own project, like every other node. Placement is not a promise —
+  // the grid wraps where the viewport says, and the fleet's sort can hand the same agent a
+  // different neighbour on the next poll — so nothing here points at the node beside it.
   return `<article class="node" data-role="${role}" data-state="${state}" data-reading="${reading}">
       <div class="dial">
-        <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? `<circle class="halo" cx="40" cy="40" r="${DIAL_R}"/>` : ''}<circle class="track" cx="40" cy="40" r="${DIAL_R}"/>${ring}</svg>
+        <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? `<circle class="halo" cx="40" cy="40" r="${DIAL_R}"/>` : ''}<circle class="track${measured ? '' : ' unmeasured'}" cx="40" cy="40" r="${DIAL_R}"/>${pct === null ? '' : arc(pct)}</svg>
         <div class="val">${value}</div>
       </div>
-      <div class="who">${role === 'agent' ? '<span class="tie" aria-hidden="true">&#8627;</span>' : ''}<span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(r))}</span><span class="project">${esc(title)}</span></div>
-      <div class="sub">${esc(under)}</div>
+      <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span></div>
+      <div class="sub">${esc(r.name)}</div>
+      ${r.kind === null || r.kind === INTERACTIVE ? '' : `<div class="sub">${esc(r.kind)}</div>`}
       <div class="sub">${esc(r.model)}${r.effort === null ? '' : ` · ${esc(r.effort)}`}</div>
       ${asOf}
     </article>`;
 }
+
+/**
+ * How old a dated reading is, in the words both surfaces use.
+ *
+ * `duration` floors to whole minutes, and `--stale-after` takes seconds — so a 30s reading
+ * judged against a 2s threshold rendered "! 0m ago": the "!" saying past the threshold and
+ * the "0m" saying brand new, in the same breath. Under a minute the age stops pretending to
+ * be a round number.
+ */
+const asOfAge = (ms: number): string => (ms < 60_000 ? '<1m' : duration(ms));
 
 /** The dial's geometry. One radius, named once, so the arithmetic below cannot drift from it. */
 const DIAL_R = 30;
@@ -790,7 +808,7 @@ function ctxCell(r: FleetRow): string {
   // (the "!" says past the threshold, the "0m" says brand new). The terminal path already
   // re-checked it; the two surfaces are not allowed to disagree about the module's own rule.
   const asOf =
-    r.stale && r.snapshotAgeMs !== null ? ` <span class="stale">! ${esc(duration(r.snapshotAgeMs))} ago</span>` : '';
+    r.stale && r.snapshotAgeMs !== null ? ` <span class="stale">! ${esc(asOfAge(r.snapshotAgeMs))} ago</span>` : '';
   return `<span class="bar"><i style="width:${Math.min(100, r.ctxPct)}%"></i></span>${r.ctxPct}%${asOf}`;
 }
 
