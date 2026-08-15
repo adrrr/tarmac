@@ -472,6 +472,18 @@ test('a request a browser labels cross-site is refused before it can spawn anyth
   });
 });
 
+// The second surface, on its own address: the tab is a link, so the view has to survive a
+// reload and a bookmark.
+test('GET /map serves the page opened on the map', async () => {
+  await withServer(collectOk, async (base) => {
+    const res = await fetch(base + '/map', { signal: AbortSignal.timeout(4000) });
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /<!doctype/i, 'the shell, not the fragment');
+    assert.match(body, /<body data-view="map"/);
+  });
+});
+
 test('an unknown path is a 404, not the dashboard', async () => {
   await withServer(collectOk, async (base) => {
     assert.equal((await fetch(base + '/nope', { signal: AbortSignal.timeout(4000) })).status, 404);
