@@ -48,6 +48,51 @@ test('missing status yields busy=null', () => {
   assert.equal(sessions[0].busy, null);
 });
 
+// A background agent, captured verbatim off a real machine. It carries none of the keys an
+// interactive session does: no `pid`, no `status` — its state lives under `state`, and the
+// entry has an `id` of its own beside the session id. Reading only `status` made every
+// satellite on a healthy fleet an amber "unknown".
+const BACKGROUND = JSON.stringify([
+  {
+    id: '6ea4b4ee',
+    cwd: '/Users/jane/alpha',
+    kind: 'background',
+    startedAt: 1786727883345,
+    sessionId: '6ea4b4ee-8852-44d5-a1bb-b38b703797db',
+    name: 'sweep the stale branches',
+    state: 'done',
+  },
+]);
+
+test('a background agent reports its state under `state`, and it is read', () => {
+  const { sessions } = parseAgents(BACKGROUND);
+  assert.equal(sessions[0].status, 'done', 'the word the source used, kept as it came');
+  assert.equal(sessions[0].busy, false, 'a finished agent is not working');
+});
+
+// The banner it used to raise says "report a status tarmac does not know" — on a fleet where
+// nothing is wrong and the only agent has simply finished.
+test('a finished background agent is not counted as an unknown status', () => {
+  assert.equal(parseAgents(BACKGROUND).health.unknownStatus, 0);
+});
+
+// `status` is the field an entry with a live process carries, and it wins: `state` is the
+// fallback for the entries that have none, never a second opinion about the ones that do.
+test('`status` is read ahead of `state` when an entry carries both', () => {
+  const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', status: 'busy', state: 'done' }]));
+  assert.equal(sessions[0].busy, true);
+  assert.equal(sessions[0].status, 'busy');
+});
+
+// The 3rd-blindness rule reaches the new field too: reading `state` is not licence to guess
+// at a vocabulary no captured payload has ever shown.
+test('a state word tarmac has never seen is unknown, never idle', () => {
+  const { sessions, health } = parseAgents(JSON.stringify([{ sessionId: 'a', state: 'churning' }]));
+  assert.equal(sessions[0].busy, null);
+  assert.equal(sessions[0].status, 'churning');
+  assert.equal(health.unknownStatus, 1);
+});
+
 test('health counts what the schema failed to give us', () => {
   const { health } = parseAgents(
     JSON.stringify([

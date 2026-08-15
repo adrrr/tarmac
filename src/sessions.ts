@@ -15,6 +15,11 @@ export interface Session {
   name: string | null;
   kind: string | null;
   startedAt: number | null;
+  /**
+   * The word the entry used for what it is doing — `status` for a session with a process of
+   * its own, `state` for a background agent that has none. One field, because it is one fact,
+   * and the page quotes whichever word it came as.
+   */
   status: string | null;
   /** `null` means "unrecognised status", never "idle". */
   busy: boolean | null;
@@ -32,9 +37,19 @@ export interface ParsedAgents {
   health: DiscoveryHealth;
 }
 
+/**
+ * The words a captured payload has actually contained, and what each one says about whether
+ * the session is working. Never a list of everything the CLI might one day print: a word that
+ * is not here is `null` — "we do not know" — and that is the whole point of the file.
+ *
+ * `done` arrives on background agents, which report under `state` rather than `status`. It is
+ * a finished agent, so it is not working — the same `false` an idle terminal gets, reached
+ * from the other end.
+ */
 const KNOWN_STATUS = new Map<string | null, boolean>([
   ['busy', true],
   ['idle', false],
+  ['done', false],
 ]);
 
 /** @param text raw stdout of `claude agents --json` */
@@ -60,7 +75,11 @@ export function parseAgents(text: string): ParsedAgents {
     const sessionId = typeof entry.sessionId === 'string' ? entry.sessionId : null;
     if (!sessionId) health.noSessionId += 1;
 
-    const status = typeof entry.status === 'string' ? entry.status : null;
+    // A background agent carries no `status` at all — its word is under `state`. `status`
+    // still wins where both are present: it comes from the agent's own process, and `state`
+    // is what the dispatcher believes about an agent whose process may not be on this machine.
+    const status =
+      typeof entry.status === 'string' ? entry.status : typeof entry.state === 'string' ? entry.state : null;
     const busy = KNOWN_STATUS.has(status) ? (KNOWN_STATUS.get(status) as boolean) : null;
     if (busy === null) health.unknownStatus += 1;
 
