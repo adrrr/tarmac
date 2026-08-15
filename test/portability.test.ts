@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PRUNE_MARKER, renderWrapper, SNAPSHOT_TTL_MIN } from '../src/wrapper.ts';
 import { wideningLocale } from './locales.ts';
 import { settle, waitFor } from './sweep.ts';
+import { tempDir } from './sandbox.ts';
 
 // The wrapper was developed on macOS, where /bin/sh is bash wearing a POSIX hat and
 // forgives a great deal. On Debian and Ubuntu — the primary target of a public npx tool —
@@ -63,7 +63,7 @@ function runUnder(
   readOnlyDir = false,
   env?: Record<string, string>,
 ): RunResult {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-posix-'));
+  const root = tempDir('tarmac-posix-');
   const snapDir = path.join(root, 'snapshots');
   if (seed || readOnlyDir) {
     fs.mkdirSync(snapDir, { recursive: true });

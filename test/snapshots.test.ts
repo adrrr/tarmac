@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractTelemetry, preferred, readSnapshots } from '../src/snapshots.ts';
 import type { Snapshot } from '../src/snapshots.ts';
 import { PRUNE_MARKER } from '../src/wrapper.ts';
+import { tempDir } from './sandbox.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string): unknown => JSON.parse(fs.readFileSync(path.join(here, '..', 'fixtures', n), 'utf8'));
@@ -115,7 +115,7 @@ test('a payload without rate limits yields null, not a fabricated zero', () => {
 
 // ── directory reading ─────────────────────────────────────────────────────────────────
 function snapDir(files: Record<string, string>): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-snap-'));
+  const dir = tempDir('tarmac-snap-');
   for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), body);
   return dir;
 }

@@ -37,10 +37,27 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A background agent's state is read.** `claude agents --json` prints those sessions with
+  none of the keys an interactive one carries: no `pid`, no `status` — their word is under
+  `state`. Reading only `status` made every background agent on the page an amber "unknown",
+  and raised `N session(s) report a status tarmac does not know` on a fleet where nothing was
+  wrong. `status` still wins wherever both are present, and `done` joins the two words the
+  mapping already knew as a "not working". A word neither field has ever carried is still
+  `null` — the rule that whole module exists for. (#5)
 - `! 0m ago` on both surfaces. A `--stale-after` under a minute — legal, and the example the
   map's own pulse window is documented against — dated a thirty-second reading with the "!"
   that means past the threshold and the "0m" that means brand new, in the same breath. Under
   a minute the age now reads `<1m` rather than rounding itself into a contradiction.
+- **The uninstall plan looks at the prune marker before promising to remove it.** It printed
+  "tarmac's prune marker is removed" without ever asking what was at that path — so it said it
+  to everyone whose install had **no marker at all** (nothing stamps one until the first frame
+  that sweeps — a frame away in ordinary use, but never on a machine that installs and draws no
+  status line, and never again once a snapshots directory is emptied by hand), and to anyone
+  whose marker was a symlink or a directory, which `removePruneMarker` refuses by design because
+  `unlink` takes a link and not its target. Same class as issue #15, one branch over: the plan now carries what
+  is really on disk (`marker: 'file' | 'not-a-file' | 'none' | null`, read with the same
+  `lstat().isFile()` question the removal asks) and says which of the four it is. Three of them
+  are "it stays", each for its own reason. The deed is unchanged. (issue #23)
 - **The sweep's own deletions no longer count as unreadable snapshots.** A snapshot file listed
   by `readdir` and gone by the time it was read landed in `snapshotsUnreadable`, and `list` and
   `serve` printed "schema may have moved, check for a newer tarmac" — tarmac driving its own

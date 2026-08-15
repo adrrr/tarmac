@@ -133,6 +133,12 @@ the path, with `backup.json` left behind, which uninstall still works through â€
 opens no snapshots directory at all, and the plan prints `snapshots  unknown` rather than a
 path it would only have guessed at.
 
+Two more states leave the marker where it is, and the plan says which one it is looking at
+rather than promising a removal in either. There may be no marker to remove â€” nothing stamps
+one until the first frame that sweeps, so a home whose status line has never drawn has none at
+all. And what wears that name may not be a regular file: a symlink or a directory there is
+left alone, because `unlink` would take the link and not what it points at.
+
 ### Where the snapshots live, and why not in `.claude`
 
 `$XDG_STATE_HOME/tarmac/snapshots/` when that variable is set to an absolute path, and
