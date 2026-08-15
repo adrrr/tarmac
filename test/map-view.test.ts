@@ -6,7 +6,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderMap, renderPage } from '../src/render.ts';
+import { renderLive, renderMap, renderPage } from '../src/render.ts';
 import { health, row } from './fleet-fixtures.ts';
 import type { Fleet, FleetHealth, FleetRow } from '../src/fleet.ts';
 
@@ -122,6 +122,21 @@ test('a session name is escaped, not drawn', () => {
 });
 
 // ── the page around it ───────────────────────────────────────────────────────────────────
+
+// The rule that outranks every layout question here: whatever the map does with an entry, it
+// may not answer with a smaller fleet than the table sitting in the same fragment.
+test('the map and the table count the same sessions', () => {
+  const rows = [
+    row({ sessionId: 'a', kind: 'interactive', cwd: '/x', name: 'a' }),
+    row({ sessionId: 'b', kind: 'background', cwd: '/x', name: 'b' }),
+    row({ sessionId: 'c', kind: 'background', cwd: '/gone', name: 'c' }),
+    row({ sessionId: 'd', kind: null, cwd: null, name: 'd' }),
+    row({ sessionId: 'e', kind: 'interactive', cwd: '/x', name: 'e' }),
+  ];
+  const live = renderLive(fleet(rows, { sessions: rows.length }));
+  assert.equal((live.match(/<tr data-state=/g) ?? []).length, rows.length);
+  assert.equal((live.match(/<article class="node"/g) ?? []).length, rows.length);
+});
 
 test('the page carries both views, so one refresh feeds them both', () => {
   const html = renderPage(fleet([row()]), 'map');
