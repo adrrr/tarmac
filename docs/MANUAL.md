@@ -221,8 +221,8 @@ tabs are links rather than script, so the view survives a reload and a bookmark 
 views are rendered into the same fragment, out of the same reading, which is why the two can
 never disagree about a session on the same screen.
 
-One node per session, and the count matches the table's rows exactly. A node says four things
-at once, in four channels that never rely on colour alone:
+One node per session, and the count matches the table's rows exactly. A node says five things
+at once, in five channels that never rely on colour alone:
 
 | What | Where it is | What it means |
 |---|---|---|
@@ -252,7 +252,8 @@ threshold calls stale, even when `--stale-after` is set below that window (the t
 the one that judges), and never for a snapshot that carried no measurement: a drifted fleet
 writes a file on every frame, and a fleet of empty dials beating steadily is the calm, wrong
 answer this tool exists to refuse. Under `prefers-reduced-motion: reduce` it stops moving and
-stays as a faint ring: the movement goes, the fact it carries does not.
+stays as a faint ring: the movement goes, the fact it carries does not. It is also written out
+beside the dial, for a reader who is not looking at the page at all.
 
 **Background agents.** `claude agents --json` prints interactive and background sessions in
 one array, and publishes nothing that ties an agent to whoever dispatched it. So the map does
@@ -269,6 +270,13 @@ a renamed kind rather than as a machine that has gone entirely background — th
 the fleet applies to telemetry, where a signal true of every row is a change in the source.
 Whatever a node calls itself is printed on it when it is not `interactive`, so that decision is
 never invisible.
+
+**A background session's name is its prompt.** `claude agents --json` names those sessions
+after what they were asked to do, and tarmac prints the name as it came — on the node, and in
+the table's `Session` column. A screenshot of a real fleet is therefore a screenshot of what
+its agents were told. Nothing is truncated to soften that: a name cut short is one you can no
+longer match back to an agent, and the first half of a prompt is still the prompt. Worth
+knowing before the screen goes anywhere.
 
 There is no history and no time scrubber: every node is the fleet as of the reading in the
 header, and nothing on the page remembers an earlier one.
