@@ -56,11 +56,19 @@ export function renderPlan(plan: Plan): string {
     if (plan.gitRepo !== null) rows.push(['git', gitHint(plan.gitRepo, clearing)]);
   } else {
     rows.push(['restore', `${plan.mode} — ${restoreMeaning(plan.mode)}`]);
-    // Foreign statusLine ownership keeps our wrapper in place, so its marker stays too. In
-    // every restoring mode the wrapper leaves and the marker has no owner. Name both facts
-    // so the plan matches the operation exactly.
-    const marker = plan.mode === 'foreign' ? "tarmac's prune marker stays" : "tarmac's prune marker is removed";
-    rows.push(['snapshots', `${plan.snapshots}   (snapshot files stay; ${marker})`]);
+    // Nothing here says where the payloads are — no wrapper, or one that no longer carries
+    // the path, or one we cannot read. There is no directory to name, and `uninstall` opens
+    // none and removes nothing in one. Printing the default we would have computed, beside a
+    // promise to clear a marker out of it, is a plan disagreeing with what runs.
+    if (plan.snapshots === null) {
+      rows.push(['snapshots', 'unknown — nothing here says where; nothing there is opened or removed']);
+    } else {
+      // Foreign statusLine ownership keeps our wrapper in place, so its marker stays too. In
+      // every restoring mode the wrapper leaves and the marker has no owner. Name both facts
+      // so the plan matches the operation exactly.
+      const marker = plan.mode === 'foreign' ? "tarmac's prune marker stays" : "tarmac's prune marker is removed";
+      rows.push(['snapshots', `${plan.snapshots}   (snapshot files stay; ${marker})`]);
+    }
   }
   rows.push(['undo', plan.undo]);
 

@@ -41,6 +41,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   map's own pulse window is documented against — dated a thirty-second reading with the "!"
   that means past the threshold and the "0m" that means brand new, in the same breath. Under
   a minute the age now reads `<1m` rather than rounding itself into a contradiction.
+- **The sweep's own deletions no longer count as unreadable snapshots.** A snapshot file listed
+  by `readdir` and gone by the time it was read landed in `snapshotsUnreadable`, and `list` and
+  `serve` printed "schema may have moved, check for a newer tarmac" — tarmac driving its own
+  format-drift warning off its own housekeeping. Measured at up to **2675** phantom unreadable on
+  one read of a 20 000-file directory, and `list --watch` and `serve` redraw often enough to be
+  inside that window every hour. An `ENOENT` there is now skipped in silence; a file that is
+  corrupt, half-written or truly unreadable still counts, as it must. (issue #17)
 - **The hourly sweep no longer happens inside a frame.** Amortization made the sweep cheap on
   average, and the average was never the problem: the ONE frame that swept paid for the whole
   backlog at once. On an install that had never pruned — 20 000 snapshots, half of them dead —
@@ -58,6 +65,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   rather than by the time the line is drawn — which also means a chained status line reading
   the same directory now runs beside the sweep rather than after it, and can see a cold
   snapshot vanish mid-frame. (#8)
+- **The uninstall plan no longer promises a removal it cannot make.** With the wrapper
+  hand-deleted and a usable `backup.json` left behind — a state `uninstall` still works
+  through — nothing says where the snapshots are, so nothing there is opened or removed. The
+  plan filled that gap with the directory it *would* have computed and printed "tarmac's prune
+  marker is removed" beside it: a promise about a path nobody had established. The unknown now
+  travels in the plan (`snapshots: string | null`, the same `null` `uninstall` acts on) and the
+  plan says `unknown` instead of guessing. No destructive consequence either way — the failure
+  was a promise, not a deletion. (issue #15)
 - `uninstall` now removes the wrapper-owned `.tarmac-last-prune` housekeeping marker while
   preserving every snapshot file. A foreign `statusLine` keeps both the wrapper and marker,
   and settings restoration completes before marker cleanup can fail. (#9)
