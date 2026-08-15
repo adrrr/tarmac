@@ -45,7 +45,9 @@ test('a session with no reading gets a dash and the reason, never a ring', () =>
   const html = one({ ctxPct: null, ctxState: 'absent', snapshotAgeMs: null });
   assert.match(html, /not chained/);
   assert.match(html, /&mdash;|—/);
-  assert.doesNotMatch(html, /stroke-dasharray="0 100"/, 'an empty arc would read as a measured 0%');
+  // No arc at all, rather than one drawn at zero: an arc of zero length is what a session
+  // measured at 0% would get, and "I could not look" is not "the value is zero".
+  assert.doesNotMatch(html, /class="arc"/);
 });
 
 test('the two other kinds of missing keep their own words', () => {
