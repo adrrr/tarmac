@@ -50,6 +50,15 @@ test('the threshold every "!" was judged against travels with the fleet', () => 
   assert.equal(tight.health.stale, 1);
 });
 
+// `claude agents --json` prints "active sessions (interactive and background)", and `kind`
+// is the only thing in the payload that tells the two apart. Dropping it made every
+// background agent look like a terminal someone is sitting at.
+test('carries the session kind, so a background agent is not read as a terminal', () => {
+  const sessions = [session({ sessionId: 'a' }), session({ sessionId: 'b', kind: 'background' })];
+  const { rows } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  assert.deepEqual(rows.map((r) => r.kind).sort(), ['background', 'interactive']);
+});
+
 test('joins a session to its snapshot on sessionId', () => {
   const { rows } = buildFleet({ sessions: [session()], snapshots: new Map([['s1', telemetry()]]), now: NOW });
   assert.equal(rows.length, 1);

@@ -28,6 +28,12 @@ export interface FleetRow {
   project: string | null;
   cwd: string | null;
   pid: number | null;
+  /**
+   * `interactive` for a terminal someone is sitting at, and whatever `claude agents --json`
+   * calls the background sessions it also prints. Unknown to this module on purpose: it is
+   * carried, never interpreted, and the map is the only reader that treats one differently.
+   */
+  kind: string | null;
   status: string | null;
   busy: boolean | null;
   uptimeMs: number | null;
@@ -106,6 +112,7 @@ export function buildFleet({
       project: s.cwd ? path.basename(s.cwd) : null,
       cwd: s.cwd,
       pid: s.pid,
+      kind: s.kind,
       status: s.status,
       busy: s.busy,
       uptimeMs: typeof s.startedAt === 'number' ? now - s.startedAt : null,
