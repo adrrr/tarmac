@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { collectFleet } from '../src/collect.ts';
 import { parseArgs } from '../src/args.ts';
+import { tempDir } from './sandbox.ts';
 
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 
@@ -14,7 +14,7 @@ interface StageOptions {
 }
 
 function stage({ agents, snapshotFiles = {} }: StageOptions): { claudeBin: string; snapshotsDir: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-e2e-'));
+  const dir = tempDir('tarmac-e2e-');
   const bin = path.join(dir, 'claude');
   fs.writeFileSync(bin, `#!/bin/sh\ncat <<'EOF'\n${JSON.stringify(agents)}\nEOF\n`);
   fs.chmodSync(bin, 0o755);

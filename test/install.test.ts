@@ -10,9 +10,10 @@ import type { UninstallMode } from '../src/install.ts';
 import { renderPlan } from '../src/render.ts';
 import { renderWrapper, PRUNE_MARKER, TEMP_PREFIX, WRAPPER_MARKER } from '../src/wrapper.ts';
 import { escapeRe } from '../src/reap.ts';
+import { tempDir } from './sandbox.ts';
 
 function fakeHome(settingsText?: string): string {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-home-'));
+  const home = tempDir('tarmac-home-');
   fs.mkdirSync(path.join(home, '.claude'));
   if (settingsText !== undefined) fs.writeFileSync(path.join(home, '.claude', 'settings.json'), settingsText);
   return home;
@@ -85,27 +86,27 @@ test('the install plan refuses a re-install whose backup is gone', () => {
 // is the file itself (device + inode), the same through every spelling. The spike used it
 // to refuse; the plan uses it to say which terminal is about to change under you.
 test('the plan recognises the real home through a symlink', () => {
-  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-realhome-'));
-  const link = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-link-')), 'home');
+  const real = tempDir('tarmac-realhome-');
+  const link = path.join(tempDir('tarmac-link-'), 'home');
   fs.symlinkSync(real, link);
   assert.equal(planInstall({ home: link, realHome: real }).isRealHome, true);
 });
 
 test('the plan recognises the real home spelled with a trailing slash', () => {
-  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-realhome-'));
+  const real = tempDir('tarmac-realhome-');
   assert.equal(planInstall({ home: real + '/', realHome: real }).isRealHome, true);
 });
 
 test('the plan does not mistake a different directory for the real home', () => {
-  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-realhome-'));
-  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-sandbox-'));
+  const real = tempDir('tarmac-realhome-');
+  const other = tempDir('tarmac-sandbox-');
   assert.equal(planInstall({ home: other, realHome: real }).isRealHome, false);
 });
 
 // "The exact command that undoes it" is exact or it is a lie: undoing an install into a
 // directory that is not your home needs the flag that put it there.
 test('the undo command carries --home unless the target is the real home', () => {
-  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-realhome-'));
+  const real = tempDir('tarmac-realhome-');
   fs.mkdirSync(path.join(real, '.claude'));
   assert.equal(planInstall({ home: real, realHome: real }).undo, 'tarmac uninstall');
   const other = fakeHome('{}');
@@ -115,10 +116,10 @@ test('the undo command carries --home unless the target is the real home', () =>
 // "Exact" has to survive a copy-paste, and a home directory with a space in it is ordinary
 // on macOS. An unquoted path would print a command that runs against the wrong directory.
 test('the undo command is pasteable when the home has a space in it', () => {
-  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-space-'));
+  const parent = tempDir('tarmac-space-');
   const home = path.join(parent, "od d's home");
   fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-realhome-'));
+  const real = tempDir('tarmac-realhome-');
   const { undo } = planInstall({ home, realHome: real });
   assert.equal(undo, `tarmac uninstall --home '${home.replace(/'/g, `'\\''`)}'`);
   // and it really is one argument once a shell has read it
@@ -136,7 +137,7 @@ test('refuses a --home that does not exist, instead of building a tree inside th
 });
 
 test('refuses a --home that is a file, while planning rather than mid-write', () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-file-')), 'not-a-dir');
+  const file = path.join(tempDir('tarmac-file-'), 'not-a-dir');
   fs.writeFileSync(file, '');
   assert.throws(() => planInstall({ home: file }), /not a directory/);
 });
@@ -240,7 +241,7 @@ test('the printed plan carries the file, both statusLine values and the undo com
 });
 
 test('the printed plan says out loud when the target is your own home', () => {
-  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-realhome-'));
+  const real = tempDir('tarmac-realhome-');
   fs.mkdirSync(path.join(real, '.claude'));
   assert.match(renderPlan(planInstall({ home: real, realHome: real })), /your home/i);
   const other = fakeHome('{}');
@@ -442,7 +443,7 @@ test('resolves ~ against the home being installed into, not the one it runs from
 // apostrophe in the home is the one character `quoteArg` transforms rather than wraps, and
 // tarmac stopped recognising its own install there — chaining itself, and unable to uninstall.
 test("a home with an apostrophe survives the whole round trip", () => {
-  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-quote-'));
+  const parent = tempDir('tarmac-quote-');
   const home = path.join(parent, "od d's home");
   fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
   fs.writeFileSync(paths(home).settings, MINE);
@@ -586,7 +587,7 @@ test('creates settings.json when there is none', () => {
 });
 
 test('creates the .claude directory when there is none', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-bare-'));
+  const home = tempDir('tarmac-bare-');
   install({ home });
   assert.equal(jsonOf(home).statusLine.command, paths(home).wrapper);
 });
@@ -627,7 +628,7 @@ test('refuses to re-install when the backup is gone, keeping the wrapper intact'
 // C2, on disk: the same directory reached by two different path strings. Installing under
 // both must not make the wrapper chain itself — identity is device+inode, not the spelling.
 function spellingHome(): string {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-spell-'));
+  const home = tempDir('tarmac-spell-');
   fs.mkdirSync(path.join(home, '.claude'));
   fs.writeFileSync(paths(home).settings, JSON.stringify({ statusLine: { type: 'command', command: 'echo PRECIOUS' } }));
   return home;
@@ -641,7 +642,9 @@ function assertChainedOnce(home: string): void {
 
 test('installing through a symlink to the same home never chains the wrapper to itself', () => {
   const home = spellingHome();
-  const link = `${home}-link`;
+  // Inside a sandbox of its own, not `${home}-link` beside one: a path built next to a
+  // temporary directory belongs to no one, and was the last thing this suite left behind.
+  const link = path.join(tempDir('tarmac-link-'), 'home');
   fs.symlinkSync(home, link);
   install({ home });
   const res = install({ home: link });
@@ -658,7 +661,7 @@ test('installing under both macOS spellings of /tmp never chains the wrapper to 
     t.skip('macOS firmlinks only');
     return;
   }
-  const home = fs.mkdtempSync(path.join('/tmp', 'tarmac-spell-'));
+  const home = tempDir('tarmac-spell-', '/tmp');
   fs.mkdirSync(path.join(home, '.claude'));
   fs.writeFileSync(paths(home).settings, JSON.stringify({ statusLine: { type: 'command', command: 'echo PRECIOUS' } }));
   install({ home });
@@ -698,7 +701,7 @@ test('refuses to re-install when the backup is corrupt', () => {
 // space in its name is word-split: the status line dies with 127 at every frame, and the
 // display tarmac promises never to break is the first thing that goes.
 test('a wrapper path with a space is written so the shell reads it as one argument', () => {
-  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-space-'));
+  const parent = tempDir('tarmac-space-');
   const home = path.join(parent, 'My Home');
   fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
   fs.writeFileSync(paths(home).settings, MINE);
@@ -1026,7 +1029,7 @@ test('uninstall leaves a symlink wearing the prune marker name alone', () => {
 test('uninstall removes the marker from the directory frozen in the wrapper', () => {
   const home = fakeHome('{}');
   install({ home });
-  const snapshots = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-uninstall-')), 'snapshots');
+  const snapshots = path.join(tempDir('tarmac-uninstall-'), 'snapshots');
   fs.mkdirSync(snapshots);
   fs.writeFileSync(path.join(snapshots, PRUNE_MARKER), '');
   fs.writeFileSync(paths(home).wrapper, renderWrapper({ snapshotDir: snapshots, chainCommand: null }), { mode: 0o755 });
@@ -1088,7 +1091,7 @@ test('snapshots live outside .claude, in the XDG state directory', () => {
 
 test('XDG_STATE_HOME moves the state directory, for the home that exported it', () => {
   const home = fakeHome();
-  const state = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-xdg-'));
+  const state = tempDir('tarmac-xdg-');
   const p = paths(home, { env: { XDG_STATE_HOME: state }, realHome: home });
   assert.equal(p.snapshots, path.join(state, 'tarmac', 'snapshots'));
 });
@@ -1100,7 +1103,7 @@ test('XDG_STATE_HOME moves the state directory, for the home that exported it', 
 // exports it, write into the developer's real one.
 test('XDG_STATE_HOME does not follow --home into someone else\'s home', () => {
   const home = fakeHome();
-  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-realhome-'));
+  const real = tempDir('tarmac-realhome-');
   const p = paths(home, { env: { XDG_STATE_HOME: '/var/somebody-elses-state' }, realHome: real });
   assert.equal(p.snapshots, path.join(home, '.local', 'state', 'tarmac', 'snapshots'));
 });
@@ -1303,7 +1306,7 @@ test('the plan is quiet about git when .claude is not a repository', () => {
 // this install is about.
 test('a legacy snapshots directory that is a symlink is left entirely alone', () => {
   const home = fakeHome('{}');
-  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-elsewhere-'));
+  const elsewhere = tempDir('tarmac-elsewhere-');
   const theirs = path.join(elsewhere, 'aaaaaaaa-1111-1111-1111-111111111111.json');
   fs.writeFileSync(theirs, '{"session_id":"a"}');
   fs.mkdirSync(paths(home).dir, { recursive: true });
@@ -1324,7 +1327,7 @@ test('a symlink wearing a session id name is not a payload, and survives the pur
   const home = fakeHome('{}');
   oldInstall(home);
   const dir = legacyLitter(home);
-  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-target-'));
+  const elsewhere = tempDir('tarmac-target-');
   const target = path.join(elsewhere, 'kept.json');
   fs.writeFileSync(target, '{"not":"ours"}');
   fs.symlinkSync(target, path.join(dir, 'cccccccc-3333-3333-3333-333333333333.json'));
@@ -1398,7 +1401,7 @@ test('the purge never touches the directory the wrapper is about to write to', (
 // the same rule, and the same fix, as `cli-config.test.ts` applies to `TARMAC_*`.
 test('a CLI run under a throwaway home cannot reach the developer\'s state directory', () => {
   const home = fakeHome('{}');
-  const theirs = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-devxdg-'));
+  const theirs = tempDir('tarmac-devxdg-');
   const restore = process.env.XDG_STATE_HOME;
   process.env.XDG_STATE_HOME = theirs;
   let run;
@@ -1456,7 +1459,7 @@ test('a real home that cannot be determined falls back to the targeted home, and
 
 test('the effective snapshots directory is the one frozen in the wrapper', () => {
   const home = fakeHome('{}');
-  const theirs = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-statehome-'));
+  const theirs = tempDir('tarmac-statehome-');
   const withXdg: Record<string, string | undefined> = { ...process.env, HOME: home, XDG_STATE_HOME: theirs };
   const withoutXdg: Record<string, string | undefined> = { ...process.env, HOME: home };
   delete withoutXdg.XDG_STATE_HOME;
@@ -1510,7 +1513,7 @@ test('a snapshots path with an apostrophe survives the round trip', () => {
 // path the wrapper really used rather than one recomputed from this shell's environment.
 test('the uninstall plan says where the snapshots it leaves behind are', () => {
   const home = fakeHome(MINE);
-  const odd = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-elsewhere-')), 'snapshots');
+  const odd = path.join(tempDir('tarmac-elsewhere-'), 'snapshots');
   install({ home });
   fs.writeFileSync(paths(home).wrapper, renderWrapper({ snapshotDir: odd, chainCommand: 'echo MINE' }), { mode: 0o755 });
 
@@ -1630,7 +1633,7 @@ test('the pattern the hint prints is one git honours, from the repository it nam
 // without saying so is the one thing `renderPlan` exists to prevent.
 test('the plan says so when the install moves the snapshots directory', () => {
   const home = fakeHome(MINE);
-  const elsewhere = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-was-')), 'snapshots');
+  const elsewhere = path.join(tempDir('tarmac-was-'), 'snapshots');
   install({ home });
   fs.writeFileSync(paths(home).wrapper, renderWrapper({ snapshotDir: elsewhere, chainCommand: 'echo MINE' }), { mode: 0o755 });
 

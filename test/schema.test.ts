@@ -8,12 +8,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CHECKED_VERSIONS, guardVersions, schemaNotice } from '../src/schema.ts';
+import { tempDir } from './sandbox.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, '..');
@@ -155,7 +155,7 @@ const CAPTURE = path.join(repo, 'scripts', 'capture-fixtures.ts');
 const AGENTS_JSON = '[{"pid":1,"cwd":"/tmp/a","sessionId":"aaaa","status":"idle"}]';
 
 function sandbox(): { dir: string; bin: string; snapshots: string; fixtures: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-capture-'));
+  const dir = tempDir('tarmac-capture-');
   const bin = path.join(dir, 'claude');
   fs.writeFileSync(
     bin,

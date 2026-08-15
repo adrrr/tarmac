@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
@@ -14,6 +13,7 @@ import {
   SNAPSHOT_TTL_MIN,
   TEMP_PREFIX,
 } from '../src/wrapper.ts';
+import { tempDir } from './sandbox.ts';
 import { wideningLocale } from './locales.ts';
 import { settle, waitFor } from './sweep.ts';
 
@@ -33,7 +33,7 @@ const payload = (over: Record<string, unknown> = {}): string =>
   });
 
 function sandbox(): { root: string; snapDir: string } {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-wrap-'));
+  const root = tempDir('tarmac-wrap-');
   return { root, snapDir: path.join(root, 'snapshots') };
 }
 
