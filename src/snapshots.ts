@@ -153,8 +153,14 @@ export function readSnapshots(dir: string, { now = Date.now() }: { now?: number 
     try {
       mtimeMs = fs.statSync(file).mtimeMs;
       payload = JSON.parse(fs.readFileSync(file, 'utf8'));
-    } catch {
-      unreadable += 1; // corrupt, half-written or unreadable: skip, but never forget
+    } catch (e) {
+      // A file listed a moment ago and gone now was DELETED between the two — the sweep
+      // clearing a cold snapshot out of the directory we are reading, which is its job. That
+      // is a race with our own housekeeping, not a payload we failed to parse, and counting
+      // it made tarmac drive its own format-drift warning (up to 2675 phantom unreadable on
+      // one read of a 20k directory, every hour, on every `list --watch` and `serve` redraw).
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT')
+        unreadable += 1; // corrupt, half-written or unreadable: skip, but never forget
       continue;
     }
     const t = extractTelemetry(payload);
