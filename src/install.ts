@@ -166,9 +166,11 @@ export interface UninstallPlan extends PlanBase {
    * it is guessing again. `'file'` is the only state that gets removed — and only when the
    * restore is not `foreign`, which keeps the wrapper and its marker both.
    *
-   * `'none'` is not exotic: a fresh install has no marker at all until the first frame that
-   * sweeps stamps one, so "tarmac's prune marker is removed" was said to everyone who
-   * uninstalled before that ever happened. `null` when there is no directory to look in.
+   * `'none'` is not exotic. Nothing stamps a marker until the first frame that sweeps, which
+   * in ordinary use is moments away — but a home whose status line never draws (a machine that
+   * runs `install` and no TUI) never gets one at all, and a snapshots directory cleared out by
+   * hand goes back to none. Every one of those was told "tarmac's prune marker is removed".
+   * `null` when there is no directory to look in.
    */
   marker: 'file' | 'not-a-file' | 'none' | null;
 }
@@ -408,20 +410,13 @@ function readLegacyDir(p: TarmacPaths): { ours: string[]; kept: number } | null 
 const isPayloadName = (name: string): boolean =>
   SNAPSHOT_NAME.test(name) || name.startsWith(TEMP_PREFIX) || name === PRUNE_MARKER;
 
-/** `lstat`: the LINK's own kind decides, since `unlink` would remove the link, not its target. */
-const isPlainFile = (file: string): boolean => {
-  try {
-    return fs.lstatSync(file).isFile();
-  } catch {
-    return false;
-  }
-};
-
 /**
- * `isPlainFile`'s answer with its two "no"s kept apart, for the plan to say which one it is:
- * nothing there at all, or something there that is not ours to take. Deliberately the SAME
- * `lstat().isFile()` question the removal asks — a plan that judged by `existsSync` would
- * follow a dead symlink to "nothing there" while the deed left the link where it was.
+ * What is at that path, with the two "no"s kept apart so a plan can say which one it is:
+ * nothing there at all, or something there that is not ours to take.
+ *
+ * `lstat`: the LINK's own kind decides, since `unlink` would remove the link, not its target.
+ * A judgement by `existsSync` would follow a dead symlink to "nothing there" while the removal
+ * left the link exactly where it was.
  */
 const markerState = (file: string): 'file' | 'not-a-file' | 'none' => {
   try {
@@ -430,6 +425,9 @@ const markerState = (file: string): 'file' | 'not-a-file' | 'none' => {
     return 'none';
   }
 };
+
+/** The same question, for callers that only need the yes. */
+const isPlainFile = (file: string): boolean => markerState(file) === 'file';
 
 /**
  * Did an install of OURS already exist here, before this run wrote anything?

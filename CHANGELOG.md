@@ -14,10 +14,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **The uninstall plan looks at the prune marker before promising to remove it.** It printed
   "tarmac's prune marker is removed" without ever asking what was at that path — so it said it
-  to everyone whose install had **no marker at all** (the wrapper stamps one on the first frame
-  that sweeps, so that is the state every fresh install is in), and to anyone whose marker was a
-  symlink or a directory, which `removePruneMarker` refuses by design because `unlink` takes a
-  link and not its target. Same class as issue #15, one branch over: the plan now carries what
+  to everyone whose install had **no marker at all** (nothing stamps one until the first frame
+  that sweeps — a frame away in ordinary use, but never on a machine that installs and draws no
+  status line, and never again once a snapshots directory is emptied by hand), and to anyone
+  whose marker was a symlink or a directory, which `removePruneMarker` refuses by design because
+  `unlink` takes a link and not its target. Same class as issue #15, one branch over: the plan now carries what
   is really on disk (`marker: 'file' | 'not-a-file' | 'none' | null`, read with the same
   `lstat().isFile()` question the removal asks) and says which of the four it is. Three of them
   are "it stays", each for its own reason. The deed is unchanged. (issue #23)

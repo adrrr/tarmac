@@ -296,9 +296,10 @@ test('with the wrapper gone, the uninstall plan promises no removal it cannot ma
   assert.ok(fs.existsSync(marker), 'the deed the plan predicted: nothing in that directory was touched');
 });
 
-// The commonest state of all, and the one the plan was wrong about: a fresh install has no
-// marker yet — the wrapper stamps it on the first frame that sweeps. "tarmac's prune marker
-// is removed" was printed to everyone who uninstalled before that ever happened.
+// A fresh install has no marker: the wrapper stamps one on the first frame that sweeps, so in
+// ordinary use the gap is a frame wide — but it never closes on a machine whose status line
+// never draws, and it reopens for good on a snapshots directory emptied by hand. All of them
+// were told "tarmac's prune marker is removed".
 test('the uninstall plan does not promise to remove a prune marker that is not there', () => {
   const home = fakeHome('{}');
   install({ home });
@@ -307,6 +308,22 @@ test('the uninstall plan does not promise to remove a prune marker that is not t
   const text = renderPlan(planUninstall({ home }));
   assert.doesNotMatch(text, /prune marker is removed/i);
   assert.match(text, /no prune marker to remove/i);
+});
+
+// The two facts are independent, and a plan that reads the mode first gets this one wrong:
+// "foreign" says who owns the marker, not that there IS one. Asserted because the mutation is
+// silent — moving the `foreign` test to the front of `markerFate` leaves every other test in
+// this file green while the plan speaks of a marker that does not exist, which is the very sin
+// this change is about.
+test('a foreign statusLine with no marker on disk says nothing about one', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, JSON.stringify({ statusLine: { type: 'command', command: 'other.sh' } }));
+
+  const text = renderPlan(planUninstall({ home }));
+  assert.match(text, /foreign/, 'still the mode it is');
+  assert.match(text, /no prune marker to remove/i);
+  assert.doesNotMatch(text, /prune marker stays/i, 'nothing stays that was never there');
 });
 
 // `removePruneMarker` asks `isPlainFile`, so a symlink wearing the name is left alone BY

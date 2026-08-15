@@ -92,21 +92,24 @@ const gitHint = (repo: { dir: string; ignore: string }, hasLegacy: boolean): str
 /**
  * What becomes of the prune marker, said only after looking at it.
  *
- * Three of these four answers are "it stays", and each for its own reason: a foreign
- * statusLine keeps the wrapper, so the marker keeps its owner; nothing is there to take; or
- * what is there is not a plain file, which `removePruneMarker` refuses by design because
- * `unlink` would take a link and not its target. Only the fourth is a removal, and the plan
- * may not print it in the other three — "no marker yet" is the state every install is in
- * until the first frame that sweeps stamps one.
+ * Three of these four answers are "it stays", each for its own reason: a foreign statusLine
+ * keeps the wrapper, so the marker keeps its owner; nothing is there to take; or what is there
+ * is not a plain file, which `removePruneMarker` refuses by design because `unlink` would take
+ * a link and not its target.
+ *
+ * Written so that ONLY `'file'` can reach the removal sentence, rather than letting it be the
+ * fallthrough: `marker` is nullable by type, and a null landing on "is removed" would be the
+ * exact promise this whole change exists to stop making. The safe answer is the default; the
+ * dangerous one is the special case.
  */
 const markerFate = (mode: UninstallMode, marker: UninstallPlan['marker']): string =>
-  marker === 'none'
-    ? 'no prune marker to remove'
-    : marker === 'not-a-file'
+  marker !== 'file'
+    ? marker === 'not-a-file'
       ? "the prune marker's name is worn by something that is not a regular file, so it stays"
-      : mode === 'foreign'
-        ? "tarmac's prune marker stays"
-        : "tarmac's prune marker is removed";
+      : 'no prune marker to remove'
+    : mode === 'foreign'
+      ? "tarmac's prune marker stays"
+      : "tarmac's prune marker is removed";
 
 /** What each restore mode means, in the words the plan and the report both use. */
 export const restoreMeaning = (mode: UninstallMode): string => RESTORE_MEANING[mode];
