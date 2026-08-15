@@ -268,6 +268,29 @@ test('the printed uninstall plan distinguishes snapshot files from the prune mar
   assert.doesNotMatch(text, /left exactly as they are/i);
 });
 
+// The degraded case `install` names explicitly: the wrapper was deleted by hand and
+// `backup.json` survived, so uninstall still works — through the backup. There is nothing
+// left to read the snapshots path out of, so `removePruneMarker` removes nothing, and the
+// plan used to print a computed default beside "tarmac's prune marker is removed": a promise
+// about a directory it was only guessing at. A plan that can disagree with what runs is worse
+// than no plan, so the unknown is carried through and SAID.
+test('with the wrapper gone, the uninstall plan promises no removal it cannot make', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  const marker = path.join(paths(home).snapshots, PRUNE_MARKER);
+  fs.writeFileSync(marker, '');
+  fs.rmSync(paths(home).wrapper);
+
+  const plan = planUninstall({ home });
+  assert.equal(plan.snapshots, null, 'nothing left to read the path from, and no default stands in');
+  const text = renderPlan(plan);
+  assert.doesNotMatch(text, /prune marker is removed/i);
+  assert.match(text, /unknown/i, 'the plan says what is not known');
+
+  uninstall({ home });
+  assert.ok(fs.existsSync(marker), 'the deed the plan predicted: nothing in that directory was touched');
+});
+
 const escapeForTest = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // ── the command line ──────────────────────────────────────────────────────────────────
