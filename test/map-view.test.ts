@@ -80,6 +80,16 @@ test('a reading that just landed pulses, and a stale one never does', () => {
   assert.doesNotMatch(one({ snapshotAgeMs: 4 * 3600_000, stale: true }), /class="halo"/);
 });
 
+// The table's pill is "● busy" for a reason: shape, word and border, so the state survives a
+// reader who cannot separate two hues. The map's three glyphs differ in silhouette, which
+// covers that reader — but a screen reader is handed "●" and nothing else, and an unrecognised
+// status, the one state the table spells out in full, disappears entirely.
+test('a node names its state in words, not only in a shape', () => {
+  assert.match(one({ busy: true }), /<span class="sr">busy<\/span>/);
+  assert.match(one({ busy: false }), /<span class="sr">idle<\/span>/);
+  assert.match(one({ busy: null, status: 'compacting' }), /<span class="sr">compacting<\/span>/);
+});
+
 test('a busy session is marked busy, and an unknown status is not marked idle', () => {
   assert.match(one({ busy: true }), /data-state="busy"/);
   assert.match(one({ busy: null, status: 'compacting' }), /data-state="unknown"/);

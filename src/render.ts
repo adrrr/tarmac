@@ -447,6 +447,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node[data-role="agent"] .why b { font-size:1rem; }
   .node[data-role="agent"] .project { font-weight:400; }
   .tie { color:var(--dim); font-size:.75rem; }
+  /* Said, not shown: the three glyphs differ in silhouette, so a reader who cannot separate
+     two hues still has the state — but a screen reader is handed a bullet and nothing else. */
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
   .dial { position:relative; width:5.5rem; height:5.5rem; }
   .dial svg { width:100%; height:100%; display:block; overflow:visible; }
   .track { fill:none; stroke:var(--line); stroke-width:5; }
@@ -661,7 +664,7 @@ const SCRIPT = `
  */
 function renderRow(r: FleetRow): string {
   const state = stateOf(r);
-  const word = r.busy === true ? 'busy' : r.busy === false ? 'idle' : (r.status ?? 'unknown');
+  const word = stateWord(r);
   // `data-label` is not decoration: below ~46rem the columns stack, the header row is gone,
   // and a value whose column has no name is a bare "—" that could mean anything.
   // Every cell holds exactly ONE element. Stacked on a phone the label sits left and the
@@ -682,6 +685,14 @@ function renderRow(r: FleetRow): string {
 type RowState = 'busy' | 'idle' | 'unknown';
 const stateOf = (r: FleetRow): RowState => (r.busy === true ? 'busy' : r.busy === false ? 'idle' : 'unknown');
 const SHAPE: Record<RowState, string> = { busy: '●', unknown: '▲', idle: '○' };
+
+/**
+ * The state in words, for both surfaces. An unrecognised status is quoted as it came rather
+ * than flattened to "unknown": the whole point of keeping it is that someone reading the page
+ * can go and find out what `compacting` means.
+ */
+const stateWord = (r: FleetRow): string =>
+  r.busy === true ? 'busy' : r.busy === false ? 'idle' : (r.status ?? 'unknown');
 
 /**
  * Which kind of missing a missing percentage is. One lookup for both surfaces: the table
@@ -735,7 +746,7 @@ function renderNode({ row: r, role, state, reading, pulse }: MapNode): string {
         <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? `<circle class="halo" cx="40" cy="40" r="${DIAL_R}"/>` : ''}<circle class="track" cx="40" cy="40" r="${DIAL_R}"/>${ring}</svg>
         <div class="val">${value}</div>
       </div>
-      <div class="who">${role === 'agent' ? '<span class="tie" aria-hidden="true">&#8627;</span>' : ''}<span class="shape">${SHAPE[state]}</span><span class="project">${esc(title)}</span></div>
+      <div class="who">${role === 'agent' ? '<span class="tie" aria-hidden="true">&#8627;</span>' : ''}<span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(r))}</span><span class="project">${esc(title)}</span></div>
       <div class="sub">${esc(under)}</div>
       <div class="sub">${esc(r.model)}${r.effort === null ? '' : ` · ${esc(r.effort)}`}</div>
       ${asOf}
