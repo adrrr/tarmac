@@ -236,8 +236,8 @@ amber arc dated `! 2h ago`.
 The halo is the only thing that moves, and it makes one claim: a snapshot for that session
 arrived moments ago. It never fires for a reading the freshness threshold calls stale, even
 when `--stale-after` is set below the ten-second pulse window — the threshold is the one that
-judges. `prefers-reduced-motion: reduce` turns it off entirely; nothing that matters is
-carried by the movement.
+judges. Under `prefers-reduced-motion: reduce` it stops moving and stays as a faint ring: the
+movement goes, the fact it carries does not.
 
 **Background agents.** `claude agents --json` prints interactive and background sessions in
 one array, and publishes nothing that ties an agent to whoever dispatched it. So the map does
