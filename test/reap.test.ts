@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -9,13 +8,14 @@ import { fileURLToPath } from 'node:url';
 import { waitForOutput } from './bounded.ts';
 import { escapeRe, reapOrphanedTemps } from '../src/reap.ts';
 import { PRUNE_MARKER, renderWrapper, TEMP_PREFIX } from '../src/wrapper.ts';
+import { tempDir } from './sandbox.ts';
 
 const NOW = 1786240000000;
 const HOUR = 3600_000;
 
 /** A snapshot dir whose files are backdated to a chosen age. */
 function snapDir(files: Record<string, number>): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-reap-'));
+  const dir = tempDir('tarmac-reap-');
   for (const [name, ageMs] of Object.entries(files)) {
     const file = path.join(dir, name);
     fs.writeFileSync(file, '{}');
@@ -187,7 +187,7 @@ for (const { what, sid } of [
   { what: 'the same id upper-cased', sid: SID.toUpperCase() },
 ])
 test(`the reaper removes the very file an interrupted wrapper leaves behind (${what})`, () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-accord-'));
+  const root = tempDir('tarmac-accord-');
   const snapDir = path.join(root, 'snapshots');
   const script = path.join(root, 'statusline.sh');
   fs.writeFileSync(script, renderWrapper({ snapshotDir: snapDir, chainCommand: null }));
@@ -220,7 +220,7 @@ test(`the reaper removes the very file an interrupted wrapper leaves behind (${w
 // like our temp file made `statSync` throw ENOENT and get counted as "could not remove",
 // printing a false alarm on every single `serve` — about a file `unlinkSync` removes fine.
 test('removes a dangling symlink instead of reporting a failure it did not have', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-reap-'));
+  const dir = tempDir('tarmac-reap-');
   const link = path.join(dir, TEMP);
   fs.symlinkSync('/nonexistent/target', link);
   const old = new Date(NOW - 4 * HOUR);
@@ -234,7 +234,7 @@ test('removes a dangling symlink instead of reporting a failure it did not have'
 // The mirror case: the link is ancient, its target is fresh. Judging by the target's mtime
 // keeps the orphan forever — the age of OUR file is the age of our file.
 test('judges a symlink by its own age, not its target\'s', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-reap-'));
+  const dir = tempDir('tarmac-reap-');
   const target = path.join(dir, 'fresh-target');
   fs.writeFileSync(target, '{}');
   const link = path.join(dir, TEMP);
@@ -290,7 +290,7 @@ async function serve(snapshotsDir: string): Promise<ChildProcess> {
 
 test('serve reaps orphaned temp files before it starts listening', async () => {
   // Real clock here: the CLI does not take a `now`, so the fixtures must be really old.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-serve-'));
+  const dir = tempDir('tarmac-serve-');
   const stale = path.join(dir, `.tarmac-${SID}.111.tmp`);
   const inflight = path.join(dir, `.tarmac-${SID}.222.tmp`);
   const snapshot = path.join(dir, `${SID}.json`);

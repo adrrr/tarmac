@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { discoverSessions } from '../src/discover.ts';
+import { tempDir } from './sandbox.ts';
 
 /** Writes a fake `claude` executable that prints `out` and exits with `code`. */
 function fakeClaude(out: string, code = 0): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-disc-'));
+  const dir = tempDir('tarmac-disc-');
   const bin = path.join(dir, 'claude');
   fs.writeFileSync(bin, `#!/bin/sh\ncat <<'EOF'\n${out}\nEOF\nexit ${code}\n`);
   fs.chmodSync(bin, 0o755);

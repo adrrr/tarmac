@@ -7,7 +7,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   DEFAULT_PORT,
@@ -19,6 +18,7 @@ import {
   resolveConfig,
 } from '../src/config.ts';
 import type { FileConfig } from '../src/config.ts';
+import { tempDir } from './sandbox.ts';
 
 test('a duration is read in the units a human writes', () => {
   assert.equal(parseDuration('90s', '--stale-after'), 90_000);
@@ -218,7 +218,7 @@ function resolve(input: {
   });
 }
 
-const tmpdir = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-config-'));
+const tmpdir = (): string => tempDir('tarmac-config-');
 
 function writeConfig(body: Record<string, unknown>): string {
   const file = path.join(tmpdir(), 'config.json');

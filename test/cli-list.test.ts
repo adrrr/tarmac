@@ -9,12 +9,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
+import { tempDir } from './sandbox.ts';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
 const SID = 'aaaaaaaa-1111-1111-1111-111111111111';
@@ -22,7 +22,7 @@ const OTHER = 'bbbbbbbb-2222-2222-2222-222222222222';
 
 /** A fleet of two sessions on CC 2.99.0: one reports a cost, one has no `cost` key at all. */
 function fleetOnUncheckedVersion(): { bin: string; snapshots: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-list-'));
+  const dir = tempDir('tarmac-list-');
   const agents = path.join(dir, 'agents.json');
   fs.writeFileSync(
     agents,
@@ -126,7 +126,7 @@ test('list --watch and --json refuse to be combined', () => {
 // "statusline chained on 0/2 sessions … run tarmac install", which is both already done and
 // useless against a schema change. The count of unreadable payloads is what tells them apart.
 test('list names the snapshots it could not read when the payload key moved', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-drift-'));
+  const dir = tempDir('tarmac-drift-');
   const agents = path.join(dir, 'agents.json');
   fs.writeFileSync(
     agents,
