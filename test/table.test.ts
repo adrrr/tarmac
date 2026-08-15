@@ -9,48 +9,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderSettings, renderTable } from '../src/render.ts';
 import { guardVersions } from '../src/schema.ts';
+import { health, row } from './fleet-fixtures.ts';
 import type { Fleet, FleetHealth, FleetRow } from '../src/fleet.ts';
 
-const NOW = 1786240000000;
-const row = (over: Partial<FleetRow> = {}): FleetRow => ({
-  sessionId: 's1',
-  name: 'alpha-7a',
-  project: 'alpha',
-  cwd: '/Users/jane/alpha',
-  pid: 42,
-  status: 'idle',
-  busy: false,
-  uptimeMs: 3600_000,
-  ctxState: 'ok',
-  ctxPct: 26,
-  ctxTokens: 256390,
-  ctxWindow: null,
-  model: 'Fable 5',
-  effort: 'max',
-  costUsd: 27.75,
-  snapshotAgeMs: 1200,
-  stale: false,
-  rateLimits: null,
-  ...over,
-});
-const health = (over: Partial<FleetHealth> = {}): FleetHealth => ({
-  sessions: 1,
-  covered: 1,
-  unfilable: 0,
-  drift: 0,
-  stale: 0,
-  discovered: 1,
-  noSessionId: 0,
-  schemaBroken: false,
-  unknownStatus: 0,
-  busy: 0,
-  costUsd: 27.75,
-  costReporting: 1,
-  schemaGuard: guardVersions(['2.1.226']),
-  staleAfterMs: 600_000,
-  generatedAt: NOW,
-  ...over,
-});
 const fleet = (rows: FleetRow[], h: Partial<FleetHealth> = {}): Fleet => ({ rows, health: health(h) });
 
 test('prints a header, a row and the fleet summary', () => {

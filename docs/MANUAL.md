@@ -220,6 +220,76 @@ Everything a reader interprets is rendered on the server. The browser owns two f
 rules: re-deriving "a dash, never a zero" in page JavaScript would put a second copy of it
 where the test suite cannot reach.
 
+## The map
+
+`serve` has a second view of the same fleet, on `/map`, reached by the tab in the header. The
+tabs are links rather than script, so the view survives a reload and a bookmark — and both
+views are rendered into the same fragment, out of the same reading, which is why the two can
+never disagree about a session on the same screen.
+
+One node per session, and the count matches the table's rows exactly. A node says five things
+at once, in five channels that never rely on colour alone:
+
+| What | Where it is | What it means |
+|---|---|---|
+| context | the arc | how full the window is, drawn to the size of the reading |
+| the reading's age | the arc's weight | solid: fresh. Thin, amber and dated `! 3h ago`: past the freshness threshold |
+| no reading at all | a dotted, empty dial | nothing was measured, and the middle says which kind of nothing — `not chained`, `no turn yet`, `schema drift` |
+| the session's state | the shape by the name | `●` busy or an agent working, `○` idle or an agent finished, `▲` a word tarmac does not flatten into either — printed as it came |
+| a reading just landed | one halo, once | a measured reading for that session is under 10s old |
+
+The state and the reading are two different clocks and are never merged. `busy` comes from
+`claude agents --json`, read at the moment you asked; the percentage comes from a file that
+session's terminal wrote whenever it last drew a frame. A busy session with a two-hour-old
+reading is **both** live and stale, and the node says both — a solid green dot beside a thin
+amber arc dated `! 2h ago`.
+
+"How old is the file" and "is there a number in it" are a third pair that is never merged.
+A session that has taken no turn yet, and one whose payload drifted, both have a snapshot as
+current as any on the machine and neither has a percentage: they get the dotted dial, not the
+solid ring of a session measured at 0%. That distinction matters twice a lifetime and both
+times at once — `no turn yet` is the whole fleet for a few minutes after a restart, and
+`schema drift` is the whole fleet the day Claude Code moves the payload.
+
+The halo is the only thing that moves, and it makes one claim: a reading for that session
+arrived moments ago. Three things have to be true for it — the reading is fresh, it is inside
+the ten-second window, and there is a number in it. It never fires for a reading the freshness
+threshold calls stale, even when `--stale-after` is set below that window (the threshold is
+the one that judges), and never for a snapshot that carried no measurement: a drifted fleet
+writes a file on every frame, and a fleet of empty dials beating steadily is the calm, wrong
+answer this tool exists to refuse. Under `prefers-reduced-motion: reduce` it stops moving and
+stays as a faint ring: the movement goes, the fact it carries does not. It is also written out
+beside the dial, so the claim is in the markup and not only in the drawing.
+
+**Background agents.** `claude agents --json` prints interactive and background sessions in
+one array, and publishes nothing that ties an agent to whoever dispatched it. So the map does
+not draw one: an agent is a smaller, tinted node placed *next to* the session sharing its
+working directory — the only field both carry — and it keeps a node of its own, with its own
+project on it, even when no session matches. An edge would claim a parentage the source does
+not contain; nesting would let this page show a smaller fleet than the table beside it; and
+nothing points at the neighbouring node either, because the grid wraps where the viewport says
+and the fleet's sort can hand the same agent a different neighbour on the next poll.
+
+Which entries those are is decided by `kind`. `interactive` is what a terminal calls itself,
+and `background` is the one other value seen so far, on entries that carry no `pid` and report
+their state under `state` instead of `status`. One alternative is not a vocabulary, so
+`interactive` stays the anchor: a fleet in which **nothing** calls itself `interactive` is read as
+a renamed kind rather than as a machine that has gone entirely background — the same tolerance
+the fleet applies to telemetry, where a signal true of every row is a change in the source.
+Whatever a node calls itself is printed on it when it is not `interactive`, so that decision is
+never invisible.
+
+**A background session's name is its prompt.** `claude agents --json` names those sessions
+after what they were asked to do, and tarmac carries the name as it came — onto the node, into
+the table's `Session` column, and verbatim into `GET /api/fleet` and `list --json`. A
+screenshot of a real fleet is therefore a screenshot of what its agents were told. A long name
+is ellipsised on a node to fit its column, which is a width, not a redaction: the whole string
+is still in the markup and in both JSON surfaces, and the first half of a prompt is usually
+the half that gives it away. Worth knowing before the screen, or the payload, goes anywhere.
+
+There is no history and no time scrubber: every node is the fleet as of the reading in the
+header, and nothing on the page remembers an earlier one.
+
 ## Configuration
 
 Three of tarmac's numbers are opinions, not truths, so all three are yours to set. Nothing

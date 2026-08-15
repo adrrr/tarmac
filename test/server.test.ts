@@ -6,6 +6,8 @@ import type { AddressInfo } from 'node:net';
 import { renderLive, renderPage, servingLine } from '../src/render.ts';
 import { createFleetServer, listenFleetServer, PORT_FALLBACK_TRIES } from '../src/server.ts';
 import { guardVersions } from '../src/schema.ts';
+import { buildFleet } from '../src/fleet.ts';
+import { parseAgents } from '../src/sessions.ts';
 import { health, row } from './fleet-fixtures.ts';
 import { rawGet } from './bounded.ts';
 import type { Fleet, FleetRow } from '../src/fleet.ts';
@@ -193,6 +195,25 @@ test('tells the two uncovered kinds apart when the fleet has both', () => {
   assert.match(live, /For the others, run `tarmac install`/, 'and the fixable one still gets its advice');
 });
 
+// The whole pipeline, on a payload captured off a real machine: a terminal and the background
+// agent it dispatched, which reports its state under `state` rather than `status`. Every layer
+// in between is real, because the bug this pins was invisible at each of them on its own —
+// the parser handed back a `null` that was faithful to what it read, and the page turned it
+// into an alarm about a fleet where nothing at all was wrong.
+test('a finished background agent raises no banner about an unknown status', () => {
+  const { sessions, health: discovery } = parseAgents(
+    JSON.stringify([
+      { pid: 62489, cwd: '/w', kind: 'interactive', startedAt: 1, sessionId: 'a', name: 'alpha-7a', status: 'idle' },
+      { id: 'b0', cwd: '/w', kind: 'background', startedAt: 2, sessionId: 'b', name: 'sweep', state: 'done' },
+    ]),
+  );
+  const fleet = buildFleet({ sessions, snapshots: new Map(), now: 1786240000000, discovery });
+  assert.equal(fleet.health.unknownStatus, 0);
+  const live = renderLive(fleet);
+  assert.doesNotMatch(live, /does not know/);
+  assert.doesNotMatch(live, /data-state="unknown"/);
+});
+
 // ── weight: busy first, and visible as such from across a room ────────────────────────
 // The sort is already right. What was missing is that a busy row and an idle one weighed
 // the same on screen, and that the difference between them was a colour — which is no
@@ -271,7 +292,7 @@ test('a row with nothing measured renders no zero and no empty cell', () => {
   const live = renderLive({
     rows: [
       {
-        sessionId: null, name: null, project: null, cwd: null, pid: null, status: null, busy: null,
+        sessionId: null, name: null, project: null, cwd: null, pid: null, kind: null, status: null, busy: null,
         uptimeMs: null, ctxState: 'absent', ctxPct: null, ctxTokens: null, ctxWindow: null, model: null,
         effort: null, costUsd: null, snapshotAgeMs: null, stale: false, rateLimits: null,
       },
@@ -469,6 +490,18 @@ test('a request a browser labels cross-site is refused before it can spawn anyth
     assert.equal(collected, 0, 'and nothing was spawned');
     assert.equal(await rawGet(port, `localhost:${port}`, '/api/fleet', { 'sec-fetch-site': 'same-origin' }), 200);
     assert.equal(await rawGet(port, `localhost:${port}`, '/api/fleet'), 200, 'curl sends no such header');
+  });
+});
+
+// The second surface, on its own address: the tab is a link, so the view has to survive a
+// reload and a bookmark.
+test('GET /map serves the page opened on the map', async () => {
+  await withServer(collectOk, async (base) => {
+    const res = await fetch(base + '/map', { signal: AbortSignal.timeout(4000) });
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /<!doctype/i, 'the shell, not the fragment');
+    assert.match(body, /<body data-view="map"/);
   });
 });
 

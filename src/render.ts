@@ -9,6 +9,8 @@
 
 import { formatDuration } from './config.ts';
 import type { Config, Source } from './config.ts';
+import { buildMap, INTERACTIVE, stateOf } from './map.ts';
+import type { MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
 import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
 import type { Plan, UninstallMode, UninstallPlan } from './install.ts';
@@ -251,7 +253,8 @@ function age(ms: number): string {
  * could not see) are hard-won and tested; re-deriving them in browser JavaScript to redraw a
  * polled row would put the second copy somewhere this suite cannot reach.
  */
-export function renderLive({ rows, health }: Fleet): string {
+export function renderLive(fleet: Fleet): string {
+  const { rows, health } = fleet;
   const warnings: string[] = [];
   if (health.noSessionId > 0) {
     // Never "no sessions found" when discovery DID find some it could not identify.
@@ -303,24 +306,38 @@ export function renderLive({ rows, health }: Fleet): string {
   const schema = schemaNotice(health.schemaGuard);
   if (schema) warnings.push(schema);
 
+  // Both views, every time, out of the one reading the page just asked for. The tabs are
+  // links and the shell decides which of the two is visible, so a fleet cannot be drawn as a
+  // table of one age beside a map of another.
+  //
+  // A fleet with nothing in it has no two ways to be laid out, so it gets one sentence above
+  // both of them rather than a copy inside each — the copy behind `display:none` was invisible
+  // on screen and read out all the same by anything going through the markup.
   const body =
     rows.length === 0
-      ? health.noSessionId > 0
-        ? // Discovery DID return entries — we just could not identify them. Saying "none
-          // found" here would hide a schema change behind a calm, wrong answer.
-          `<p class="empty">No session could be identified, though ${health.noSessionId} were discovered.</p>`
-        : `<p class="empty">No Claude Code sessions found. Is a session running?</p>`
-      : `<table>
+      ? empty(health)
+      : `<div class="view view-table"><div class="wrap"><table>
       <thead><tr>
         <th>Project</th><th>Session</th><th>State</th><th>Context</th><th>Model</th><th>Effort</th><th>Cost</th><th>Uptime</th>
       </tr></thead>
       <tbody>${rows.map(renderRow).join('')}</tbody>
-    </table>`;
+    </table></div></div>
+<div class="view view-map">${renderMap(fleet)}</div>`;
 
   return `<div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>
 ${warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}
-<div class="wrap">${body}</div>`;
+${body}`;
 }
+
+/**
+ * What to say instead of a fleet. Discovery returning entries we could not identify is not
+ * an empty fleet, and saying "none found" would hide a schema change behind a calm, wrong
+ * answer — so the two surfaces below share one wording rather than each keeping its own.
+ */
+const empty = (health: FleetHealth): string =>
+  health.noSessionId > 0
+    ? `<p class="empty">No session could be identified, though ${health.noSessionId} were discovered.</p>`
+    : `<p class="empty">No Claude Code sessions found. Is a session running?</p>`;
 
 export interface WatchFrame {
   /** The last fleet that could be read — `null` until one ever could. */
@@ -378,7 +395,10 @@ function ago(ms: number): string {
   return m < 60 ? `${m}m` : `${Math.round(m / 60)}h`;
 }
 
-export function renderPage(fleet: Fleet): string {
+/** Which of the two surfaces the shell opens on. */
+export type View = 'table' | 'map';
+
+export function renderPage(fleet: Fleet, view: View = 'table'): string {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -429,6 +449,81 @@ export function renderPage(fleet: Fleet): string {
   body.failing .pulse { background:var(--warn); }
   body.failing #live { border:1px dashed var(--warn); border-radius:8px; padding:.5rem; }
   .offline strong { white-space:nowrap; }
+  /* The tabs, and what they hide. The shell owns the choice — not the fragment — so a poll
+     that swaps the fleet underneath cannot put the reader back on a view they left. */
+  nav { display:flex; gap:.15rem; }
+  nav a { color:var(--dim); text-decoration:none; font-size:.8rem; font-weight:600; text-transform:uppercase;
+          letter-spacing:.06em; padding:.15rem .55rem; border-radius:99px; border:1px solid transparent; }
+  nav a[aria-current="page"] { color:var(--fg); border-color:var(--line); }
+  body[data-view="table"] .view-map { display:none; }
+  body[data-view="map"] .view-table { display:none; }
+
+  /* ── the map ─────────────────────────────────────────────────────────────────────────
+     One node per session. The arc is the context, its weight is how much that reading may
+     be believed, and the halo — the only thing on this page that moves — says a frame
+     landed moments ago. */
+  .map { display:grid; gap:.9rem; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
+  .node { border:1px solid var(--line); border-radius:10px; padding:.8rem .85rem .7rem;
+          display:flex; flex-direction:column; align-items:center; text-align:center; }
+  .node[data-state="busy"] { border-color:color-mix(in srgb, var(--busy) 45%, var(--line)); }
+  /* An agent is a smaller body in the same system, next to the session it shares a directory
+     with — never inside it. Tinted rather than outlined, and hooked, so it reads as the
+     session's dependent without a line claiming a parentage the source never published. */
+  .node[data-role="agent"] { padding-top:.55rem; border-color:transparent;
+          background:color-mix(in srgb, var(--line) 22%, transparent); }
+  .node[data-role="agent"] .dial { width:3.6rem; height:3.6rem; }
+  .node[data-role="agent"] .pct { font-size:.95rem; }
+  .node[data-role="agent"] .why { font-size:.6rem; max-width:3.4rem; }
+  .node[data-role="agent"] .why b { font-size:1rem; }
+  .node[data-role="agent"] .project { font-weight:400; }
+  /* Said, not shown: the three glyphs differ in silhouette, so a reader who cannot separate
+     two hues still has the state — but a screen reader is handed a bullet and nothing else. */
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  .dial { position:relative; width:5.5rem; height:5.5rem; }
+  .dial svg { width:100%; height:100%; display:block; overflow:visible; }
+  .track { fill:none; stroke:var(--line); stroke-width:5; }
+  /* Butt caps, not round: a rounded cap adds half a stroke width at each end, which draws a
+     1% reading at three times its extent. The prettier cap overstates every small number. */
+  .arc { fill:none; stroke:var(--dim); stroke-width:5; }
+  .node[data-state="busy"] .arc { stroke:var(--busy); }
+  /* A reading past the freshness threshold is drawn as what it is: thin, faded, and in the
+     warning hue — never the solid arc of a live one. Its EXTENT stays true, because the
+     number is still the truth of an earlier moment; and a dash pattern here would overwrite
+     stroke-dasharray, which is what carries the percentage. */
+  .node[data-reading="stale"] .arc, .node[data-reading="undated"] .arc {
+          stroke:var(--warn); stroke-width:2.5; opacity:.7; }
+  /* Nothing was measured. Keyed on the measurement and never on the age of the file: a
+     solid empty ring is what a session measured at 0% wears, and the two must not match. */
+  .track.unmeasured { stroke-dasharray:2 6; stroke-linecap:round; }
+  /* Once per arrival, not forever: the fragment is replaced on every poll, so a single run
+     per swap is what makes the fleet breathe at the rate its frames actually land. A looping
+     animation would say "a frame just arrived" for five seconds after it stopped being true. */
+  .halo { fill:none; stroke:var(--busy); stroke-width:2; opacity:0; transform-origin:50% 50%;
+          animation:halo 1.6s ease-out 1; }
+  .node[data-state="idle"] .halo { stroke:var(--dim); }
+  @keyframes halo { from { opacity:.5; transform:scale(1); } to { opacity:0; transform:scale(1.22); } }
+  /* Motion is the one thing here nobody can look away from, so it is the first thing a
+     reader who asked for less of it stops getting. The reading is still readable without it. */
+  /* Scaled, not merely stopped: at rest the halo sits inside the track's own stroke, so
+     "animation:none" alone left the one fact it carries invisible. */
+  @media (prefers-reduced-motion: reduce) { .halo { animation:none; opacity:.35; transform:scale(1.18); } }
+  .val { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+         font-variant-numeric:tabular-nums; }
+  .pct { font-size:1.25rem; font-weight:650; letter-spacing:-.01em; }
+  .pct i { font-style:normal; font-size:.7em; font-weight:500; color:var(--dim); }
+  .why { font-size:.68rem; color:var(--dim); line-height:1.2; max-width:4.4rem; }
+  .why b { display:block; font-size:1.25rem; font-weight:400; }
+  .who { margin-top:.5rem; display:flex; align-items:baseline; gap:.3rem; max-width:100%; }
+  .who .project { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .node[data-state="busy"] .who .project { font-weight:700; }
+  .shape { font-size:.7rem; color:var(--dim); }
+  .node[data-state="busy"] .shape { color:var(--busy); }
+  .node[data-state="unknown"] .shape { color:var(--warn); }
+  .sub { color:var(--dim); font-size:.76rem; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .asof { font-size:.72rem; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:.15rem; }
+  .asof.stale { color:var(--warn); font-weight:600; }
+  @media (max-width: 30rem) { .map { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); gap:.6rem; } }
+
   /* Below this the table stops being a table: one card per session, every value keeping the
      name of the column it came from. Nothing is dropped — a phone that hides the context
      column would be a phone that renders "not measured" as nothing at all. */
@@ -450,9 +545,17 @@ export function renderPage(fleet: Fleet): string {
     .bar { display:none; }
   }
 </style>
-</head><body>
+</head><body data-view="${view}">
 <header>
   <h1>tarmac</h1>
+  <!-- Links, not buttons: the view survives a reload, a bookmark and a browser with
+       JavaScript off — the state of a page whose own noscript banner promises it is still
+       readable. Both views are in the fragment below either way, so switching costs the
+       server nothing and the two can never show readings of different ages. -->
+  <nav>
+    <a href="/"${view === 'table' ? ' aria-current="page"' : ''}>Table</a>
+    <a href="/map"${view === 'map' ? ' aria-current="page"' : ''}>Map</a>
+  </nav>
   <!-- Not "updated just now". If the script never runs — a policy-injected CSP without
        'unsafe-inline', a script error — that text would stand as a permanent lie, and
        <noscript> would not fire to correct it because JavaScript is enabled. The page's one
@@ -595,7 +698,7 @@ const SCRIPT = `
  */
 function renderRow(r: FleetRow): string {
   const state = stateOf(r);
-  const word = r.busy === true ? 'busy' : r.busy === false ? 'idle' : (r.status ?? 'unknown');
+  const word = stateWord(state, r);
   // `data-label` is not decoration: below ~46rem the columns stack, the header row is gone,
   // and a value whose column has no name is a bare "—" that could mean anything.
   // Every cell holds exactly ONE element. Stacked on a phone the label sits left and the
@@ -613,14 +716,120 @@ function renderRow(r: FleetRow): string {
   </tr>`;
 }
 
-type RowState = 'busy' | 'idle' | 'unknown';
-const stateOf = (r: FleetRow): RowState => (r.busy === true ? 'busy' : r.busy === false ? 'idle' : 'unknown');
-const SHAPE: Record<RowState, string> = { busy: '●', unknown: '▲', idle: '○' };
+const SHAPE: Record<NodeState, string> = { busy: '●', unknown: '▲', idle: '○' };
+
+/**
+ * The state in words, for both surfaces — derived from the state the MODEL decided, never
+ * from the row a second time. Two expressions for one fact on one element is how a node ends
+ * up shaped `unknown` and captioned `idle`.
+ *
+ * An unrecognised status is quoted as it came rather than flattened to "unknown": the point
+ * of keeping it is that someone reading the page can go and find out what `compacting` means.
+ */
+const stateWord = (state: NodeState, r: FleetRow): string =>
+  state === 'unknown' ? (r.status ?? 'unknown') : state;
+
+/**
+ * Which kind of missing a missing percentage is. One lookup for both surfaces: the table
+ * says it beside a dash, the map says it inside an empty dial, and a second copy of these
+ * three words is a second chance to describe the same state differently.
+ */
+const CTX_WHY: Record<string, string> = { fresh: 'no turn yet', drift: 'schema drift', absent: 'not chained' };
+
+/**
+ * The map: one node per session, laid out as a grid rather than a graph. An empty fleet is not
+ * its business — `renderLive` says that once, above both views, rather than letting each of
+ * them render the same sentence and hide one of the two.
+ *
+ * There are no edges because the sources publish no relationship between two sessions — the
+ * one thing they do carry is the working directory, and that is expressed by putting an
+ * agent NEXT to the session it shares a directory with, never by drawing a line that would
+ * claim more than the data says.
+ *
+ * Everything a reader interprets is decided in `map.ts` and rendered here, on the server,
+ * for the same reason the table is: the rules that keep a reading honest are tested, and a
+ * copy of them re-derived in browser JavaScript would sit where this suite cannot reach.
+ */
+export function renderMap(fleet: Fleet): string {
+  return `<div class="map">${buildMap(fleet).nodes.map(renderNode).join('')}</div>`;
+}
+
+/**
+ * One node. Five facts, in five channels that do not depend on colour alone: the arc is how
+ * full the context is, the dial's weight is how much that reading may be believed, a dotted
+ * dial is no reading at all, the shape beside the name is the session's state, and the halo
+ * says one landed moments ago. The words under them are the same ones the table uses for the
+ * same conditions — including the halo's, which would otherwise live only in a drawing.
+ */
+function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode): string {
+  // The model owns "is there a number"; this reads its verdict rather than asking the row a
+  // second question. `fresh` and `drift` are the two states where the age of the file and the
+  // presence of a reading disagree, and they are the two that matter most.
+  const pct = measured ? r.ctxPct : null;
+  const value =
+    pct === null
+      ? `<span class="why"><b>&mdash;</b>${esc(CTX_WHY[r.ctxState] ?? 'no reading')}</span>`
+      : `<span class="pct">${pct}<i>%</i></span>`;
+  // The reading's own age, and only when it is one the reader must not take for current.
+  const asOf =
+    reading === 'stale' && r.snapshotAgeMs !== null
+      ? `<div class="asof stale">! ${esc(asOfAge(r.snapshotAgeMs))} ago</div>`
+      : reading === 'undated'
+        ? `<div class="asof stale">! undated</div>`
+        : '';
+  // An agent carries its own project, like every other node. Placement is not a promise —
+  // the grid wraps where the viewport says, and the fleet's sort can hand the same agent a
+  // different neighbour on the next poll — so nothing here points at the node beside it.
+  return `<article class="node" data-role="${role}" data-state="${state}" data-reading="${reading}">
+      <div class="dial">
+        <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? `<circle class="halo" cx="40" cy="40" r="${DIAL_R}"/>` : ''}<circle class="track${measured ? '' : ' unmeasured'}" cx="40" cy="40" r="${DIAL_R}"/>${pct === null ? '' : arc(pct)}</svg>
+        <div class="val">${value}</div>
+        ${pulse ? `<span class="sr">a reading just landed</span>` : ''}
+      </div>
+      <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span></div>
+      <div class="sub">${esc(r.name)}</div>
+      ${r.kind === null || r.kind === INTERACTIVE ? '' : `<div class="sub">${esc(r.kind)}</div>`}
+      <div class="sub">${esc(r.model)}${r.effort === null ? '' : ` · ${esc(r.effort)}`}</div>
+      ${asOf}
+    </article>`;
+}
+
+/**
+ * How old a dated reading is, in the words both surfaces use.
+ *
+ * `duration` floors to whole minutes, and `--stale-after` takes seconds — so a 30s reading
+ * judged against a 2s threshold rendered "! 0m ago": the "!" saying past the threshold and
+ * the "0m" saying brand new, in the same breath. Under a minute the age stops pretending to
+ * be a round number.
+ */
+const asOfAge = (ms: number): string => (ms < 60_000 ? '<1m' : duration(ms));
+
+/** The dial's geometry. One radius, named once, so the arithmetic below cannot drift from it. */
+const DIAL_R = 30;
+const DIAL_C = 2 * Math.PI * DIAL_R;
+
+/**
+ * The filled part of the ring, as a fraction of the circle's real circumference.
+ *
+ * `pathLength="100"` would say the same thing in far prettier markup — "62 filled, 38 empty"
+ * — but it is an attribute browsers have not always honoured on basic shapes, and the way it
+ * fails is the one this page cannot afford: the dash array is ignored, the arc closes, and
+ * every session reads as a full context window. Two decimals is well under a pixel at this
+ * radius, and it keeps the markup diffable.
+ */
+function arc(pct: number): string {
+  const filled = (Math.min(100, Math.max(0, pct)) / 100) * DIAL_C;
+  return (
+    `<circle class="arc" cx="40" cy="40" r="${DIAL_R}" transform="rotate(-90 40 40)"` +
+    ` stroke-dasharray="${round2(filled)} ${round2(DIAL_C - filled)}"/>`
+  );
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 function ctxCell(r: FleetRow): string {
   if (r.ctxPct === null) {
-    const why = ({ fresh: 'no turn yet', drift: 'schema drift', absent: 'not chained' } as Record<string, string>)[r.ctxState] ?? '';
-    return `${dash()} <span class="dim">${esc(why)}</span>`;
+    return `${dash()} <span class="dim">${esc(CTX_WHY[r.ctxState] ?? '')}</span>`;
   }
   // A stale reading is still the truth — of an earlier moment. Show it, and date it, with
   // the same "!" the terminal marks it with: an age in the same grey as everything else is
@@ -632,7 +841,7 @@ function ctxCell(r: FleetRow): string {
   // (the "!" says past the threshold, the "0m" says brand new). The terminal path already
   // re-checked it; the two surfaces are not allowed to disagree about the module's own rule.
   const asOf =
-    r.stale && r.snapshotAgeMs !== null ? ` <span class="stale">! ${esc(duration(r.snapshotAgeMs))} ago</span>` : '';
+    r.stale && r.snapshotAgeMs !== null ? ` <span class="stale">! ${esc(asOfAge(r.snapshotAgeMs))} ago</span>` : '';
   return `<span class="bar"><i style="width:${Math.min(100, r.ctxPct)}%"></i></span>${r.ctxPct}%${asOf}`;
 }
 
