@@ -10,7 +10,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -19,6 +18,7 @@ import type { ChildProcess } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { waitForOutput } from './bounded.ts';
+import { tempDir } from './sandbox.ts';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
 const SID = 'aaaaaaaa-1111-1111-1111-111111111111';
@@ -36,7 +36,7 @@ interface Home {
  * astride the 10-minute default, so the threshold in force decides whether it is stale.
  */
 function fakeHome(): Home {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-cfg-'));
+  const root = tempDir('tarmac-cfg-');
   // The XDG state directory, not `.claude` — see #20. `--home` is a throwaway directory here
   // and never the real home, so an `XDG_STATE_HOME` in the developer's shell cannot reach it.
   const snapshots = path.join(root, '.local', 'state', 'tarmac', 'snapshots');

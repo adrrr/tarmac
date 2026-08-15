@@ -16,11 +16,11 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { PRUNE_EVERY_MIN, PRUNE_MARKER, renderWrapper, SNAPSHOT_TTL_MIN } from '../src/wrapper.ts';
 import { waitFor, warmUpFrames } from './sweep.ts';
+import { tempDir } from './sandbox.ts';
 
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 const DEAD = 'ffffffff-1111-2222-3333-444444444444';
@@ -62,7 +62,7 @@ interface Rig {
  * the status line — and then runs the real `find` with the real arguments.
  */
 function rig(): Rig {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tarmac-detach-'));
+  const root = tempDir('tarmac-detach-');
   roots.push(root);
   const snapDir = path.join(root, 'snapshots');
   fs.mkdirSync(snapDir, { recursive: true });
