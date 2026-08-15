@@ -252,6 +252,10 @@ test('the printed plan says out loud when the target is your own home', () => {
 test('the printed uninstall plan warns when it would restore nothing', () => {
   const home = fakeHome(MINE);
   install({ home });
+  // Stamped, as the first sweeping frame would: the line below is about who OWNS the marker,
+  // which is only a question once there is one. (That it says nothing of the sort when the
+  // directory holds no marker is its own test.)
+  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
   fs.writeFileSync(paths(home).settings, JSON.stringify({ statusLine: { type: 'command', command: 'other.sh' } }));
   const text = renderPlan(planUninstall({ home }));
   assert.match(text, /foreign/);
@@ -262,6 +266,7 @@ test('the printed uninstall plan warns when it would restore nothing', () => {
 test('the printed uninstall plan distinguishes snapshot files from the prune marker', () => {
   const home = fakeHome('{}');
   install({ home });
+  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
   const text = renderPlan(planUninstall({ home }));
   assert.match(text, /snapshot files stay/i);
   assert.match(text, /prune marker is removed/i);
@@ -289,6 +294,56 @@ test('with the wrapper gone, the uninstall plan promises no removal it cannot ma
 
   uninstall({ home });
   assert.ok(fs.existsSync(marker), 'the deed the plan predicted: nothing in that directory was touched');
+});
+
+// A fresh install has no marker: the wrapper stamps one on the first frame that sweeps, so in
+// ordinary use the gap is a frame wide — but it never closes on a machine whose status line
+// never draws, and it reopens for good on a snapshots directory emptied by hand. All of them
+// were told "tarmac's prune marker is removed".
+test('the uninstall plan does not promise to remove a prune marker that is not there', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  assert.equal(fs.existsSync(path.join(paths(home).snapshots, PRUNE_MARKER)), false, 'the state a fresh install is in');
+
+  const text = renderPlan(planUninstall({ home }));
+  assert.doesNotMatch(text, /prune marker is removed/i);
+  assert.match(text, /no prune marker to remove/i);
+});
+
+// The two facts are independent, and a plan that reads the mode first gets this one wrong:
+// "foreign" says who owns the marker, not that there IS one. Asserted because the mutation is
+// silent — moving the `foreign` test to the front of `markerFate` leaves every other test in
+// this file green while the plan speaks of a marker that does not exist, which is the very sin
+// this change is about.
+test('a foreign statusLine with no marker on disk says nothing about one', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, JSON.stringify({ statusLine: { type: 'command', command: 'other.sh' } }));
+
+  const text = renderPlan(planUninstall({ home }));
+  assert.match(text, /foreign/, 'still the mode it is');
+  assert.match(text, /no prune marker to remove/i);
+  assert.doesNotMatch(text, /prune marker stays/i, 'nothing stays that was never there');
+});
+
+// `removePruneMarker` asks `isPlainFile`, so a symlink wearing the name is left alone BY
+// DESIGN (unlink would take the link, not the target — the deed is already tested below).
+// The plan asked nothing and promised the removal anyway.
+test('the uninstall plan says a symlink wearing the marker name is left alone', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  const target = path.join(home, 'someone-elses-file');
+  fs.writeFileSync(target, 'keep');
+  const marker = path.join(paths(home).snapshots, PRUNE_MARKER);
+  fs.symlinkSync(target, marker);
+
+  const text = renderPlan(planUninstall({ home }));
+  assert.doesNotMatch(text, /prune marker is removed/i);
+  assert.match(text, /not a regular file/i, 'and why it stays');
+
+  uninstall({ home });
+  assert.equal(fs.lstatSync(marker).isSymbolicLink(), true, 'the deed the plan predicted');
+  assert.equal(fs.readFileSync(target, 'utf8'), 'keep');
 });
 
 const escapeForTest = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

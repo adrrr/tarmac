@@ -160,6 +160,19 @@ export interface UninstallPlan extends PlanBase {
    * nobody had established. Same rule as `ctxPct`: no value is never rendered as a value.
    */
   snapshots: string | null;
+  /**
+   * What sits at the prune marker's path, because only a plain file is ours to take:
+   * `removePruneMarker` asks `isPlainFile`, so the plan has to ask the very same question or
+   * it is guessing again. `'file'` is the only state that gets removed — and only when the
+   * restore is not `foreign`, which keeps the wrapper and its marker both.
+   *
+   * `'none'` is not exotic. Nothing stamps a marker until the first frame that sweeps, which
+   * in ordinary use is moments away — but a home whose status line never draws (a machine that
+   * runs `install` and no TUI) never gets one at all, and a snapshots directory cleared out by
+   * hand goes back to none. Every one of those was told "tarmac's prune marker is removed".
+   * `null` when there is no directory to look in.
+   */
+  marker: 'file' | 'not-a-file' | 'none' | null;
 }
 
 export type Plan = InstallPlan | UninstallPlan;
@@ -397,14 +410,24 @@ function readLegacyDir(p: TarmacPaths): { ours: string[]; kept: number } | null 
 const isPayloadName = (name: string): boolean =>
   SNAPSHOT_NAME.test(name) || name.startsWith(TEMP_PREFIX) || name === PRUNE_MARKER;
 
-/** `lstat`: the LINK's own kind decides, since `unlink` would remove the link, not its target. */
-const isPlainFile = (file: string): boolean => {
+/**
+ * What is at that path, with the two "no"s kept apart so a plan can say which one it is:
+ * nothing there at all, or something there that is not ours to take.
+ *
+ * `lstat`: the LINK's own kind decides, since `unlink` would remove the link, not its target.
+ * A judgement by `existsSync` would follow a dead symlink to "nothing there" while the removal
+ * left the link exactly where it was.
+ */
+const markerState = (file: string): 'file' | 'not-a-file' | 'none' => {
   try {
-    return fs.lstatSync(file).isFile();
+    return fs.lstatSync(file).isFile() ? 'file' : 'not-a-file';
   } catch {
-    return false;
+    return 'none';
   }
 };
+
+/** The same question, for callers that only need the yes. */
+const isPlainFile = (file: string): boolean => markerState(file) === 'file';
 
 /**
  * Did an install of OURS already exist here, before this run wrote anything?
@@ -885,6 +908,7 @@ export function planUninstall({ home, realHome = os.homedir() }: PlanOptions): U
   }
 
   const isRealHome = sameFile(root, realHome);
+  const snapshots = installedSnapshotsDir(p);
   return {
     action: 'uninstall',
     home: root,
@@ -898,7 +922,8 @@ export function planUninstall({ home, realHome = os.homedir() }: PlanOptions): U
     // Where they REALLY are: `uninstall` leaves them behind, so the path it prints has to be
     // the wrapper's own, not one recomputed from this shell's environment — and when the
     // wrapper cannot answer, neither can the plan. The same `null` `uninstall` acts on.
-    snapshots: installedSnapshotsDir(p),
+    snapshots,
+    marker: snapshots === null ? null : markerState(path.join(snapshots, PRUNE_MARKER)),
     undo: undoCommand('install', root, isRealHome),
   };
 }
