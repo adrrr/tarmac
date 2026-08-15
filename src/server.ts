@@ -7,6 +7,7 @@ import http from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { reason, renderLive, renderPage } from './render.ts';
+import type { View } from './render.ts';
 import { SOURCE_PHRASE } from './config.ts';
 import type { Source } from './config.ts';
 import type { Fleet } from './fleet.ts';
@@ -20,6 +21,12 @@ import type { Fleet } from './fleet.ts';
  * failures carry it too: their text is what it quotes as the reason.
  */
 const IDENTITY = { 'x-tarmac': '1' };
+
+/** The addresses that serve the shell, and which view each one opens on. */
+const PAGES = new Map<string, View>([
+  ['/', 'table'],
+  ['/map', 'map'],
+]);
 
 export interface FleetServerDeps {
   collect: () => Promise<Fleet>;
@@ -52,7 +59,12 @@ export function createFleetServer({ collect }: FleetServerDeps): Server {
 
     // `/live` is what the open page asks for every few seconds: the same render as `/`, minus
     // the shell. Serving the whole page there would hand the running script a copy of itself.
-    if (url.pathname !== '/' && url.pathname !== '/live' && url.pathname !== '/api/fleet') {
+    //
+    // `/map` is the same page opened on the other view, and deliberately not `/?view=map`:
+    // the tabs are plain links, so the view has to be somewhere a reload and a bookmark can
+    // both find it. There is no second fragment — one `/live` carries both views, which is
+    // what keeps them from ever showing readings of different ages.
+    if (!PAGES.has(url.pathname) && url.pathname !== '/live' && url.pathname !== '/api/fleet') {
       res.writeHead(404, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
       res.end('not found\n');
       return;
@@ -72,7 +84,7 @@ export function createFleetServer({ collect }: FleetServerDeps): Server {
         body = JSON.stringify(fleet, null, 2);
       } else {
         type = 'text/html; charset=utf-8';
-        body = url.pathname === '/live' ? renderLive(fleet) : renderPage(fleet);
+        body = url.pathname === '/live' ? renderLive(fleet) : renderPage(fleet, PAGES.get(url.pathname)!);
       }
     } catch (e) {
       // Say why. A dashboard that goes blank when its source breaks teaches nothing.

@@ -12,6 +12,7 @@ export const row = (over: Partial<FleetRow> = {}): FleetRow => ({
   project: 'alpha',
   cwd: '/Users/jane/alpha',
   pid: 42,
+  kind: 'interactive',
   status: 'idle',
   busy: false,
   uptimeMs: 3600_000,

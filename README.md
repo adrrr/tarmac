@@ -87,6 +87,20 @@ does not mark same-origin — your cwd paths and costs never leave the machine. 
 **default** port walks up to the next free one and says so; a port you chose yourself — flag,
 environment or config file — refuses instead, because you chose it.
 
+### The map
+
+The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
+its context, the shape by the name its state, and a single halo when a reading for it landed
+moments ago. It is the same reading in the same fragment, so the two views can never disagree.
+
+The rules the table follows, the map follows: a reading past the freshness threshold is drawn
+thin, amber and dated `! 3h ago` rather than as a live one, and a percentage nobody measured
+is an empty dotted dial that names which kind of nothing it is — never a ring at zero, and
+never a halo, however new the file it came in. A background agent is placed beside the session
+sharing its working directory, because the working directory is the only thing the two provably
+share; nothing is nested, and no edge is drawn for a relationship the sources do not publish.
+Details in [the manual](docs/MANUAL.md#the-map).
+
 ## Why it does not break
 
 The usual ways to watch a Claude Code fleet read something Claude Code never promised would
@@ -115,7 +129,7 @@ table is in [`docs/MANUAL.md`](docs/MANUAL.md).
 | Command | What it does | Options |
 |---|---|---|
 | `tarmac list` | one-shot fleet table — the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
-| `tarmac serve` | local dashboard, `GET /` for the page, `GET /live` for the fragment it refreshes, `GET /api/fleet` for JSON | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin` |
+| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin` |
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 

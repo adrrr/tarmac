@@ -15,6 +15,12 @@ export interface Session {
   name: string | null;
   kind: string | null;
   startedAt: number | null;
+  /**
+   * The word the entry used for what it is doing — `status` for a session with a process of
+   * its own, `state` for a background agent that has none. One field, because it is one fact.
+   * It is what both surfaces print when `busy` below is `null`, so a word nothing here
+   * recognises reaches the reader as it came rather than as "unknown".
+   */
   status: string | null;
   /** `null` means "unrecognised status", never "idle". */
   busy: boolean | null;
@@ -32,9 +38,26 @@ export interface ParsedAgents {
   health: DiscoveryHealth;
 }
 
+/**
+ * What each word this surface prints says about the one question the boolean asks: is this
+ * session working. A word that does not answer it is absent, and absent means `null` — "we do
+ * not know" — which is the whole point of the file.
+ *
+ * The first two arrive on a session with a process of its own; the other two are a background
+ * agent's `state`, which is where its word lives instead.
+ *
+ * Some words are left out ON PURPOSE rather than for want of a payload. `failed` and `stopped`
+ * are "not working", and that is the least interesting true thing about them; `blocked` and
+ * `waiting` are a session halted until a human answers something, where `false` reads as calm
+ * on a session that needs you and `true` as fine on one that has stopped. Unknown is the only
+ * bucket whose node prints the word itself, so those keep it: an amber node captioned `failed`
+ * says what neither boolean could.
+ */
 const KNOWN_STATUS = new Map<string | null, boolean>([
   ['busy', true],
   ['idle', false],
+  ['working', true],
+  ['done', false],
 ]);
 
 /** @param text raw stdout of `claude agents --json` */
@@ -60,7 +83,11 @@ export function parseAgents(text: string): ParsedAgents {
     const sessionId = typeof entry.sessionId === 'string' ? entry.sessionId : null;
     if (!sessionId) health.noSessionId += 1;
 
-    const status = typeof entry.status === 'string' ? entry.status : null;
+    // A background agent carries no `status` at all — its word is under `state`. `status`
+    // still wins where both are present: it comes from the agent's own process, and `state`
+    // is what the dispatcher believes about an agent whose process may not be on this machine.
+    const status =
+      typeof entry.status === 'string' ? entry.status : typeof entry.state === 'string' ? entry.state : null;
     const busy = KNOWN_STATUS.has(status) ? (KNOWN_STATUS.get(status) as boolean) : null;
     if (busy === null) health.unknownStatus += 1;
 
