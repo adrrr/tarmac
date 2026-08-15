@@ -121,7 +121,8 @@ export interface InstallPlan extends PlanBase {
   action: 'install';
   /**
    * Where the payloads will live — the path this install is about to freeze into the wrapper.
-   * No longer guessable from the path above it, which is exactly why both plans name it.
+   * No longer guessable from the path above it, which is why the plan names it. Always known
+   * here: an install chooses the directory. An uninstall can only ask what was chosen.
    */
   snapshots: string;
   /** The command the wrapper will call, so the display is unchanged. */
