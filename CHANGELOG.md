@@ -12,6 +12,15 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The uninstall plan looks at the prune marker before promising to remove it.** It printed
+  "tarmac's prune marker is removed" without ever asking what was at that path — so it said it
+  to everyone whose install had **no marker at all** (the wrapper stamps one on the first frame
+  that sweeps, so that is the state every fresh install is in), and to anyone whose marker was a
+  symlink or a directory, which `removePruneMarker` refuses by design because `unlink` takes a
+  link and not its target. Same class as issue #15, one branch over: the plan now carries what
+  is really on disk (`marker: 'file' | 'not-a-file' | 'none' | null`, read with the same
+  `lstat().isFile()` question the removal asks) and says which of the four it is. Three of them
+  are "it stays", each for its own reason. The deed is unchanged. (issue #23)
 - **The sweep's own deletions no longer count as unreadable snapshots.** A snapshot file listed
   by `readdir` and gone by the time it was read landed in `snapshotsUnreadable`, and `list` and
   `serve` printed "schema may have moved, check for a newer tarmac" — tarmac driving its own

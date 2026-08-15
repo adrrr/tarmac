@@ -160,6 +160,17 @@ export interface UninstallPlan extends PlanBase {
    * nobody had established. Same rule as `ctxPct`: no value is never rendered as a value.
    */
   snapshots: string | null;
+  /**
+   * What sits at the prune marker's path, because only a plain file is ours to take:
+   * `removePruneMarker` asks `isPlainFile`, so the plan has to ask the very same question or
+   * it is guessing again. `'file'` is the only state that gets removed — and only when the
+   * restore is not `foreign`, which keeps the wrapper and its marker both.
+   *
+   * `'none'` is not exotic: a fresh install has no marker at all until the first frame that
+   * sweeps stamps one, so "tarmac's prune marker is removed" was said to everyone who
+   * uninstalled before that ever happened. `null` when there is no directory to look in.
+   */
+  marker: 'file' | 'not-a-file' | 'none' | null;
 }
 
 export type Plan = InstallPlan | UninstallPlan;
@@ -403,6 +414,20 @@ const isPlainFile = (file: string): boolean => {
     return fs.lstatSync(file).isFile();
   } catch {
     return false;
+  }
+};
+
+/**
+ * `isPlainFile`'s answer with its two "no"s kept apart, for the plan to say which one it is:
+ * nothing there at all, or something there that is not ours to take. Deliberately the SAME
+ * `lstat().isFile()` question the removal asks — a plan that judged by `existsSync` would
+ * follow a dead symlink to "nothing there" while the deed left the link where it was.
+ */
+const markerState = (file: string): 'file' | 'not-a-file' | 'none' => {
+  try {
+    return fs.lstatSync(file).isFile() ? 'file' : 'not-a-file';
+  } catch {
+    return 'none';
   }
 };
 
@@ -885,6 +910,7 @@ export function planUninstall({ home, realHome = os.homedir() }: PlanOptions): U
   }
 
   const isRealHome = sameFile(root, realHome);
+  const snapshots = installedSnapshotsDir(p);
   return {
     action: 'uninstall',
     home: root,
@@ -898,7 +924,8 @@ export function planUninstall({ home, realHome = os.homedir() }: PlanOptions): U
     // Where they REALLY are: `uninstall` leaves them behind, so the path it prints has to be
     // the wrapper's own, not one recomputed from this shell's environment — and when the
     // wrapper cannot answer, neither can the plan. The same `null` `uninstall` acts on.
-    snapshots: installedSnapshotsDir(p),
+    snapshots,
+    marker: snapshots === null ? null : markerState(path.join(snapshots, PRUNE_MARKER)),
     undo: undoCommand('install', root, isRealHome),
   };
 }

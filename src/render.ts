@@ -11,7 +11,7 @@ import { formatDuration } from './config.ts';
 import type { Config, Source } from './config.ts';
 import { schemaNotice } from './schema.ts';
 import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
-import type { Plan, UninstallMode } from './install.ts';
+import type { Plan, UninstallMode, UninstallPlan } from './install.ts';
 
 /**
  * The other thing this module renders: the plan a user consents to before install or
@@ -61,11 +61,7 @@ export function renderPlan(plan: Plan): string {
     if (plan.snapshots === null) {
       rows.push(['snapshots', 'unknown — nothing here says where; nothing there is opened or removed']);
     } else {
-      // Foreign statusLine ownership keeps our wrapper in place, so its marker stays too. In
-      // every restoring mode the wrapper leaves and the marker has no owner. Name both facts
-      // so the plan matches the operation exactly.
-      const marker = plan.mode === 'foreign' ? "tarmac's prune marker stays" : "tarmac's prune marker is removed";
-      rows.push(['snapshots', `${plan.snapshots}   (snapshot files stay; ${marker})`]);
+      rows.push(['snapshots', `${plan.snapshots}   (snapshot files stay; ${markerFate(plan.mode, plan.marker)})`]);
     }
   }
   rows.push(['undo', plan.undo]);
@@ -92,6 +88,25 @@ const gitHint = (repo: { dir: string; ignore: string }, hasLegacy: boolean): str
   (hasLegacy
     ? `commit the removal above, and add \`${repo.ignore}\` to its .gitignore`
     : 'nothing tarmac writes there changes at runtime; the snapshots live outside it');
+
+/**
+ * What becomes of the prune marker, said only after looking at it.
+ *
+ * Three of these four answers are "it stays", and each for its own reason: a foreign
+ * statusLine keeps the wrapper, so the marker keeps its owner; nothing is there to take; or
+ * what is there is not a plain file, which `removePruneMarker` refuses by design because
+ * `unlink` would take a link and not its target. Only the fourth is a removal, and the plan
+ * may not print it in the other three — "no marker yet" is the state every install is in
+ * until the first frame that sweeps stamps one.
+ */
+const markerFate = (mode: UninstallMode, marker: UninstallPlan['marker']): string =>
+  marker === 'none'
+    ? 'no prune marker to remove'
+    : marker === 'not-a-file'
+      ? "the prune marker's name is worn by something that is not a regular file, so it stays"
+      : mode === 'foreign'
+        ? "tarmac's prune marker stays"
+        : "tarmac's prune marker is removed";
 
 /** What each restore mode means, in the words the plan and the report both use. */
 export const restoreMeaning = (mode: UninstallMode): string => RESTORE_MEANING[mode];
