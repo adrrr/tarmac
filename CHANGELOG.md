@@ -12,6 +12,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The sweep's own deletions no longer count as unreadable snapshots.** A snapshot file listed
+  by `readdir` and gone by the time it was read landed in `snapshotsUnreadable`, and `list` and
+  `serve` printed "schema may have moved, check for a newer tarmac" — tarmac driving its own
+  format-drift warning off its own housekeeping. Measured at up to **2675** phantom unreadable on
+  one read of a 20 000-file directory, and `list --watch` and `serve` redraw often enough to be
+  inside that window every hour. An `ENOENT` there is now skipped in silence; a file that is
+  corrupt, half-written or truly unreadable still counts, as it must. (issue #17)
 - **The hourly sweep no longer happens inside a frame.** Amortization made the sweep cheap on
   average, and the average was never the problem: the ONE frame that swept paid for the whole
   backlog at once. On an install that had never pruned — 20 000 snapshots, half of them dead —
