@@ -13,29 +13,27 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **The account's two rate-limit windows, drawn at the top of the page.** The five-hour and
-  seven-day allowances the statusline payload has been carrying all along — used percentage,
-  and the reset spelled as the time left rather than as an epoch. They are page-level because
-  that is what a rate limit is: one account, which every session below is spending from. The
-  number is authoritative and the bar is a glance, the same bargain the context column makes.
-  The countdown is recomputed from the moment the fleet was read, so the polled fragment keeps
-  it counting down; a reset already behind the reading that reported it says `reset was due
-  20m ago` rather than a countdown with a minus sign, because the percentage beside it belongs
-  to a window that has since rolled over. Sessions can disagree about the account — they
-  carry the same number at different ages — and the freshest reading wins, the fleet model's
-  own rule, with a snapshot dated after the clock that read it refused rather than believed.
-  Nothing measured is never a zero: no snapshot carrying limits at all, and a window whose
-  percentage is present and null, both read `— no reading` on a dotted rail; a window that is
-  gone or holding something that is not a percentage reads `— schema drift`; and a reset further
-  from the reading than the longest window can be — the same field in milliseconds, or the `0`
-  an unset field so often is — is refused rather than rendered as `resets in 19656250d`. A
-  reading past the freshness threshold is dated `! 40m ago`, once for the pair: the percentage is
-  as old as its snapshot while the countdown is recomputed every poll, and undated the two would
-  read as one moment. The gauges live
-  in the shell so a poll cannot move them, and their numbers ride up out of the fragment on
-  every swap so they are never as old as the tab. On replay they come down and sit with the
-  fleet they belong to, under the banner that dates it, counted from the sample's own minute —
-  which is what makes the five-hour window watchable, draining and refilling across a day.
-  (#37)
+  seven-day allowances the statusline payload has been carrying all along — used percentage, and
+  the reset spelled as the time left rather than as an epoch. They are page-level because that is
+  what a rate limit is: one account, which every session below is spending from. The number is
+  authoritative and the bar is a glance, the same bargain the context column makes. The countdown
+  is recomputed from the moment the fleet was read, so the polled fragment keeps it counting down;
+  a reset already behind the reading that reported it says `reset was due 20m ago` rather than a
+  countdown with a minus sign, because the percentage beside it belongs to a window that has since
+  rolled over. Sessions can disagree about the account — they carry the same number at different
+  ages — and the freshest reading wins, the fleet model's own rule, with a snapshot dated after
+  the clock that read it refused rather than believed. Past the freshness threshold the pair is
+  dated `! 40m ago`, once for the two: the percentage is as old as its snapshot while the
+  countdown moves every poll, and undated the two would read as one moment. Nothing measured is
+  never a zero — no snapshot carrying limits at all, and a window whose percentage is present and
+  null, both read `— no reading` on a dotted rail; a window that is gone, or holding something
+  that is not a percentage, reads `— schema drift`; and a reset further from the reading than the
+  longest window can be (the same field in milliseconds, or the `0` an unset field so often is) is
+  refused rather than rendered as `resets in 19656250d`. The gauges live in the shell so a poll
+  cannot move them, and their numbers ride up out of the fragment on every swap so they are never
+  as old as the tab. On replay they come down and sit with the fleet they belong to, under the
+  banner that dates it, counted from the sample's own minute — which is what makes the five-hour
+  window watchable, draining and refilling across a day. (#37)
 
 - **A scrubber under the map that replays the day the serve has seen.** Drag it and the dials
   render the fleet as it was at that minute; a play button walks the readings, one every 100ms
