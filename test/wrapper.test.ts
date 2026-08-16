@@ -507,10 +507,18 @@ test('refuses to stamp a marker that is a symlink, and writes nothing outside th
 // is a directory reads as "stamped" on every frame while `-mmin` never has a regular file to
 // judge: the sweep runs on every single frame and the amortization this whole design is
 // built around is silently gone. Anything at that name that is not a plain file is refused.
+//
+// The marker directory is BACKDATED, and that is the whole test: `find -mmin` answers for a
+// directory as readily as for a file, so a marker created just now is refused by its AGE
+// whatever the `-f` guard says — the fixture would pass with the guard deleted, which is the
+// one edit it exists to catch. Dated past the window, only the guard can still refuse it.
 test('refuses a marker that is not a regular file, rather than sweeping every frame', async () => {
   const { root, snapDir } = sandbox();
   seed(snapDir, { [`${DEAD}.json`]: 5 * 24 * 60 });
-  fs.mkdirSync(path.join(snapDir, PRUNE_MARKER));
+  const marker = path.join(snapDir, PRUNE_MARKER);
+  fs.mkdirSync(marker);
+  const due = new Date(Date.now() - (PRUNE_EVERY_MIN + 60) * MIN);
+  fs.utimesSync(marker, due, due);
 
   const out = runWrapper({ root, snapDir, chain: 'echo OK', input: payload() });
 

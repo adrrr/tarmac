@@ -17,9 +17,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { PRUNE_EVERY_MIN, PRUNE_MARKER, renderWrapper, SNAPSHOT_TTL_MIN } from '../src/wrapper.ts';
-import { waitFor, warmUpFrames } from './sweep.ts';
+import { settle, waitFor, warmUpFrames } from './sweep.ts';
 import { tempDir } from './sandbox.ts';
 
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
@@ -54,8 +54,13 @@ interface Rig {
  * on the PATH that is slow, noisy and honest: it records the sweep, prints on both streams
  * BEFORE sleeping — a sweep that inherited the frame's stdout would put that straight into
  * the status line — and then runs the real `find` with the real arguments.
+ *
+ * `stubs` puts more utilities on that same PATH, `find` included if a test wants a different
+ * one: the two below need a `touch` that refuses and a `find` that cannot answer `-mmin`,
+ * which are the two ways the machine can decline this block without denying anything a
+ * permission bit could express.
  */
-function rig(): Rig {
+function rig(stubs: Record<string, string> = {}): Rig {
   const root = tempDir('tarmac-detach-');
   const snapDir = path.join(root, 'snapshots');
   fs.mkdirSync(snapDir, { recursive: true });
@@ -90,6 +95,11 @@ exec ${REAL_FIND} "$@"
   );
   fs.chmodSync(path.join(bin, 'find'), 0o755);
 
+  for (const [name, source] of Object.entries(stubs)) {
+    fs.writeFileSync(path.join(bin, name), source);
+    fs.chmodSync(path.join(bin, name), 0o755);
+  }
+
   const wrapper = path.join(root, 'statusline.sh');
   fs.writeFileSync(wrapper, renderWrapper({ snapshotDir: snapDir, chainCommand: 'echo CHAINED' }));
   fs.chmodSync(wrapper, 0o755);
@@ -113,11 +123,14 @@ exec ${REAL_FIND} "$@"
  */
 const sweepStarted = (r: Rig): Promise<void> => waitFor(() => r.sweeps().length === 1, 'the sweep to record that it started');
 
-/** One frame. Returns what the status line printed and what it cost. */
-function frame(r: Rig): { out: string; ms: number } {
+/** One frame. Returns what the status line printed, what it leaked, and what it cost. */
+function frame(r: Rig): { out: string; err: string; ms: number } {
   const started = process.hrtime.bigint();
-  const out = execFileSync(r.wrapper, { input: payload, encoding: 'utf8', env: r.env });
-  return { out, ms: Number(process.hrtime.bigint() - started) / 1e6 };
+  const run = spawnSync(r.wrapper, { input: payload, encoding: 'utf8', env: r.env });
+  const ms = Number(process.hrtime.bigint() - started) / 1e6;
+  assert.equal(run.error, undefined, 'the frame ran');
+  assert.equal(run.status, 0, 'RULE 1: the status line always exits 0');
+  return { out: run.stdout, err: run.stderr, ms };
 }
 
 test('the frame does not wait for the sweep, and the sweep finishes anyway', async () => {
@@ -193,4 +206,44 @@ test('the marker is restamped by the frame, not by the sweep it started', async 
 
   assert.ok(fs.statSync(marker).mtimeMs > before, 'the frame dated the sweep before returning');
   await sweepStarted(r);
+});
+
+// …and the stamp is not merely FIRST, it is the CONDITION. Swap the two and a directory whose
+// marker cannot be written is swept by every frame that ever renders there — the unamortized
+// walk this design exists to avoid, on the one machine that already told us it cannot take a
+// note. Nothing above catches the swap: where the stamp fails because the directory is
+// read-only, the `rm` the sweep would run fails too, so the files are still there either way
+// and the difference is only in how much walking was done to leave them. A `touch` that
+// refuses is that same refusal with the deleting left possible — and, unlike a 0555 fixture,
+// it is the same fixture under root.
+test('a marker it could not stamp starts no sweep at all', async () => {
+  const r = rig({ touch: '#!/bin/sh\nexit 1\n' });
+  warmUpFrames(() => frame(r));
+  r.arm();
+
+  const { out } = frame(r);
+
+  assert.match(out, /CHAINED/, 'the display renders');
+  await settle();
+  assert.deepEqual(r.sweeps(), [], 'the frame that could not date a sweep started none');
+  assert.equal(fs.existsSync(path.join(r.snapDir, `${DEAD}.json`)), true, 'so the cold snapshot is still there');
+});
+
+// `-mmin` is the one thing in this block POSIX does not require, and a busybox built without
+// CONFIG_FEATURE_FIND_MMIN is where it is missing: the marker's age cannot be read, the
+// substitution is empty, and the sweep simply never runs. That hole is accepted — snapshots
+// pile up exactly as they did before this block existed — on the condition that it is SILENT.
+// A `find` that reports what it cannot do is one line of noise per FRAME on the terminal of a
+// script whose first rule is to be invisible, and the `2>/dev/null` around that substitution
+// is all there is between the two. Removing it broke no test until this one.
+test('a find that cannot answer -mmin leaves the frame silent, and sweeps nothing', async () => {
+  const r = rig({ find: '#!/bin/sh\nprintf "find: unrecognized: -mmin\\n" >&2\nexit 1\n' });
+  r.arm();
+
+  const { out, err } = frame(r);
+
+  assert.equal(err, '', 'nothing at all reaches the user terminal');
+  assert.match(out, /CHAINED/, 'and the display renders');
+  await settle();
+  assert.equal(fs.existsSync(path.join(r.snapDir, `${DEAD}.json`)), true, 'with no age to read, nothing is swept');
 });
