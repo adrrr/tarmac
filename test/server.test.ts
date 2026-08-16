@@ -138,9 +138,14 @@ test('qualifies a partial fleet cost by the sessions that really report one', ()
   assert.match(html, /1\/3 reporting cost/);
 });
 
+// Read, not shipped: the page also carries the replay's renderer, which qualifies a partial
+// sum in the very same words — deliberately, since two surfaces are not allowed to word one
+// fact two ways. What this test is about is the sentence a reader sees.
+const visible = (html: string): string => html.replace(/<script>[\s\S]*?<\/script>/g, '');
+
 test('leaves a complete fleet cost unqualified', () => {
   const html = renderPage({ rows: [row()], health: health({ sessions: 1, covered: 1, costUsd: 27.75, costReporting: 1 }) });
-  assert.equal(/reporting cost/.test(html), false);
+  assert.equal(/reporting cost/.test(visible(html)), false);
 });
 
 test('a fleet that has genuinely cost nothing still says $0.00', () => {
