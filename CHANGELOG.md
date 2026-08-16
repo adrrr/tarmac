@@ -10,6 +10,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] — 2026-08-16
+
 ### Added
 
 - **A map view of the fleet, on `GET /map`.** One node per session — the arc is its context,
