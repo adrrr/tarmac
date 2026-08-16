@@ -41,10 +41,10 @@ export interface FleetServerDeps {
 }
 
 export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS }: FleetServerDeps): Server {
-  // What this serve has already read, kept for a day and never written down. `since` is now
-  // rather than the first sample: the record covers everything from the moment it started
-  // listening, and a serve that has been up an hour with nothing in it is a fact worth
-  // showing, not an empty span pretending to be a young one.
+  // What this serve has already read, kept for a day and never written down. `since` is the
+  // moment this server was made, not the first sample that landed: the span it covers is how
+  // long the process has been up, and an hour of it with nothing in it is a fact worth
+  // showing rather than an empty record pretending to be a young one.
   const history = createHistory({ since: Date.now(), cadence: sampleEveryMs });
   // One at a time. `claude agents --json` has a 15s deadline of its own, and a fleet slower
   // than a slot would otherwise be answered with a queue of processes instead of one missed

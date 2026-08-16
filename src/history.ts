@@ -79,8 +79,8 @@ export function createHistory({ since, cadence }: HistoryOptions): FleetHistory 
   return {
     record(fleet: Fleet): void {
       samples.push(sampleOf(fleet));
-      // Before the next push, not after a threshold: the array's length is the guarantee, so
-      // it is never allowed to be one over it, even for a tick.
+      // Trimmed on the way in and never on the way out: the array's own length is the
+      // guarantee, so no reader has to be told the ring is bounded for it to be true.
       if (samples.length > HISTORY_SLOTS) samples.splice(0, samples.length - HISTORY_SLOTS);
     },
     miss(): void {
