@@ -76,7 +76,9 @@ test('a fleet that carries no rate limits says so, and never draws 0%', () => {
   const html = header(null);
   assert.doesNotMatch(html, /\b0%/);
   assert.match(html, /no reading/);
-  assert.match(html, /&mdash;|—/);
+  // The gauge's own dash, not any dash in the header: "updated &mdash;" is up there too, and so
+  // is an em dash inside an HTML comment, so a bare /—/ passed with the whole pair deleted.
+  assert.match(html, /<span class="num"><span class="dim">—<\/span><\/span>/);
   assert.doesNotMatch(html, /width:/, 'nothing is filled in for a window nobody read');
 });
 
@@ -104,6 +106,15 @@ test('each window is spelled out for a reader who hears the page', () => {
 // The bar is the one part of a gauge that carries nothing the text does not already say.
 test('the bar is hidden from anything reading the page out', () => {
   assert.match(header(), /class="rail"[^>]*aria-hidden="true"|aria-hidden="true"[^>]*class="rail"/);
+});
+
+// Between the tabs and the freshness, a reader who hears the page gets "five-hour window 17%
+// resets in 2h 14m seven-day window 42%…" with nothing saying whose windows those are. The pair
+// is named once, as a group, rather than each gauge repeating the word "account".
+test('the pair says what it is the pair of', () => {
+  const group = /<div class="limits" id="limits"([^>]*)>/.exec(header())![1];
+  assert.match(group, /role="group"/);
+  assert.match(group, /aria-label="[^"]*account/i);
 });
 
 // Where they live, and why. The header is the shell's — it survives the poll, the tabs and the

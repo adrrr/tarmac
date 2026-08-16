@@ -13,7 +13,7 @@ import { buildMap, INTERACTIVE, stateOf } from './map.ts';
 import type { MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
 import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
-import type { Gauge } from './limits.ts';
+import type { Gauge, LimitWhy } from './limits.ts';
 import { accountLimits } from './fleet.ts';
 import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
 import type { Plan, UninstallMode, UninstallPlan } from './install.ts';
@@ -386,7 +386,7 @@ function gauge(g: Gauge): string {
 }
 
 /** Which kind of missing a missing window is, in the two words both surfaces use. */
-const LIMIT_WHY: Record<string, string> = { absent: 'no reading', drift: 'schema drift' };
+const LIMIT_WHY: Record<LimitWhy, string> = { absent: 'no reading', drift: 'schema drift' };
 
 /**
  * The reset, as a stretch of time rather than as the epoch the payload carries.
@@ -484,8 +484,9 @@ function ago(ms: number): string {
 export type View = 'table' | 'map';
 
 export function renderPage(fleet: Fleet, view: View = 'table'): string {
-  // Rendered once and used twice: the header shows it now, the fragment carries the same
-  // markup for the poll to copy up. One call, so the two can never be a render apart.
+  // The header's copy. `renderLive` below renders its own, out of this same fleet and through
+  // this same function — two calls of one pure renderer over one reading, which is what keeps
+  // the pair the reader sees and the pair the script will copy up from being two accounts.
   const gauges = renderLimits(fleet);
   return `<!doctype html>
 <html lang="en"><head>
@@ -719,7 +720,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        the account every session below is spending from, not to any one of them. Their VALUES
        come up from the fragment on every poll (the script's limits-src copy), so the header
        structure can be the shell's without the numbers being as old as the tab. -->
-  <div class="limits" id="limits">${gauges}</div>
+  <div class="limits" id="limits" role="group" aria-label="account rate limits">${gauges}</div>
   <!-- Not "updated just now". If the script never runs — a policy-injected CSP without
        'unsafe-inline', a script error — that text would stand as a permanent lie, and
        <noscript> would not fire to correct it because JavaScript is enabled. The page's one
@@ -727,7 +728,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   <span class="freshness"><span class="pulse" aria-hidden="true"></span><span id="age">updated &mdash;</span></span>
 </header>
 <div class="warn offline" id="offline" hidden>
-  <strong>&#9888; refresh failing</strong> — nothing below has moved since the time in the header.
+  <strong>&#9888; refresh failing</strong> — nothing on this page has moved since the time in the header.
   <span id="why"></span>
 </div>
 <!-- The one claim on this page that could be a lie, so it is the loudest element on it and it
@@ -751,7 +752,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        over it saying so, and the first thing a screen reader reaches, long before the warning.
        Hidden until a script raises it: with no script there is no replay, and an empty gauge
        would be a claim about nothing. -->
-  <div class="limits" id="replay-limits" hidden></div>
+  <div class="limits" id="replay-limits" role="group" aria-label="account rate limits, at the minute being replayed" hidden></div>
   <div class="meta" id="replay-meta"></div>
   <div class="map" id="replay-map"></div>
 </div>
