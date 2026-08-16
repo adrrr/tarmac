@@ -12,6 +12,32 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A scrubber under the map that replays the day the serve has seen.** Drag it and the dials
+  render the fleet as it was at that minute; a play button walks the readings, one every 100ms
+  — one a second for a reader who asked their system for less motion — and stops at the end
+  rather than looping. The record comes from `GET /api/history`, fetched on load and again
+  when a tab that has been away comes back, so a drag is a lookup in samples the page already
+  holds and not a request, let alone a `claude agents --json`, per position. Only the map view
+  asks for it: the table has no scrubber, and a full ring is megabytes. A replay is never allowed to pass for the present: a sticky
+  banner names the minute it is showing and carries one button back to live, the live fragment
+  — map, totals, timestamp and warnings, all of them about now — is hidden while the past is
+  up, **halos stay off** because a sample never "just landed", and a session absent from a
+  minute is absent from the map rather than a dial at zero. Agents replay as the ring holds
+  them: kind and numbers, no name. The live poll keeps running underneath, so returning to the
+  present is instant and a page left on replay does not rot; a tab that has been away picks up
+  the minutes it missed, though never under a reader who has taken hold of the handle, and a
+  refresh that fails leaves the record the page already had. The banner carries `role="status"`
+  and the minute travels with the handle as its `aria-valuetext`, because a yellow box is
+  nothing to a reader who cannot see it. The range says what it really covers — a serve ten
+  minutes old offers ten minutes, and a record whose every reading failed says so instead of
+  reading like a serve that has just started — along with how many minutes have no reading.
+  Because the ring keeps each reading and never how old that reading was, a replayed arc gets
+  a weight of its own rather than the solid one of a fresh reading or the amber one of a stale
+  reading, and the line under the scrubber says why.
+  All of it lives in the page shell rather than in the polled fragment, which is what keeps a
+  refresh from dragging the reader back to the present every five seconds. With JavaScript off
+  there is no scrubber at all. (#36)
+
 - **A day of what `serve` already read, on `GET /api/history`.** The dashboard read the whole
   fleet on every request and forgot it on the next one; it now also reads it on a timer of its
   own — one sample a minute into a ring of 1440 slots, after which the oldest minute falls off
