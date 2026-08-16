@@ -530,6 +530,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      stroke-dasharray, which is what carries the percentage. */
   .node[data-reading="stale"] .arc, .node[data-reading="undated"] .arc {
           stroke:var(--warn); stroke-width:2.5; opacity:.7; }
+  /* A replayed reading. Its EXTENT is what the record vouches for; its age is the one thing
+     the ring never kept, so it may not wear the solid arc that means "as current as a reading
+     gets" — nor the warning hue of a stale one, which would claim the opposite. Between the
+     two: full colour, a shade lighter, and no date underneath it. */
+  .node[data-reading="undatable"] .arc { stroke-width:4; opacity:.85; }
   /* Nothing was measured. Keyed on the measurement and never on the age of the file: a
      solid empty ring is what a session measured at 0% wears, and the two must not match. */
   .track.unmeasured { stroke-dasharray:2 6; stroke-linecap:round; }
@@ -607,7 +612,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
 <!-- The one claim on this page that could be a lie, so it is the loudest element on it and it
      carries the minute it is showing. Hidden until a script raises it: with no script there
      is no replay, and a banner about one would be a warning about nothing. -->
-<div class="warn replaying-note" id="replaying" hidden>
+<!-- role="status" because it appears without a reload and without focus moving: drawn only,
+     it is the page's loudest claim and its most invisible one. -->
+<div class="warn replaying-note" id="replaying" role="status" hidden>
   <strong>&#9209; replaying <span id="replay-at"></span></strong>
   <span>&mdash; a reading from the past, not the fleet now.</span>
   <button type="button" id="to-live">Back to live</button>
@@ -627,7 +634,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
 </div>
-<script>${pageScript()}</script>
+<script>${pageScript(view)}</script>
 </body></html>
 `;
 }
@@ -679,8 +686,11 @@ const PLAY_STEP_MS = 100;
  */
 const PLAY_STEP_CALM_MS = 1000;
 
-/** A function, not a constant: it reads the vocabulary and the geometry declared below it. */
-function pageScript(): string {
+/**
+ * A function, not a constant: it reads the vocabulary and the geometry declared below it, and
+ * it takes the view because only one of the two has a scrubber to feed.
+ */
+function pageScript(view: View): string {
   return `
 (function () {
   var live = document.getElementById('live'), age = document.getElementById('age');
@@ -775,7 +785,7 @@ function pageScript(): string {
   var rview = document.getElementById('replay-view'), rmap = document.getElementById('replay-map');
   var rmeta = document.getElementById('replay-meta'), note = document.getElementById('replaying');
   var atEl = document.getElementById('replay-at'), toLive = document.getElementById('to-live');
-  var record = null, recordAt = 0, at = -1, replaying = false, playing = null;
+  var record = null, recordAt = 0, at = -1, replaying = false, playing = null, hgen = 0;
 
   // The vocabulary and the geometry, handed over rather than written twice: three words for
   // the three kinds of missing, three glyphs for the three states, one dial radius.
@@ -789,6 +799,11 @@ function pageScript(): string {
   function esc(v) {
     if (v === null || v === undefined || v === '') return '<span class="dim">—</span>';
     return String(v).replace(/[&<>"']/g, function (c) { return ENT[c]; });
+  }
+
+  /** A lookup that cannot be answered by Object.prototype. */
+  function own(table, key) {
+    return Object.prototype.hasOwnProperty.call(table, key);
   }
 
   function two(n) { return (n < 10 ? '0' : '') + n; }
@@ -805,12 +820,21 @@ function pageScript(): string {
   function coversText() {
     var n = record.samples.length;
     if (n === 0) {
-      return 'Nothing recorded yet — this serve started at ' + hhmm(record.since)
-        + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
+      // A record empty because every reading FAILED is not a record that has just started, and
+      // this was the one branch that threw that away: ten hours of a collector that could not
+      // run read exactly like a serve thirty seconds old.
+      return record.missed
+        ? 'Nothing recorded — this serve started at ' + hhmm(record.since) + ' and '
+          + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' were due and never read.'
+        : 'Nothing recorded yet — this serve started at ' + hhmm(record.since)
+          + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
     }
     var last = record.samples[n - 1].t;
     return 'Covering ' + edge(record.since, last) + ' – ' + hhmm(last)
-      + ', as this serve had it when the page loaded — ' + n + ' reading' + (n === 1 ? '' : 's')
+      // Not "when the page loaded": the record is asked for again when a tab that has been
+      // away comes back, so the sentence names the last time this page asked rather than a
+      // moment it may be hours past.
+      + ', as this page last had it — ' + n + ' reading' + (n === 1 ? '' : 's')
       // A gap that says it is a gap is not a gap. The handle steps through readings, not
       // through minutes, and a record with holes in it is not a smooth walk.
       + (record.missed ? ', ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '')
@@ -824,7 +848,6 @@ function pageScript(): string {
     scrub.max = String(n === 0 ? 0 : n - 1);
     scrub.disabled = n === 0;
     playBtn.disabled = n === 0;
-    if (at >= n) at = -1;
   }
 
   // Revealed, not hidden, when the record cannot be had: a scrubber that silently never
@@ -837,6 +860,12 @@ function pageScript(): string {
   }
 
   function load() {
+    // The same generation guard the fleet poll carries, for the same reason and one more.
+    // The replaying flag is read when the tab regains focus; the answer lands later, and
+    // a reader's hand can arrive in between — so the question is asked AGAIN at the moment of
+    // the swap. Without it the record was replaced under a live scrub: the handle pointing at
+    // one minute, the map drawing another, out of a record that no longer existed.
+    var mine = ++hgen;
     return fetch('/api/history', { cache: 'no-store' }).then(function (res) {
       // The same refusal the fragment makes, for the same reason: what comes back is parsed
       // and drawn into this page, and loopback proves where bytes came from, not who wrote them.
@@ -845,11 +874,17 @@ function pageScript(): string {
         if (!res.ok) throw new Error(body.split('\\n').filter(Boolean).join(' ').slice(0, 200));
         var got = JSON.parse(body);
         if (!got || !got.samples) throw new Error('the record came back in a shape this page does not know');
+        if (mine !== hgen || replaying) return;
         record = got;
         recordAt = Date.now();
         ready();
       });
     }).catch(function (e) {
+      if (mine !== hgen) return;
+      // A refresh is not a first load. Failing one is no reason to take away a record the page
+      // is already holding — and saying "the record could not be read" over one the reader is
+      // scrubbing would be false. The fleet poll's own banner already says the server is quiet.
+      if (record !== null) return;
       noRecord('The record could not be read — ' + String((e && e.message) || e).slice(0, 200));
     });
   }
@@ -860,16 +895,23 @@ function pageScript(): string {
     // The map's own rule, in the map's own words: an absent kind is not evidence of an agent,
     // and a fleet where nothing calls itself interactive is a fleet whose source moved.
     var role = !anchored || x.kind === null || x.kind === undefined || x.kind === INTERACTIVE ? 'session' : 'agent';
-    var state = SHAPE[x.state] ? x.state : 'unknown';
+    // Own keys only. A bare read inherits from Object.prototype, so "constructor" and
+    // "toString" passed this guard and reached the markup below — into an attribute
+    // unescaped, and into the glyph slot as a function body.
+    var state = own(SHAPE, x.state) ? x.state : 'unknown';
     var pct = typeof x.ctxPct === 'number' ? x.ctxPct : null;
-    return '<article class="node" data-role="' + role + '" data-state="' + state + '">'
+    // The ring keeps each reading and never how old that reading was, so the arc weight that
+    // says how much a reading may be believed cannot be earned here. It is not the live
+    // default either: this third value is de-weighted in the stylesheet, and never the warning
+    // hue, which would claim the opposite — that the reading is known to be old.
+    return '<article class="node" data-role="' + role + '" data-state="' + state + '" data-reading="undatable">'
       // No halo, ever. It means a frame landed moments ago, which is never true of a sample.
       + '<div class="dial"><svg viewBox="0 0 80 80" aria-hidden="true">'
       + '<circle class="track' + (pct === null ? ' unmeasured' : '') + '" cx="40" cy="40" r="' + R + '"/>'
       + (pct === null ? '' : arcOf(pct))
       + '</svg><div class="val">'
       + (pct === null
-        ? '<span class="why"><b>—</b>' + esc(WHY[x.ctxState] || 'no reading') + '</span>'
+        ? '<span class="why"><b>—</b>' + esc(own(WHY, x.ctxState) ? WHY[x.ctxState] : 'no reading') + '</span>'
         : '<span class="pct">' + pct + '<i>%</i></span>')
       + '</div></div>'
       + '<div class="who"><span class="shape" aria-hidden="true">' + SHAPE[state] + '</span>'
@@ -919,6 +961,9 @@ function pageScript(): string {
     at = i;
     replaying = true;
     scrub.value = String(i);
+    // The handle's own value is an index, so a reader who cannot see the banner would be read
+    // "3" while the fleet on screen is three hours old. The minute travels with the handle.
+    scrub.setAttribute('aria-valuetext', hhmm(s.t));
     atEl.textContent = hhmm(s.t);
     rmeta.textContent = metaOf(s);
     rmap.innerHTML = nodesOf(s);
@@ -941,6 +986,7 @@ function pageScript(): string {
     note.hidden = true;
     rview.hidden = true;
     rmap.innerHTML = '';
+    scrub.removeAttribute('aria-valuetext');
     document.body.classList.toggle('replaying', false);
   }
 
@@ -970,12 +1016,18 @@ function pageScript(): string {
     poll();
     // The record was answered once, at load. A tab left alone all afternoon holds a record
     // that stops where the reader's attention did — so it is asked again on the way back in.
-    // Never while a reader is scrubbing (the record under their hand is not ours to swap),
-    // never for one younger than a single slot, and never as a retry: a record that could not
-    // be read said so, and this is not the place to argue with it.
+    // Never while a reader is scrubbing (the record under their hand is not ours to swap, and
+    // the load asks that question again when the answer lands), and never for one younger than
+    // a single slot. A record that could never be read at all is not retried here: it stays
+    // null, the guard holds, and the reader has a sentence saying so rather than a page
+    // quietly trying again forever.
     if (!replaying && record !== null && Date.now() - recordAt >= record.cadence) load();
   });
-  load();
+  // Only where there is a scrubber to feed. The table view hides these controls in CSS, and a
+  // full ring is megabytes of session ids, projects and costs: fetching and parsing it to
+  // write a sentence into an element with display:none is a cost paid on every load of the
+  // page most people open first, for a control they cannot see.
+  if (${view === 'map'}) load();
 })();
 `;
 }

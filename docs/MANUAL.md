@@ -294,9 +294,11 @@ The one surface it never reaches is the retained record — see
 Under the map is a scrubber, and it is the one place on this page where a node is not the
 fleet as of the reading in the header. Drag it and the dials render the fleet as the serve
 recorded it at that minute; the play button walks the readings, one every 100ms, and stops at
-the end rather than looping. The record is asked for **once**, at load, so a drag is a lookup
-in samples the page already holds — a scrubber that asked per position would spawn a `claude
-agents --json` for every pixel of it.
+the end rather than looping. The record is asked for when the page loads, and again when a tab
+that has been away comes back — never per position, so a drag is a lookup in samples the page
+already holds. A scrubber that asked per position would spawn a `claude agents --json` for
+every pixel of it. It is asked for on `/map` only: the table has no scrubber, and a full ring
+is megabytes.
 
 A replay is never allowed to pass for the present:
 
@@ -308,17 +310,25 @@ A replay is never allowed to pass for the present:
 - an agent replays as its kind and its numbers. The ring holds no names, so neither does this
 - the poll goes on underneath, so returning to now is instant and a page left on replay does
   not rot
+- the banner carries `role="status"` and the minute travels with the handle as its
+  `aria-valuetext`, because a yellow box is nothing at all to a reader who cannot see it
 
-The range says what it really covers — a serve ten minutes old offers ten minutes — and it
-covers the record **as it stood when the page loaded**; a tab that has been away picks up the
-minutes it missed when you come back to it. The handle steps through readings, not minutes, so
-the line under it also names how many minutes the record has no reading for.
+The range says what it really covers — a serve ten minutes old offers ten minutes, and a record
+whose every reading failed says *that* rather than reading like a serve which has just started.
+The handle steps through readings, not minutes, so the line under it also names how many
+minutes have none.
 
-Two things it deliberately does not do. It does not date the readings it draws: the ring keeps
-each reading, not how old that reading was, so a replayed dial cannot be marked stale the way a
-live one is — the line under the scrubber says so. And it does not place an agent beside the
-session it shares a directory with, because the ring holds no working directory: the past is
-drawn in the order the sample carries.
+Two things it deliberately does not do. **It does not date the readings it draws**: the ring
+keeps each reading, never how old that reading was, so a replayed arc can be neither the solid
+one of a fresh reading nor the thin amber one of a stale reading. It gets a third weight of its
+own — full colour, a shade lighter, `data-reading="undatable"` in the markup — and the line
+under the scrubber says why. And it does not place an agent beside the session it shares a
+directory with, because the ring holds no working directory: the past is drawn in the order the
+sample carries.
+
+A record that is refreshed under a reader who has taken hold of it is not swapped: the answer
+re-asks whether anyone is scrubbing at the moment it lands, and a refresh that fails leaves the
+record the page already had rather than taking the scrubber away.
 
 With JavaScript off there is no scrubber at all, which is the honest version of a control
 nothing can drive. Under `prefers-reduced-motion: reduce` play still plays, one reading a

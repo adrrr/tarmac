@@ -27,6 +27,16 @@ class El {
       else this.classes.delete(name);
     },
   };
+  private readonly attrs = new Map<string, string>();
+  setAttribute(name: string, value: string): void {
+    this.attrs.set(name, value);
+  }
+  getAttribute(name: string): string | null {
+    return this.attrs.get(name) ?? null;
+  }
+  removeAttribute(name: string): void {
+    this.attrs.delete(name);
+  }
   private readonly handlers = new Map<string, Array<() => void>>();
   addEventListener(type: string, fn: () => void): void {
     const list = this.handlers.get(type) ?? [];
@@ -74,9 +84,33 @@ export interface Page {
 export interface MountOptions {
   /** What the reader asked their operating system for. The play button reads it. */
   reducedMotion?: boolean;
+  /**
+   * How the shell ships each element, from `shellState`. Without it every element starts
+   * visible and enabled, and an assertion that the script REVEALED something passes whether
+   * or not the script ran — which is how three tests of the replay banner turned out to be
+   * pinning nothing at all.
+   */
+  shell?: Record<string, { hidden: boolean; disabled: boolean }>;
 }
 
-export function mountPage(script: string, respond: Respond, { reducedMotion = false }: MountOptions = {}): Page {
+/**
+ * What the served markup says about each element with an id, so the fake DOM starts where the
+ * browser's would. Only the two attributes the script toggles are read.
+ */
+export function shellState(html: string): Record<string, { hidden: boolean; disabled: boolean }> {
+  const state: Record<string, { hidden: boolean; disabled: boolean }> = {};
+  for (const m of html.matchAll(/<[a-z]+\s([^>]*\bid="([\w-]+)"[^>]*)>/g)) {
+    const [, attrs, id] = m;
+    state[id] = { hidden: /\bhidden\b/.test(attrs), disabled: /\bdisabled\b/.test(attrs) };
+  }
+  return state;
+}
+
+export function mountPage(
+  script: string,
+  respond: Respond,
+  { reducedMotion = false, shell = {} }: MountOptions = {},
+): Page {
   const els = new Map<string, El>();
   const body = new El();
   const timers: Timer[] = [];
@@ -89,7 +123,14 @@ export function mountPage(script: string, respond: Respond, { reducedMotion = fa
 
   const el = (id: string): El => {
     let e = els.get(id);
-    if (!e) els.set(id, (e = new El()));
+    if (!e) {
+      els.set(id, (e = new El()));
+      const as = shell[id];
+      if (as) {
+        e.hidden = as.hidden;
+        e.disabled = as.disabled;
+      }
+    }
     return e;
   };
 

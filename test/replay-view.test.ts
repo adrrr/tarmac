@@ -49,8 +49,12 @@ test('a container the script hides is never given a display that outranks hidden
   let checked = 0;
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const [, selector, declarations] = m;
-    if (!/display\s*:/.test(declarations)) continue;
-    if (!/\.replay\b|\.replaying-note\b/.test(selector)) continue;
+    // Only a display that would SHOW it. `display:none` agrees with the attribute rather than
+    // outranking it, and is how the table view hides these same elements.
+    if (!/display\s*:\s*(?!none)/.test(declarations)) continue;
+    // Every element the script ships hidden, by class or by id — `#replay-view` is the one
+    // whose accidental reveal would put a past map on screen with nothing saying so.
+    if (!/\.replay\b|\.replaying-note\b|#replay\b|#replay-view\b/.test(selector)) continue;
     checked++;
     assert.match(selector, /:not\(\[hidden\]\)/, `${selector.trim()} would show while hidden`);
   }
@@ -64,6 +68,14 @@ test('the banner names the replay and carries the way back to live', () => {
   const banner = html.slice(html.indexOf('id="replaying"'));
   assert.match(banner.slice(0, 400), /id="replay-at"/, 'the minute it shows has somewhere to go');
   assert.match(banner.slice(0, 400), /id="to-live"/, 'and one gesture returns to the present');
+});
+
+// The page says every other state out loud beside the shape that draws it — the node's `.sr`
+// span, the halo's "a reading just landed". The banner appears without a reload and without
+// focus moving, so a reader who is not looking at it gets nothing unless it is announced.
+test('the banner is announced, not merely drawn', () => {
+  const banner = page().slice(page().indexOf('id="replaying"'));
+  assert.match(banner.slice(0, 200), /role="status"/);
 });
 
 // The whole fragment, and not merely its map. Hiding the map alone left the LIVE header —
