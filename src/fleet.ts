@@ -186,6 +186,17 @@ export function buildFleet({
   };
 }
 
+export interface AccountReading {
+  rateLimits: Record<string, any>;
+  /**
+   * How old the snapshot that carried them is. It travels because the reading is exactly as old
+   * as that snapshot, while anything computed from a reset epoch is as young as the clock doing
+   * the arithmetic — and a percentage frozen forty minutes ago beside a countdown that ticks
+   * every five seconds is the page contradicting itself in one line.
+   */
+  ageMs: number;
+}
+
 /**
  * The account's rate limits, as this fleet's sessions report them.
  *
@@ -203,14 +214,12 @@ export function buildFleet({
  * header draws it, and two copies of "which session's word counts" is two answers about one
  * account the day either one is touched.
  */
-export function accountLimits(rows: FleetRow[]): Record<string, any> | null {
-  let freshest: Record<string, any> | null = null;
-  let youngest = Infinity;
+export function accountLimits(rows: FleetRow[]): AccountReading | null {
+  let freshest: AccountReading | null = null;
   for (const r of rows) {
     if (r.rateLimits === null || r.snapshotAgeMs === null || r.snapshotAgeMs < 0) continue;
-    if (r.snapshotAgeMs < youngest) {
-      freshest = r.rateLimits;
-      youngest = r.snapshotAgeMs;
+    if (freshest === null || r.snapshotAgeMs < freshest.ageMs) {
+      freshest = { rateLimits: r.rateLimits, ageMs: r.snapshotAgeMs };
     }
   }
   return freshest;

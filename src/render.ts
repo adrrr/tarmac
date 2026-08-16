@@ -347,7 +347,21 @@ ${body}`;
  * alone would be as old as the tab.
  */
 export function renderLimits({ rows, health }: Fleet): string {
-  return readLimits(accountLimits(rows), health.generatedAt).map(gauge).join('');
+  const account = accountLimits(rows);
+  const gauges = readLimits(account === null ? null : account.rateLimits, health.generatedAt)
+    .map(gauge)
+    .join('');
+  // Dated when the snapshot behind it is past the threshold, exactly as the table dates a stale
+  // context. It matters more here than anywhere else on the page: the percentage is as old as
+  // that snapshot, while the countdown beside it is recomputed on every five-second re-render —
+  // so an undated pair puts a frozen number next to a visibly moving one and lets the reader
+  // assume both are now.
+  //
+  // Once for the two, not once each: both windows come out of the SAME snapshot, and the same
+  // fact said twice is noise. The replay has no equivalent — the ring keeps each reading and
+  // never how old it was, which is why nothing replayed on this page is dated.
+  const stale = account !== null && account.ageMs > health.staleAfterMs;
+  return gauges + (stale ? `<span class="stale">! ${esc(asOfAge(account!.ageMs))} ago</span>` : '');
 }
 
 /**

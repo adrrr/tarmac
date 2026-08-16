@@ -19,15 +19,15 @@ const limits = (over: Record<string, any> = {}): Record<string, any> => ({
   ...over,
 });
 
-const fleet = (rateLimits: Record<string, any> | null = limits()): Fleet => ({
-  rows: [row({ rateLimits })],
+const fleet = (rateLimits: Record<string, any> | null = limits(), snapshotAgeMs = 1200): Fleet => ({
+  rows: [row({ rateLimits, snapshotAgeMs })],
   health: health(),
 });
 
 const page = (rateLimits: Record<string, any> | null = limits()): string => renderPage(fleet(rateLimits));
 /** The header alone — the stylesheet above it has widths and percentages of its own. */
-const header = (rateLimits: Record<string, any> | null = limits()): string => {
-  const html = page(rateLimits);
+const header = (rateLimits: Record<string, any> | null = limits(), ageMs?: number): string => {
+  const html = renderPage(fleet(rateLimits, ageMs));
   return html.slice(html.indexOf('<header>'), html.indexOf('</header>'));
 };
 
@@ -127,13 +127,42 @@ test('the fragment ships its copy hidden', () => {
 test('the replayed gauges ship hidden, and nothing gives them a display that outranks it', () => {
   const html = page();
   assert.match(html, /id="replay-limits"[^>]*hidden/);
-  const css = /<style>([\s\S]*?)<\/style>/.exec(html)![1];
+  // Comments stripped FIRST. A selector is captured as "everything since the last brace", which
+  // is the comment above the rule as well as the rule — and the comment above this one explains
+  // the guard by naming it, so the assertion below was matching prose and passing over a
+  // selector that had lost it. Removing the guard from the stylesheet left this green.
+  const css = /<style>([\s\S]*?)<\/style>/.exec(html)![1].replace(/\/\*[\s\S]*?\*\//g, '');
+  let checked = 0;
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const [, selector, declarations] = m;
     if (!/display\s*:\s*(?!none)/.test(declarations)) continue;
     if (!/\.limits\b|#limits\b|#replay-limits\b/.test(selector)) continue;
+    checked++;
     assert.match(selector, /:not\(\[hidden\]\)/, `${selector.trim()} would show while hidden`);
   }
+  assert.ok(checked > 0, 'the rule this is about was found at all');
+});
+
+// The rule every other value on this page follows, and the one this pair was breaking in the
+// loudest possible way: the percentage is as old as the snapshot it came from, while the
+// countdown beside it is recomputed every five seconds — so a window measured forty minutes ago
+// sat next to a number visibly ticking down, with nothing saying which of the two was current.
+// A stale reading is still the truth, of an earlier moment. Show it, and date it.
+test('a reading past the freshness threshold is dated, like every other stale reading here', () => {
+  const html = header(limits(), 40 * 60_000);
+  assert.match(html, /17%/, 'the number is still shown — it was true of an earlier moment');
+  assert.match(html, /! 40m ago/);
+});
+
+test('a reading inside the threshold is not dated, and the pair is said once', () => {
+  const html = header();
+  assert.doesNotMatch(html, /ago/);
+});
+
+// One reading, one date. Both windows come out of the same snapshot, so two "! 40m ago" would
+// be the same fact said twice.
+test('the age is the pair, not each gauge', () => {
+  assert.equal((header(limits(), 40 * 60_000).match(/! 40m ago/g) ?? []).length, 1);
 });
 
 // A replaying page hides the live fragment for a reason — its totals are about now. The

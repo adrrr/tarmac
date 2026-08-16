@@ -312,7 +312,8 @@ test('the account limits are the freshest reading that carried them', () => {
     row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17 } } }),
     row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 42 } } }),
   ]);
-  assert.equal(limits!.five_hour.used_percentage, 42);
+  assert.equal(limits!.rateLimits.five_hour.used_percentage, 42);
+  assert.equal(limits!.ageMs, 1200, 'and it carries the age of the reading it came from');
 });
 
 // The same value `map.ts` refuses to call an age: a snapshot dated after the clock that read
@@ -323,7 +324,7 @@ test('a snapshot dated in the future does not get to be the freshest reading', (
     row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3 } } }),
     row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91 } } }),
   ]);
-  assert.equal(limits!.five_hour.used_percentage, 91);
+  assert.equal(limits!.rateLimits.five_hour.used_percentage, 91);
 });
 
 test('a fleet whose snapshots carry no rate limits reports the account as absent, never as zero', () => {
@@ -337,5 +338,5 @@ test('a row with no snapshot age cannot be the freshest reading', () => {
     row({ snapshotAgeMs: null, rateLimits: { five_hour: { used_percentage: 5 } } }),
     row({ sessionId: 's2', snapshotAgeMs: 60_000, rateLimits: { five_hour: { used_percentage: 88 } } }),
   ]);
-  assert.equal(limits!.five_hour.used_percentage, 88);
+  assert.equal(limits!.rateLimits.five_hour.used_percentage, 88);
 });
