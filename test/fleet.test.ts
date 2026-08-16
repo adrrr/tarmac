@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFleet } from '../src/fleet.ts';
+import { accountLimits, buildFleet } from '../src/fleet.ts';
+import { row } from './fleet-fixtures.ts';
 import type { Session } from '../src/sessions.ts';
 import type { Snapshot } from '../src/snapshots.ts';
 
@@ -298,4 +299,44 @@ test('a ghost snapshot from a version nobody runs cannot raise the guard', () =>
 test('reports nothing reporting when no session is covered at all', () => {
   const { health } = buildFleet({ sessions: [session()], snapshots: new Map(), now: NOW });
   assert.equal(health.costReporting, 0);
+});
+
+// ── the account, out of sessions that disagree about it ─────────────────────────────────
+//
+// One account, read at whatever moment each session last drew a frame — so the rows do not
+// carry contradicting numbers, they carry the same number at different ages, and the youngest
+// is the one still true. Two readers depend on this rule now: the ring, which samples it every
+// minute, and the header gauges, which draw it.
+test('the account limits are the freshest reading that carried them', () => {
+  const limits = accountLimits([
+    row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17 } } }),
+    row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 42 } } }),
+  ]);
+  assert.equal(limits!.rateLimits.five_hour.used_percentage, 42);
+  assert.equal(limits!.ageMs, 1200, 'and it carries the age of the reading it came from');
+});
+
+// The same value `map.ts` refuses to call an age: a snapshot dated after the clock that read
+// it (an NTP correction, a mount running ahead) is not the youngest reading, and letting it
+// win would misreport the account's limits for as long as the skew lasts.
+test('a snapshot dated in the future does not get to be the freshest reading', () => {
+  const limits = accountLimits([
+    row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3 } } }),
+    row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91 } } }),
+  ]);
+  assert.equal(limits!.rateLimits.five_hour.used_percentage, 91);
+});
+
+test('a fleet whose snapshots carry no rate limits reports the account as absent, never as zero', () => {
+  assert.equal(accountLimits([row(), row({ sessionId: 's2' })]), null);
+});
+
+// An undated reading is not a young one. A row with no snapshot at all has no age to be
+// judged by, and it carries no limits either — but the pair must not be reachable.
+test('a row with no snapshot age cannot be the freshest reading', () => {
+  const limits = accountLimits([
+    row({ snapshotAgeMs: null, rateLimits: { five_hour: { used_percentage: 5 } } }),
+    row({ sessionId: 's2', snapshotAgeMs: 60_000, rateLimits: { five_hour: { used_percentage: 88 } } }),
+  ]);
+  assert.equal(limits!.rateLimits.five_hour.used_percentage, 88);
 });

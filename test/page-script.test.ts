@@ -120,3 +120,34 @@ test('an answer that does not identify itself as tarmac is never swapped in', as
   assert.equal(page.el('offline').hidden, false, 'and the reader is told the refresh failed');
   assert.match(page.el('why').textContent, /tarmac/i);
 });
+
+// ── the account's two windows ─────────────────────────────────────────────────────────
+// They are drawn in the header, which is the shell's and survives the poll — but the numbers
+// in them are the fleet's, and the fleet arrives in the fragment. So the fragment carries a
+// hidden copy and every swap lifts it up: a five-hour window frozen at the minute the tab was
+// opened would be the one number on this page still claiming to be about now.
+test('the account gauges are lifted out of the fragment on every swap', async () => {
+  const page = mount(() => ok('<div>fleet</div>'));
+  page.el('limits-src').innerHTML = '<div class="gauge">5h 21%</div>';
+  await page.advance(5000);
+  assert.equal(page.el('limits').innerHTML, '<div class="gauge">5h 21%</div>');
+});
+
+// The same rule the fragment itself follows: an answer that was refused is an answer nothing
+// is read out of. A stranger on the port must not get to write the account's numbers either.
+test('an answer that is never swapped in does not get to move the gauges', async () => {
+  const page = mount((call) =>
+    call === 1
+      ? ok('<div>the real fleet</div>')
+      : Promise.resolve({ ok: true, body: '<div>a stranger</div>', headers: {} }),
+  );
+  page.el('limits-src').innerHTML = '<div class="gauge">5h 21%</div>';
+  await page.advance(6000);
+  page.el('limits-src').innerHTML = '<div class="gauge">99%</div>';
+  await page.advance(5000);
+  assert.equal(
+    page.el('limits').innerHTML,
+    '<div class="gauge">5h 21%</div>',
+    'the header still shows what tarmac last said',
+  );
+});

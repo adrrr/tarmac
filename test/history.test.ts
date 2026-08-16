@@ -34,8 +34,9 @@ test('a session whose status tarmac does not recognise is unknown in the ring to
   assert.equal(h.read().samples[0].sessions[0].state, 'unknown');
 });
 
-// One account's number, read at whatever moment each session last drew a frame. The youngest
-// reading is the one that is still true.
+// The account's own numbers, sampled with the fleet that spent from them — which is what makes
+// a replay able to show the five-hour window draining across a day. WHICH session's word counts
+// is the fleet model's rule, and it is tested there.
 test('the rate limits travel with the sample, from the freshest reading that carried them', () => {
   const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });
   h.record(
@@ -45,20 +46,6 @@ test('the rate limits travel with the sample, from the freshest reading that car
     ]),
   );
   assert.equal(h.read().samples[0].rateLimits!.five_hour.used_percentage, 42);
-});
-
-// The same value `map.ts` refuses to call an age: a snapshot dated after the clock that read
-// it (an NTP correction, a mount running ahead) is not the youngest reading, and letting it
-// win would misreport the account's limits for every sample until the skew clears.
-test('a snapshot dated in the future does not get to be the freshest reading', () => {
-  const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });
-  h.record(
-    fleet([
-      row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3 } } }),
-      row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91 } } }),
-    ]),
-  );
-  assert.equal(h.read().samples[0].rateLimits!.five_hour.used_percentage, 91);
 });
 
 test('a fleet whose snapshots carry no rate limits samples them as absent, never as zero', () => {
