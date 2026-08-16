@@ -10,7 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderMap, renderPage } from '../src/render.ts';
+import { renderLimits, renderMap, renderPage } from '../src/render.ts';
 import { mountPage, scriptOf, shellState } from './page-dom.ts';
 import type { MountOptions } from './page-dom.ts';
 import { health, row } from './fleet-fixtures.ts';
@@ -499,3 +499,97 @@ test('the record is not pulled again under a reader who is scrubbing it', async 
   await page.show();
   assert.equal(page.el('scrub').max, '4', 'what the reader is holding is left alone');
 });
+
+// ── the account, as it stood that minute ────────────────────────────────────────────────
+//
+// The five-hour window draining and refilling across a day is the thing the record was always
+// carrying and nothing was drawing. It is the one pair of numbers on this page that is about
+// the account rather than a session, so a replay that left the LIVE pair standing in the header
+// would be showing the fleet of three hours ago under the allowance of right now.
+
+/** A record whose one sample is `t` old and carries the account as it stood then. */
+const account = (agoMs: number, rateLimits: Record<string, any> | null): HistoryPayload => {
+  const t = CLOCK - agoMs;
+  return { since: t, cadence: MIN, samples: [{ t, sessions: [session()], rateLimits }], missed: 0 };
+};
+
+test('the replayed minute brings the account of that minute with it', async () => {
+  const page = mount(account(0, { five_hour: { used_percentage: 63 }, seven_day: { used_percentage: 12 } }));
+  await page.advance(0);
+  assert.equal(page.el('replay-limits').hidden, true, 'a page nobody has scrubbed shows no past account');
+  page.el('scrub').drag(0);
+  assert.equal(page.el('replay-limits').hidden, false);
+  assert.match(page.el('replay-limits').innerHTML, /63%/);
+  assert.match(page.el('replay-limits').innerHTML, /12%/);
+});
+
+// The decision this feature turns on. A reset is a moment, and "how long is left" is a question
+// about the minute being replayed: at 09:14 the five-hour window had two hours to run, and it
+// had two hours to run whatever time it is now. Counted against the present instead, every
+// reset in the record would read as long overdue the moment it aged past — the page announcing
+// an account over its limit for a day that has already ended.
+test('a replayed reset is counted from the sample own minute, never from now', async () => {
+  const t = CLOCK - 180 * MIN;
+  const page = mount(account(180 * MIN, { five_hour: { used_percentage: 63, resets_at: (t + 2 * 3600_000) / 1000 } }));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  assert.match(page.el('replay-limits').innerHTML, /resets in 2h/);
+  assert.doesNotMatch(page.el('replay-limits').innerHTML, /due/, 'not overdue against a clock it never ran on');
+});
+
+// This project's cardinal sin, in the past tense and at the top of the page.
+test('a minute whose snapshots carried no rate limits replays as no reading, never as 0%', async () => {
+  const page = mount(account(0, null));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  const html = page.el('replay-limits').innerHTML;
+  assert.match(html, /no reading/);
+  assert.doesNotMatch(html, /\b0%/);
+  assert.match(html, /rail unmeasured/);
+});
+
+test('back to live takes the replayed account down with the rest of the past', async () => {
+  const page = mount(account(0, { five_hour: { used_percentage: 63 } }));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  page.el('to-live').fire('click');
+  assert.equal(page.el('replay-limits').hidden, true);
+  assert.equal(page.el('replay-limits').innerHTML, '', 'and the past is not left lying in the page');
+});
+
+// The second duplication this feature could not avoid — the gauges are drawn in the browser now
+// — pinned against the server's own render rather than left to drift. Character for character,
+// over the shapes a payload nobody here owns can actually arrive in: the words, the dash, the
+// rail and the arithmetic all come from one place, and this is what says so.
+//
+// One well-formed object would not have said it. The first version of this mirror answered
+// `no reading` where the server answered `schema drift` for every rate_limits that was present
+// but not a pair of windows — an array among them, which `extractTelemetry` lets through — so
+// the same minute read one way live and the opposite way replayed.
+for (const [what, rateLimits] of [
+  ['both windows, one of them due to reset', { five_hour: { used_percentage: 63.7, resets_at: (CLOCK + 8040_000) / 1000 }, seven_day: { used_percentage: 42 } }],
+  ['a window that has already reset', { five_hour: { used_percentage: 90, resets_at: (CLOCK - 1_200_000) / 1000 } }],
+  ['nothing at all', null],
+  ['an empty object', {}],
+  ['an array', [] as any],
+  ['an array of windows', [{ used_percentage: 9 }] as any],
+  ['a string', 'none' as any],
+  ['a number', 42 as any],
+  ['a percentage not taken yet', { five_hour: { used_percentage: null, resets_at: (CLOCK + 60_000) / 1000 } }],
+  ['a percentage of the wrong type', { five_hour: { used_percentage: '17%' } }],
+  ['a percentage out of range', { five_hour: { used_percentage: 101 } }],
+  ['a reset in milliseconds', { five_hour: { used_percentage: 17, resets_at: CLOCK } }],
+  ['a reset at the epoch', { five_hour: { used_percentage: 17, resets_at: 0 } }],
+  ['a window that is not an object', { five_hour: 'soon' as any }],
+] as Array<[string, any]>) {
+  test(`a replayed gauge is drawn exactly as the live header would draw it — ${what}`, async () => {
+    const page = mount(account(0, rateLimits));
+    await page.advance(0);
+    page.el('scrub').drag(0);
+    const server = renderLimits({
+      rows: [row({ rateLimits, snapshotAgeMs: 1000 })],
+      health: health({ generatedAt: CLOCK }),
+    });
+    assert.equal(page.el('replay-limits').innerHTML, server);
+  });
+}

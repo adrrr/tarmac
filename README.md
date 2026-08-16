@@ -87,6 +87,14 @@ does not mark same-origin — your cwd paths and costs never leave the machine. 
 **default** port walks up to the next free one and says so; a port you chose yourself — flag,
 environment or config file — refuses instead, because you chose it.
 
+In the header are the account's **two rate-limit gauges** — the five-hour window and the
+seven-day one, each with its used percentage and its reset spelled as the time left. They are
+page-level because that is what a rate limit is: one account, which every session below is
+spending from. A fleet whose snapshots carry no limits says `— no reading` on a dotted rail
+rather than drawing a window at 0%, and a reading past the freshness threshold is dated
+`! 40m ago` — the countdown is recomputed every poll, the percentage is as old as its snapshot,
+and a page that showed both as now would be lying with the moving one.
+
 ### The map
 
 The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
@@ -106,7 +114,9 @@ the fleet as it was at that minute; press play and the day walks past. The recor
 load, never per position, so scrubbing asks the server nothing. A replay never poses as the present: a banner names
 the minute and holds the way back, the live fragment is hidden while it is up, halos stay off
 because a sample never "just landed", and a session absent from a minute is absent from the
-map. The range says what it truly covers — a serve ten minutes old offers ten minutes.
+map. The range says what it truly covers — a serve ten minutes old offers ten minutes. The
+account's gauges replay too, counted from the minute being shown rather than from now, so the
+five-hour window can be watched draining and refilling across a day.
 
 ## Why it does not break
 

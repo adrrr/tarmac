@@ -12,6 +12,9 @@ import type { Config, Source } from './config.ts';
 import { buildMap, INTERACTIVE, stateOf } from './map.ts';
 import type { MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
+import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
+import type { Gauge, LimitWhy } from './limits.ts';
+import { accountLimits } from './fleet.ts';
 import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
 import type { Plan, UninstallMode, UninstallPlan } from './install.ts';
 
@@ -324,9 +327,91 @@ export function renderLive(fleet: Fleet): string {
     </table></div></div>
 <div class="view view-map">${renderMap(fleet)}</div>`;
 
-  return `<div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>
+  return `<div id="limits-src" hidden>${renderLimits(fleet)}</div>
+<div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>
 ${warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}
 ${body}`;
+}
+
+/**
+ * The account's two windows, for the page's header.
+ *
+ * They are the one pair of numbers here that is not about a session: every session on the page
+ * spends from the same five-hour and seven-day allowance, so the gauges sit at the top of the
+ * page rather than on a node — and the fleet's own rule decides whose reading counts when the
+ * sessions carry the same number at different ages.
+ *
+ * Rendered into the FRAGMENT as well as into the shell, in a slot the script copies up on every
+ * swap. The header is the shell's — it has to survive a poll, the tabs and a replay — but the
+ * numbers are the fleet's, and the fleet is what the fragment carries. A gauge left in the shell
+ * alone would be as old as the tab.
+ */
+export function renderLimits({ rows, health }: Fleet): string {
+  const account = accountLimits(rows);
+  const gauges = readLimits(account === null ? null : account.rateLimits, health.generatedAt)
+    .map(gauge)
+    .join('');
+  // Dated when the snapshot behind it is past the threshold, exactly as the table dates a stale
+  // context. It matters more here than anywhere else on the page: the percentage is as old as
+  // that snapshot, while the countdown beside it is recomputed on every five-second re-render —
+  // so an undated pair puts a frozen number next to a visibly moving one and lets the reader
+  // assume both are now.
+  //
+  // Once for the two, not once each: both windows come out of the SAME snapshot, and the same
+  // fact said twice is noise. The replay has no equivalent — the ring keeps each reading and
+  // never how old it was, which is why nothing replayed on this page is dated.
+  const stale = account !== null && account.ageMs > health.staleAfterMs;
+  return gauges + (stale ? `<span class="stale">! ${esc(asOfAge(account!.ageMs))} ago</span>` : '');
+}
+
+/**
+ * One window. Four things in a line: which window it is, a bar for the glance, the number that
+ * is authoritative, and how long is left. The bar is `aria-hidden` because it says nothing the
+ * number does not, and the abbreviation is replaced rather than doubled for a reader who hears
+ * the page — "5h" is a label on a screen and a syllable in an ear.
+ */
+function gauge(g: Gauge): string {
+  // No fill, ever, for a window nobody read: an empty bar is what an account at 0% wears, and
+  // "I could not look" must not be able to wear it. The same dotted emptiness as an unmeasured
+  // dial, in the shape a bar has.
+  const rail =
+    g.pct === null
+      ? `<span class="rail unmeasured" aria-hidden="true"></span>`
+      : `<span class="rail" aria-hidden="true"><i style="width:${g.pct}%"></i></span>`;
+  return (
+    `<div class="gauge"><span class="lbl" aria-hidden="true">${g.label}</span><span class="sr">${g.said}</span>` +
+    `${rail}<span class="num">${g.pct === null ? dash() : `${g.pct}%`}</span>` +
+    `<span class="reset">${g.pct === null ? LIMIT_WHY[g.why!] : resetWords(g.resetsInMs)}</span></div>`
+  );
+}
+
+/** Which kind of missing a missing window is, in the two words both surfaces use. */
+const LIMIT_WHY: Record<LimitWhy, string> = { absent: 'no reading', drift: 'schema drift' };
+
+/**
+ * The reset, as a stretch of time rather than as the epoch the payload carries.
+ *
+ * A negative one is not a countdown to be printed with a minus sign: the window rolled over
+ * after the reading that reported it, so the percentage beside these words belongs to a window
+ * that no longer exists. Saying that is the whole point of showing a reset at all.
+ */
+const resetWords = (ms: number | null): string =>
+  ms === null ? `reset ${dash()}` : ms > 0 ? `resets in ${left(ms)}` : `reset was due ${left(-ms)} ago`;
+
+/**
+ * How long, in the two units that matter at each scale. Deliberately finer than `duration()`
+ * next door, which floors a session's uptime to whole hours: five hours is a window someone
+ * plans the next hour around, and "resets in 2h" said anywhere between 2h00 and 2h59 is the
+ * kind of rounding that makes a reader stop believing the number.
+ */
+function left(ms: number): string {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return '<1m';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return m % 60 === 0 ? `${h}h` : `${h}h ${m % 60}m`;
+  const d = Math.floor(h / 24);
+  return h % 24 === 0 ? `${d}d` : `${d}d ${h % 24}h`;
 }
 
 /**
@@ -399,6 +484,10 @@ function ago(ms: number): string {
 export type View = 'table' | 'map';
 
 export function renderPage(fleet: Fleet, view: View = 'table'): string {
+  // The header's copy. `renderLive` below renders its own, out of this same fleet and through
+  // this same function — two calls of one pure renderer over one reading, which is what keeps
+  // the pair the reader sees and the pair the script will copy up from being two accounts.
+  const gauges = renderLimits(fleet);
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -457,6 +546,34 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   nav a[aria-current="page"] { color:var(--fg); border-color:var(--line); }
   body[data-view="table"] .view-map { display:none; }
   body[data-view="map"] .view-table { display:none; }
+
+  /* ── the account's two windows ───────────────────────────────────────────────────────
+     In the header, because a rate limit is the account's and not a node's. Slim on purpose:
+     the fleet is what the page is about, and these two numbers are the weather it flies in.
+     Laid out with flex behind the same :not([hidden]) guard the replay containers carry —
+     the replayed pair ships hidden, and a display in a stylesheet beats the attribute. */
+  .limits:not([hidden]) { display:flex; gap:1rem; flex-wrap:wrap; align-items:center; }
+  .gauge { display:flex; align-items:baseline; gap:.35rem; font-size:.8rem; }
+  /* Not upper-cased, alone among the small labels on this page: "5H" is not an hour, and a
+     unit that has been shouted reads as a different unit. */
+  .gauge .lbl { color:var(--dim); font-weight:600; letter-spacing:.04em; }
+  .gauge .num { font-variant-numeric:tabular-nums; font-weight:650; }
+  .gauge .reset { color:var(--dim); }
+  /* Same bargain as the row bars: a glance at a magnitude, in the quiet ink of a secondary
+     fact, beside the number that is the authority. Its own class rather than .bar — that one
+     is dropped below 46rem, where a card layout gives every value the name of its column, and
+     these two have no column to be named by. */
+  .gauge .rail { display:inline-block; width:3.5rem; height:.3rem; border-radius:99px;
+          background:var(--line); align-self:center; }
+  .gauge .rail > i { display:block; height:100%; border-radius:99px; background:var(--dim); }
+  /* Nothing was measured — the dotted track of an unmeasured dial, in the shape of a bar. An
+     empty rail is what an account at 0% wears, and the two must not match. */
+  .gauge .rail.unmeasured { background:repeating-linear-gradient(90deg,var(--line) 0 2px,transparent 2px 8px); }
+  /* The live pair goes down with the live fragment: they are about now, and left up they would
+     be the one present-tense number standing over a fleet three hours old. */
+  body.replaying #limits { display:none; }
+  /* The replayed pair leads the past fleet rather than sitting on top of its totals. */
+  #replay-limits { margin-bottom:.2rem; }
 
   /* ── the scrubber ────────────────────────────────────────────────────────────────────
      Under the map, and only under the map: the record holds what the MAP draws, so a
@@ -599,6 +716,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     <a href="/"${view === 'table' ? ' aria-current="page"' : ''}>Table</a>
     <a href="/map"${view === 'map' ? ' aria-current="page"' : ''}>Map</a>
   </nav>
+  <!-- The account's two windows, page-level because that is what they are: a limit belongs to
+       the account every session below is spending from, not to any one of them. Their VALUES
+       come up from the fragment on every poll (the script's limits-src copy), so the header
+       structure can be the shell's without the numbers being as old as the tab. -->
+  <div class="limits" id="limits" role="group" aria-label="account rate limits">${gauges}</div>
   <!-- Not "updated just now". If the script never runs — a policy-injected CSP without
        'unsafe-inline', a script error — that text would stand as a permanent lie, and
        <noscript> would not fire to correct it because JavaScript is enabled. The page's one
@@ -606,7 +728,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   <span class="freshness"><span class="pulse" aria-hidden="true"></span><span id="age">updated &mdash;</span></span>
 </header>
 <div class="warn offline" id="offline" hidden>
-  <strong>&#9888; refresh failing</strong> — nothing below has moved since the time in the header.
+  <strong>&#9888; refresh failing</strong> — nothing on this page has moved since the time in the header.
   <span id="why"></span>
 </div>
 <!-- The one claim on this page that could be a lie, so it is the loudest element on it and it
@@ -624,6 +746,13 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
 <!-- Where the past is drawn: the shell's own map, in the place the live one occupies, so
      that swapping the fragment underneath cannot repaint what the reader is scrubbing. -->
 <div id="replay-view" hidden>
+  <!-- The same pair, for the minute under the reader's hand — and here rather than in the
+       header, where the live pair sits. The banner that says "this is the past" is below the
+       header: an account drawn above it would be the one past number on the page with nothing
+       over it saying so, and the first thing a screen reader reaches, long before the warning.
+       Hidden until a script raises it: with no script there is no replay, and an empty gauge
+       would be a claim about nothing. -->
+  <div class="limits" id="replay-limits" role="group" aria-label="account rate limits, at the minute being replayed" hidden></div>
   <div class="meta" id="replay-meta"></div>
   <div class="map" id="replay-map"></div>
 </div>
@@ -695,6 +824,7 @@ function pageScript(view: View): string {
 (function () {
   var live = document.getElementById('live'), age = document.getElementById('age');
   var off = document.getElementById('offline'), why = document.getElementById('why');
+  var limits = document.getElementById('limits');
   var last = Date.now(), failing = false, inFlight = false, since = 0, gen = 0;
 
   function ago(ms) {
@@ -756,6 +886,15 @@ function pageScript(view: View): string {
         if (body.trim() === '') throw new Error('The server answered with an empty page.');
         if (!mineStill()) return;
         live.innerHTML = body;
+        // The account's gauges, lifted out of the fragment and into the header where they
+        // belong. Here rather than in the fragment's own place on the page because a limit is
+        // the account's and not a session's; here rather than in the shell alone because the
+        // NUMBERS arrive with the fleet, and a five-hour window that stopped counting down
+        // would be the one thing on this page still claiming to be about now.
+        // Inside the accepted-answer branch on purpose: a body that was refused is a body
+        // nothing is read out of, the account's numbers included.
+        var src = document.getElementById('limits-src');
+        if (src) limits.innerHTML = src.innerHTML;
         last = Date.now();
         failing = false;
       });
@@ -784,6 +923,7 @@ function pageScript(view: View): string {
   var playBtn = document.getElementById('play'), covers = document.getElementById('covers');
   var rview = document.getElementById('replay-view'), rmap = document.getElementById('replay-map');
   var rmeta = document.getElementById('replay-meta'), note = document.getElementById('replaying');
+  var rlimits = document.getElementById('replay-limits');
   var atEl = document.getElementById('replay-at'), toLive = document.getElementById('to-live');
   var record = null, recordAt = 0, at = -1, replaying = false, playing = null, hgen = 0;
 
@@ -932,6 +1072,71 @@ function pageScript(view: View): string {
       + ' stroke-dasharray="' + r2(filled) + ' ' + r2(C - filled) + '"/>';
   }
 
+  // ── the account, as it stood that minute ────────────────────────────────────────────
+  //
+  // The second thing this page interprets twice, and for the same reason as the dials: a
+  // replay is a lookup in samples the page already holds, and the ring holds the payload's own
+  // rate_limits rather than anything rendered. The vocabulary, the dash and the two windows are
+  // handed over below rather than written again; what is mirrored is the arithmetic, and a
+  // test compares this output with the server's character for character.
+  //
+  // What it counts the reset against is the SAMPLE's own clock, never Date.now(). A reset is a
+  // moment, and "how long is left" is a question about the minute being replayed: at 09:14 the
+  // five-hour window had two hours to run, and it had two hours to run whatever time it is now.
+  // Counted against the present, every reset in the record would read as long overdue the
+  // moment it aged past — a page announcing an account over its limit for a day that ended.
+  var LIMITS = ${JSON.stringify(LIMIT_WINDOWS)}, LIMIT_WHY = ${JSON.stringify(LIMIT_WHY)};
+  var DASH = ${JSON.stringify(dash())};
+
+  function left(ms) {
+    var m = Math.floor(ms / 60000);
+    if (m < 1) return '<1m';
+    if (m < 60) return m + 'm';
+    var h = Math.floor(m / 60);
+    if (h < 24) return m % 60 === 0 ? h + 'h' : h + 'h ' + (m % 60) + 'm';
+    var d = Math.floor(h / 24);
+    return h % 24 === 0 ? d + 'd' : d + 'd ' + (h % 24) + 'h';
+  }
+
+  function gaugesOf(rl, now) {
+    // Anything can be in a sample: rate_limits is a shape someone else versions, and the ring
+    // stored whatever the payload had. None of it may throw in the header of a dashboard.
+    var ok = rl !== null && rl !== undefined && typeof rl === 'object' && !Array.isArray(rl);
+    var html = '';
+    for (var i = 0; i < LIMITS.length; i++) {
+      var w = ok ? rl[LIMITS[i].key] : undefined;
+      var has = w !== null && w !== undefined && typeof w === 'object' && !Array.isArray(w) && 'used_percentage' in w;
+      var v = has ? w.used_percentage : undefined;
+      var pct = has && typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? Math.floor(v) : null;
+      var at = has && typeof w.resets_at === 'number' && Number.isFinite(w.resets_at) ? w.resets_at : null;
+      var ms = at === null ? null : at * 1000 - now;
+      // The server's horizon, off the server's own number: a reset further from the reading than
+      // the longest window can be is not this account's reset, whatever it says.
+      if (ms !== null && Math.abs(ms) > ${RESET_HORIZON_MS}) ms = null;
+      // Presence, never value: a window that is there and null is a number not taken yet, and
+      // one that is gone is a schema that moved. Same discriminant as everywhere else here.
+      // Read off rl and NOT off ok: rate_limits carrying something that is not a pair of
+      // windows — an array, which the snapshot reader lets through — is a schema that moved,
+      // not an account nobody measured. Written as !ok, this said the opposite of the server
+      // about the very same minute.
+      var why = pct !== null ? null : (rl === null || rl === undefined || (has && v === null)) ? 'absent' : 'drift';
+      html += '<div class="gauge"><span class="lbl" aria-hidden="true">' + LIMITS[i].label + '</span>'
+        + '<span class="sr">' + LIMITS[i].said + '</span>'
+        + (pct === null
+          ? '<span class="rail unmeasured" aria-hidden="true"></span>'
+          : '<span class="rail" aria-hidden="true"><i style="width:' + pct + '%"></i></span>')
+        + '<span class="num">' + (pct === null ? DASH : pct + '%') + '</span>'
+        + '<span class="reset">'
+        + (pct === null
+          ? LIMIT_WHY[why]
+          : ms === null
+            ? 'reset ' + DASH
+            : ms > 0 ? 'resets in ' + left(ms) : 'reset was due ' + left(-ms) + ' ago')
+        + '</span></div>';
+    }
+    return html;
+  }
+
   function nodesOf(s) {
     var anchored = false, html = '', i;
     for (i = 0; i < s.sessions.length; i++) if (s.sessions[i].kind === INTERACTIVE) anchored = true;
@@ -967,6 +1172,11 @@ function pageScript(view: View): string {
     atEl.textContent = hhmm(s.t);
     rmeta.textContent = metaOf(s);
     rmap.innerHTML = nodesOf(s);
+    // The account of that minute, in the place the live pair occupies — which the body class
+    // has just taken down. One allowance on screen at a time, and it is the one belonging to
+    // the fleet being shown.
+    rlimits.innerHTML = gaugesOf(s.rateLimits, s.t);
+    rlimits.hidden = false;
     note.hidden = false;
     rview.hidden = false;
     document.body.classList.toggle('replaying', true);
@@ -985,6 +1195,8 @@ function pageScript(view: View): string {
     replaying = false;
     note.hidden = true;
     rview.hidden = true;
+    rlimits.hidden = true;
+    rlimits.innerHTML = '';
     rmap.innerHTML = '';
     scrub.removeAttribute('aria-valuetext');
     document.body.classList.toggle('replaying', false);

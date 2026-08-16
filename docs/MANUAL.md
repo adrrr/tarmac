@@ -20,6 +20,8 @@ confident `0`.
 | a status string it does not know | that string, never "idle" |
 | a snapshot directory it could not read | the errno, not "run tarmac install" |
 | a cost key that is absent | `—` for the row, and a total qualified by how many sessions really report one |
+| no snapshot carrying the account's rate limits | `— no reading` in both gauges, on a dotted rail — never a window at 0% |
+| a rate-limit reset nowhere near the reading that carried it | `reset —`; the percentage stands, the impossible countdown does not |
 | a Claude Code version no fixture covers | a notice naming that version — nothing blocked, nothing hidden |
 
 That last line is the smoke detector to the rest's alarm. The fields above were *observed*
@@ -219,6 +221,55 @@ poll, a hidden tab simply stops asking, and a waking one asks at once.
 Everything a reader interprets is rendered on the server. The browser owns two facts and no
 rules: re-deriving "a dash, never a zero" in page JavaScript would put a second copy of it
 where the test suite cannot reach.
+
+## The account's two windows
+
+Every session on the page spends from the same two allowances, so they are drawn once, at the
+top of the page, rather than on each node: the **five-hour window** and the **seven-day
+window**, as the statusline payload reports them.
+
+```
+5h ▬▭▭▭  17%  resets in 2h 14m      7d ▬▬▭▭  42%  resets in 3d 11h
+```
+
+The number is what is authoritative and the bar is a glance — the same bargain the context
+column makes. The reset arrives as an epoch and is shown as **what is left of the window**,
+counted from the moment the fleet was read; the fragment is re-rendered every five seconds, so
+it keeps counting down. A window whose reset is already behind the reading that reported it
+says `reset was due 20m ago` rather than a countdown with a minus sign in front of it: the
+percentage beside those words belongs to a window that has since rolled over.
+
+A reset that is not within eight days of the reading is refused the same way a percentage
+outside 0-100 is: the longest window here is seven days, so nothing this account resets at is
+further out — while the two ways that field can move both land far outside it. Read as seconds,
+the same number in milliseconds is fifty thousand years away; `0`, the sentinel an unset field
+so often is, is 1970. Both used to render with a straight face (`resets in 19656250d`). The
+percentage stands; the countdown becomes `reset —`.
+
+The limits belong to the **account**, and they arrive per session — so several sessions can
+carry the same number at different ages. The freshest reading wins, which is the rule the
+fleet model already applies to everything else, and a snapshot dated *after* the clock that
+read it is refused rather than believed (see [staying open](#staying-open)).
+
+What is missing is said, never guessed. No snapshot carrying rate limits at all is
+`— no reading` on a dotted rail, the same dotted emptiness an unmeasured dial wears; a window
+present with a null percentage is the same, because the key being there means the number has
+simply not been taken; and a window that is gone, or holding something that is not a
+percentage, is `— schema drift`. None of the three is ever a `0%`, which would be the one
+sentence this page must not say about an account: *you have room*.
+
+**A stale reading is dated**, like every other stale reading here. The percentage is exactly as
+old as the snapshot it came from, while the countdown beside it is recomputed on every
+five-second re-render — so an undated pair would put a frozen number next to a visibly moving
+one and let both read as now. Past the freshness threshold the pair carries `! 40m ago`, once
+for the two, because both windows come out of the same snapshot.
+
+On replay the gauges come down from the header and sit with the fleet they belong to, under
+the banner that dates it — the account of that minute, not of this one. Their reset is counted
+from the **sample's own clock**: at 09:14 the five-hour window had two hours to run, and it had
+two hours to run whatever time it is now. Counted against the present, every reset in the
+record would read as long overdue the moment it aged past, and the page would announce an
+account over its limit for a day that has already ended.
 
 ## The map
 
