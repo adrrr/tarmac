@@ -539,7 +539,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      the replayed pair ships hidden, and a display in a stylesheet beats the attribute. */
   .limits:not([hidden]) { display:flex; gap:1rem; flex-wrap:wrap; align-items:center; }
   .gauge { display:flex; align-items:baseline; gap:.35rem; font-size:.8rem; }
-  .gauge .lbl { color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
+  /* Not upper-cased, alone among the small labels on this page: "5H" is not an hour, and a
+     unit that has been shouted reads as a different unit. */
+  .gauge .lbl { color:var(--dim); font-weight:600; letter-spacing:.04em; }
   .gauge .num { font-variant-numeric:tabular-nums; font-weight:650; }
   .gauge .reset { color:var(--dim); }
   /* Same bargain as the row bars: a glance at a magnitude, in the quiet ink of a secondary
@@ -555,6 +557,8 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   /* The live pair goes down with the live fragment: they are about now, and left up they would
      be the one present-tense number standing over a fleet three hours old. */
   body.replaying #limits { display:none; }
+  /* The replayed pair leads the past fleet rather than sitting on top of its totals. */
+  #replay-limits { margin-bottom:.2rem; }
 
   /* ── the scrubber ────────────────────────────────────────────────────────────────────
      Under the map, and only under the map: the record holds what the MAP draws, so a
@@ -702,9 +706,6 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        come up from the fragment on every poll (the script's limits-src copy), so the header
        structure can be the shell's without the numbers being as old as the tab. -->
   <div class="limits" id="limits">${gauges}</div>
-  <!-- The same pair, for the minute under the reader's hand. Hidden until a script raises it:
-       with no script there is no replay, and an empty gauge would be a claim about nothing. -->
-  <div class="limits" id="replay-limits" hidden></div>
   <!-- Not "updated just now". If the script never runs — a policy-injected CSP without
        'unsafe-inline', a script error — that text would stand as a permanent lie, and
        <noscript> would not fire to correct it because JavaScript is enabled. The page's one
@@ -730,6 +731,13 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
 <!-- Where the past is drawn: the shell's own map, in the place the live one occupies, so
      that swapping the fragment underneath cannot repaint what the reader is scrubbing. -->
 <div id="replay-view" hidden>
+  <!-- The same pair, for the minute under the reader's hand — and here rather than in the
+       header, where the live pair sits. The banner that says "this is the past" is below the
+       header: an account drawn above it would be the one past number on the page with nothing
+       over it saying so, and the first thing a screen reader reaches, long before the warning.
+       Hidden until a script raises it: with no script there is no replay, and an empty gauge
+       would be a claim about nothing. -->
+  <div class="limits" id="replay-limits" hidden></div>
   <div class="meta" id="replay-meta"></div>
   <div class="map" id="replay-map"></div>
 </div>

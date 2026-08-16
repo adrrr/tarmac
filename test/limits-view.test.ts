@@ -142,3 +142,17 @@ test('the replayed gauges ship hidden, and nothing gives them a display that out
 test('a replaying page hides the live gauges, the way it hides the live fragment', () => {
   assert.match(page(), /body\.replaying #limits \{ display:none/);
 });
+
+// Where the replayed pair goes, and it is not the header. Found by opening the page: the
+// banner that says "this is the past" is BELOW the header, so an account drawn above it is the
+// one past number on the page with nothing over it saying so — and the first thing a screen
+// reader reaches, minutes before the warning. It goes with the rest of the past instead,
+// under the banner and above the fleet it belongs to.
+test('the replayed account is drawn with the replayed fleet, under the banner that dates it', () => {
+  const html = page();
+  const header = html.slice(html.indexOf('<header>'), html.indexOf('</header>'));
+  assert.doesNotMatch(header, /id="replay-limits"/, 'not in the header, where nothing dates it');
+  const view = html.slice(html.indexOf('id="replay-view"'), html.indexOf('id="replay-map"'));
+  assert.match(view, /id="replay-limits"/, 'inside the surface the past is drawn on');
+  assert.ok(html.indexOf('id="replaying"') < html.indexOf('id="replay-limits"'), 'and after the banner');
+});
