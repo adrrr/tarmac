@@ -14,6 +14,11 @@ class El {
   textContent = '';
   innerHTML = '';
   hidden = false;
+  /** What a range and a button carry. The script writes them; a test reads them back. */
+  value = '';
+  max = '';
+  min = '';
+  disabled = false;
   readonly classes = new Set<string>();
   readonly classList = {
     toggle: (name: string, on?: boolean): void => {
@@ -22,16 +27,38 @@ class El {
       else this.classes.delete(name);
     },
   };
+  private readonly handlers = new Map<string, Array<() => void>>();
+  addEventListener(type: string, fn: () => void): void {
+    const list = this.handlers.get(type) ?? [];
+    list.push(fn);
+    this.handlers.set(type, list);
+  }
+  /** A reader's click, or a drag of the handle — from the test's side of the glass. */
+  fire(type: string): void {
+    for (const fn of this.handlers.get(type) ?? []) fn();
+  }
+  /** Drag: the browser sets the value, then tells the page. */
+  drag(value: number): void {
+    this.value = String(value);
+    this.fire('input');
+  }
 }
 
 interface Timer {
   fn: () => void;
   every: number;
   next: number;
+  dead: boolean;
 }
 
-/** What the fake server answers. Returning a promise that never settles is the point. */
-export type Respond = (call: number) => Promise<{ ok: boolean; body: string; headers?: Record<string, string> }>;
+/**
+ * What the fake server answers. Returning a promise that never settles is the point — and the
+ * path is passed because the page now asks two questions: the fleet now, and the day behind it.
+ */
+export type Respond = (
+  call: number,
+  url: string,
+) => Promise<{ ok: boolean; body: string; headers?: Record<string, string> }>;
 
 export interface Page {
   el(id: string): El;
@@ -44,7 +71,12 @@ export interface Page {
   show(): Promise<void>;
 }
 
-export function mountPage(script: string, respond: Respond): Page {
+export interface MountOptions {
+  /** What the reader asked their operating system for. The play button reads it. */
+  reducedMotion?: boolean;
+}
+
+export function mountPage(script: string, respond: Respond, { reducedMotion = false }: MountOptions = {}): Page {
   const els = new Map<string, El>();
   const body = new El();
   const timers: Timer[] = [];
@@ -74,10 +106,12 @@ export function mountPage(script: string, respond: Respond): Page {
     },
   };
 
-  const fetchStub = async (): Promise<{ ok: boolean; headers: { get(n: string): string | null }; text: () => Promise<string> }> => {
+  const fetchStub = async (
+    url: string,
+  ): Promise<{ ok: boolean; headers: { get(n: string): string | null }; text: () => Promise<string> }> => {
     const call = ++page.calls;
     // Default: tarmac answered. A test that wants a stranger on the port says so explicitly.
-    const { ok, body: text, headers = { 'x-tarmac': '1' } } = await respond(call);
+    const { ok, body: text, headers = { 'x-tarmac': '1' } } = await respond(call, url);
     return {
       ok,
       headers: { get: (n: string): string | null => headers[n.toLowerCase()] ?? null },
@@ -86,16 +120,38 @@ export function mountPage(script: string, respond: Respond): Page {
   };
 
   const setIntervalStub = (fn: () => void, every: number): number => {
-    timers.push({ fn, every, next: clock + every });
+    timers.push({ fn, every, next: clock + every, dead: false });
     return timers.length;
   };
 
-  const DateStub = { now: (): number => clock };
+  const clearIntervalStub = (id: number): void => {
+    const t = timers[id - 1];
+    if (t) t.dead = true;
+  };
+
+  // A real Date with a clock the test drives: the page formats the minute it is replaying, so
+  // `new Date(t)` has to be the constructor it is everywhere else.
+  class DateStub extends Date {
+    static override now(): number {
+      return clock;
+    }
+  }
+
+  const matchMediaStub = (query: string): { matches: boolean } => ({
+    matches: reducedMotion && query.includes('reduced-motion'),
+  });
 
   // The script is an IIFE over bare globals; naming them as parameters shadows the real ones,
   // so nothing here can reach the actual document, fetch or clock.
   // eslint-disable-next-line no-new-func
-  new Function('document', 'fetch', 'setInterval', 'Date', script)(document, fetchStub, setIntervalStub, DateStub);
+  new Function('document', 'fetch', 'setInterval', 'clearInterval', 'Date', 'matchMedia', script)(
+    document,
+    fetchStub,
+    setIntervalStub,
+    clearIntervalStub,
+    DateStub,
+    matchMediaStub,
+  );
 
   const settle = async (): Promise<void> => {
     for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
@@ -106,7 +162,7 @@ export function mountPage(script: string, respond: Respond): Page {
   page.advance = async (ms: number): Promise<void> => {
     const target = clock + ms;
     for (;;) {
-      const due = timers.filter((t) => t.next <= target).sort((a, b) => a.next - b.next)[0];
+      const due = timers.filter((t) => !t.dead && t.next <= target).sort((a, b) => a.next - b.next)[0];
       if (!due) break;
       clock = due.next;
       due.next += due.every;

@@ -620,7 +620,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
 </div>
-<script>${SCRIPT}</script>
+<script>${pageScript()}</script>
 </body></html>
 `;
 }
@@ -637,9 +637,15 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
  * polled for a reader who is not there. A poll is the only one of the three where the client
  * decides — so a hidden tab simply stops asking, and a waking one asks at once.
  *
- * The page therefore owns exactly two facts: when it last heard from the server, and whether
- * the last attempt failed. Everything a reader interprets is rendered by `renderLive` on the
- * server, where the suite can reach it.
+ * The page therefore owns exactly two facts about the present: when it last heard from the
+ * server, and whether the last attempt failed. Everything a reader interprets about NOW is
+ * rendered by `renderLive` on the server, where the suite can reach it.
+ *
+ * The replay below is the one exception, and it is one the issue asks for: scrubbing a day
+ * has to be a lookup in samples the page already holds, or every pixel of a drag would be a
+ * request and a `claude agents --json` behind it. So a second, smaller renderer lives in the
+ * browser — fed the same three words, the same three glyphs and the same dial geometry as the
+ * server's, by interpolation rather than by copy, and executed by `test/replay-script`.
  */
 export const REFRESH_MS = 5000;
 
@@ -650,7 +656,25 @@ export const REFRESH_MS = 5000;
  */
 const STALL_MS = 20000;
 
-const SCRIPT = `
+/**
+ * How fast play walks the record — one reading per step, so a serve that has seen ten minutes
+ * plays for a second and a full day for two and a half minutes. It is a step interval and not
+ * a total duration on purpose: the samples are not evenly spaced (a minute the collector
+ * missed is a minute nobody recorded), so a fixed run time would silently speed up over the
+ * gaps and make the day look busier than it was.
+ */
+const PLAY_STEP_MS = 100;
+
+/**
+ * The same walk for a reader who asked their system for less motion. Play is the one thing
+ * here that moves, and the honest answer to that preference is not to take the feature away —
+ * it is to stop flickering ten frames a second at someone who said that hurts.
+ */
+const PLAY_STEP_CALM_MS = 1000;
+
+/** A function, not a constant: it reads the vocabulary and the geometry declared below it. */
+function pageScript(): string {
+  return `
 (function () {
   var live = document.getElementById('live'), age = document.getElementById('age');
   var off = document.getElementById('offline'), why = document.getElementById('why');
@@ -733,11 +757,220 @@ const SCRIPT = `
     });
   }
 
+  // ── the day behind the present ──────────────────────────────────────────────────────
+  //
+  // The record is asked for once, and every drag after that is a lookup in it. The state of
+  // the replay lives here rather than in the fragment for the same reason the tabs do: /live
+  // is swapped wholesale every five seconds, and the reader's hand is not the server's to move.
+
+  var replay = document.getElementById('replay'), scrub = document.getElementById('scrub');
+  var playBtn = document.getElementById('play'), covers = document.getElementById('covers');
+  var rview = document.getElementById('replay-view'), rmap = document.getElementById('replay-map');
+  var rmeta = document.getElementById('replay-meta'), note = document.getElementById('replaying');
+  var atEl = document.getElementById('replay-at'), toLive = document.getElementById('to-live');
+  var record = null, recordAt = 0, at = -1, replaying = false, playing = null;
+
+  // The vocabulary and the geometry, handed over rather than written twice: three words for
+  // the three kinds of missing, three glyphs for the three states, one dial radius.
+  var WHY = ${JSON.stringify(CTX_WHY)}, SHAPE = ${JSON.stringify(SHAPE)};
+  var INTERACTIVE = ${JSON.stringify(INTERACTIVE)};
+  var ENT = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  var R = ${DIAL_R}, C = 2 * Math.PI * R;
+  var STEP = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? ${PLAY_STEP_CALM_MS} : ${PLAY_STEP_MS};
+
+  function esc(v) {
+    if (v === null || v === undefined || v === '') return '<span class="dim">—</span>';
+    return String(v).replace(/[&<>"']/g, function (c) { return ENT[c]; });
+  }
+
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+  function hhmm(t) { var d = new Date(t); return two(d.getHours()) + ':' + two(d.getMinutes()); }
+
+  // A day-long ring can straddle one midnight, and "09:14 – 08:59" reads as a span running
+  // backwards until the older edge says which day it is.
+  function edge(t, ref) {
+    return hhmm(t) + (new Date(t).getDate() === new Date(ref).getDate() ? '' : ' yesterday');
+  }
+
+  // What the range covers, in the record's own terms. Never "a day": that is the size of the
+  // ring, and a serve ten minutes old has seen ten minutes.
+  function coversText() {
+    var n = record.samples.length;
+    if (n === 0) {
+      return 'Nothing recorded yet — this serve started at ' + hhmm(record.since)
+        + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
+    }
+    var last = record.samples[n - 1].t;
+    return 'Covering ' + edge(record.since, last) + ' – ' + hhmm(last)
+      + ', as this serve had it when the page loaded — ' + n + ' reading' + (n === 1 ? '' : 's')
+      // A gap that says it is a gap is not a gap. The handle steps through readings, not
+      // through minutes, and a record with holes in it is not a smooth walk.
+      + (record.missed ? ', ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '')
+      + '. The record keeps each reading, not how old that reading was, so nothing replayed here is dated.';
+  }
+
+  function ready() {
+    var n = record.samples.length;
+    replay.hidden = false;
+    covers.textContent = coversText();
+    scrub.max = String(n === 0 ? 0 : n - 1);
+    scrub.disabled = n === 0;
+    playBtn.disabled = n === 0;
+    if (at >= n) at = -1;
+  }
+
+  // Revealed, not hidden, when the record cannot be had: a scrubber that silently never
+  // appears is indistinguishable from one this build does not have.
+  function noRecord(said) {
+    replay.hidden = false;
+    scrub.disabled = true;
+    playBtn.disabled = true;
+    covers.textContent = said;
+  }
+
+  function load() {
+    return fetch('/api/history', { cache: 'no-store' }).then(function (res) {
+      // The same refusal the fragment makes, for the same reason: what comes back is parsed
+      // and drawn into this page, and loopback proves where bytes came from, not who wrote them.
+      if (!res.headers.get('X-Tarmac')) throw new Error('The answer on this port did not come from tarmac.');
+      return res.text().then(function (body) {
+        if (!res.ok) throw new Error(body.split('\\n').filter(Boolean).join(' ').slice(0, 200));
+        var got = JSON.parse(body);
+        if (!got || !got.samples) throw new Error('the record came back in a shape this page does not know');
+        record = got;
+        recordAt = Date.now();
+        ready();
+      });
+    }).catch(function (e) {
+      noRecord('The record could not be read — ' + String((e && e.message) || e).slice(0, 200));
+    });
+  }
+
+  // One node, out of what the ring holds and nothing more. No name, for any kind of session:
+  // a background session is named after the prompt it was given, and the ring stores none.
+  function nodeOf(x, anchored) {
+    // The map's own rule, in the map's own words: an absent kind is not evidence of an agent,
+    // and a fleet where nothing calls itself interactive is a fleet whose source moved.
+    var role = !anchored || x.kind === null || x.kind === undefined || x.kind === INTERACTIVE ? 'session' : 'agent';
+    var state = SHAPE[x.state] ? x.state : 'unknown';
+    var pct = typeof x.ctxPct === 'number' ? x.ctxPct : null;
+    return '<article class="node" data-role="' + role + '" data-state="' + state + '">'
+      // No halo, ever. It means a frame landed moments ago, which is never true of a sample.
+      + '<div class="dial"><svg viewBox="0 0 80 80" aria-hidden="true">'
+      + '<circle class="track' + (pct === null ? ' unmeasured' : '') + '" cx="40" cy="40" r="' + R + '"/>'
+      + (pct === null ? '' : arcOf(pct))
+      + '</svg><div class="val">'
+      + (pct === null
+        ? '<span class="why"><b>—</b>' + esc(WHY[x.ctxState] || 'no reading') + '</span>'
+        : '<span class="pct">' + pct + '<i>%</i></span>')
+      + '</div></div>'
+      + '<div class="who"><span class="shape" aria-hidden="true">' + SHAPE[state] + '</span>'
+      + '<span class="sr">' + state + '</span>'
+      + '<span class="project">' + esc(x.project) + '</span></div>'
+      + (x.kind === null || x.kind === undefined || x.kind === INTERACTIVE ? '' : '<div class="sub">' + esc(x.kind) + '</div>')
+      + (typeof x.costUsd === 'number' ? '<div class="sub">$' + x.costUsd.toFixed(2) + '</div>' : '')
+      + '</article>';
+  }
+
+  // The server's own arithmetic, off the server's own radius: a fraction of the real
+  // circumference, never pathLength, so a browser that ignores it cannot close every ring
+  // into a full context window.
+  function arcOf(pct) {
+    var filled = (Math.min(100, Math.max(0, pct)) / 100) * C;
+    var r2 = function (n) { return Math.round(n * 100) / 100; };
+    return '<circle class="arc" cx="40" cy="40" r="' + R + '" transform="rotate(-90 40 40)"'
+      + ' stroke-dasharray="' + r2(filled) + ' ' + r2(C - filled) + '"/>';
+  }
+
+  function nodesOf(s) {
+    var anchored = false, html = '', i;
+    for (i = 0; i < s.sessions.length; i++) if (s.sessions[i].kind === INTERACTIVE) anchored = true;
+    // In the order the sample carries. The live map places an agent beside the session it
+    // shares a directory with; the ring holds no directory, so the past is drawn in the order
+    // the fleet was sorted in rather than in a grouping this page would have to invent.
+    for (i = 0; i < s.sessions.length; i++) html += nodeOf(s.sessions[i], anchored);
+    return html;
+  }
+
+  // The fleet of that minute, counted from that minute. A partial sum is never presented as
+  // the total, the same rule the live header follows.
+  function metaOf(s) {
+    var n = s.sessions.length, busy = 0, cost = 0, reporting = 0;
+    for (var i = 0; i < n; i++) {
+      if (s.sessions[i].state === 'busy') busy++;
+      if (typeof s.sessions[i].costUsd === 'number') { cost += s.sessions[i].costUsd; reporting++; }
+    }
+    return n + ' session' + (n === 1 ? '' : 's') + ' · ' + busy + ' busy · '
+      + (reporting === 0 ? 'cost —'
+        : '$' + cost.toFixed(2) + (reporting < n ? ' (' + reporting + '/' + n + ' reporting cost)' : ''));
+  }
+
+  function draw(i) {
+    var s = record && record.samples[i];
+    if (!s) return;
+    at = i;
+    replaying = true;
+    scrub.value = String(i);
+    atEl.textContent = hhmm(s.t);
+    rmeta.textContent = metaOf(s);
+    rmap.innerHTML = nodesOf(s);
+    note.hidden = false;
+    rview.hidden = false;
+    document.body.classList.toggle('replaying', true);
+  }
+
+  function stopPlay() {
+    if (playing) { clearInterval(playing); playing = null; }
+    playBtn.textContent = 'Play';
+  }
+
+  // Back to now, in one gesture, with nothing of the past left behind a hidden attribute.
+  function present() {
+    stopPlay();
+    replaying = false;
+    at = -1;
+    note.hidden = true;
+    rview.hidden = true;
+    rmap.innerHTML = '';
+    document.body.classList.toggle('replaying', false);
+  }
+
+  function play() {
+    if (playing) { stopPlay(); return; }
+    if (!record || record.samples.length === 0) return;
+    // From the top when there is nothing to resume: a play button that ends where it started
+    // has played nothing.
+    draw(at < 0 || at >= record.samples.length - 1 ? 0 : at);
+    playBtn.textContent = 'Pause';
+    playing = setInterval(function () {
+      // It stops at the end rather than looping back: a day that restarts on its own is a
+      // day whose beginning and end are impossible to tell apart.
+      if (at >= record.samples.length - 1) { stopPlay(); return; }
+      draw(at + 1);
+    }, STEP);
+  }
+
+  scrub.addEventListener('input', function () { stopPlay(); draw(Number(scrub.value)); });
+  playBtn.addEventListener('click', play);
+  toLive.addEventListener('click', present);
+
   setInterval(tick, 1000);
   setInterval(function () { if (!document.hidden) poll(); }, ${REFRESH_MS});
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    poll();
+    // The record was answered once, at load. A tab left alone all afternoon holds a record
+    // that stops where the reader's attention did — so it is asked again on the way back in.
+    // Never while a reader is scrubbing (the record under their hand is not ours to swap),
+    // never for one younger than a single slot, and never as a retry: a record that could not
+    // be read said so, and this is not the place to argue with it.
+    if (!replaying && record !== null && Date.now() - recordAt >= record.cadence) load();
+  });
+  load();
 })();
 `;
+}
 
 /**
  * The sort puts busy first, unknown next, idle last. This is where that order is given its

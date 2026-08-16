@@ -13,7 +13,20 @@ import type { Respond } from './page-dom.ts';
 import { health, row } from './fleet-fixtures.ts';
 
 const SCRIPT = scriptOf(renderPage({ rows: [row()], health: health() }));
-const mount = (respond: Respond) => mountPage(SCRIPT, respond);
+
+/**
+ * The page asks two things now: the fleet as it is, and the day behind it. Everything below is
+ * about the first, so the record is answered once — emptily, and honestly shaped — and the
+ * call number these tests reason about goes on counting fleet polls and nothing else.
+ */
+const EMPTY_RECORD = JSON.stringify({ since: 0, cadence: 60_000, samples: [], missed: 0 });
+
+const mount = (respond: Respond) => {
+  let polls = 0;
+  return mountPage(SCRIPT, (_call, url) =>
+    url.indexOf('/api/history') === 0 ? Promise.resolve({ ok: true, body: EMPTY_RECORD }) : respond(++polls, url),
+  );
+};
 const ok = (body: string): Promise<{ ok: boolean; body: string }> => Promise.resolve({ ok: true, body });
 
 test('a good answer is swapped in, and the age goes back to zero', async () => {
