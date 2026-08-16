@@ -9,9 +9,10 @@
 // does, none asked what the frame COSTS.
 //
 // So this file builds the stock the issue describes and times real frames through the real
-// generated script. The budget is what a frame may cost when a sweep is due, and it is an
-// order of magnitude below what a user can perceive: the sweep does not get to be the reason
-// a TUI stutters, whatever it finds to do.
+// generated script. Two ceilings bind them: the budget holds all frames but one when a
+// sweep is due, and the one frame it pardons still may not reach blocking-sweep territory —
+// so the sweep does not get to be the reason a TUI stutters, and one machine stall does not
+// get to fail the guard that exists for the sweep.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,9 +39,14 @@ const COLD = STOCK / 2;
 const BUDGET_MS = 150;
 
 /**
- * The floor of what a BLOCKING sweep costs on this stock (0.6-0.9 s measured, #8): a frame
- * at half that has paid for the backlog, not caught a stall. No frame may reach it, ever,
- * on any machine.
+ * Blocking-sweep territory. The margin is thin and stated: the CHEAPEST regression
+ * measured — the sweep back inline, warm machine — puts the triggering frame at 541 ms,
+ * 8 % over this line; a cold stock pushes it to 0.6-0.9 s. On a machine fast enough to
+ * run the whole sweep under this ceiling the guard against #8 is not here at all — it is
+ * `sweep-detached.test.ts`, whose stubbed one-second sweep is FS-independent.
+ * Calibrated for COLD = 10 000: the sweep's cost is linear in cold snapshots (~43 µs per
+ * unlink here), so shrinking the stock without shrinking this number disarms the assert
+ * below in silence.
  */
 const SWEEP_PAID_MS = 500;
 
@@ -126,12 +132,13 @@ test(`no frame pays for the backlog with ${STOCK} snapshots to sweep`, async (t)
 
   // Two ceilings, because two different things can go wrong (#21 carries the field data).
   // A frame that paid for the BACKLOG — the sweep back inline, the regression #8 forbids —
-  // costs what a blocking sweep costs: 0.6-0.9 s. Half of that is the line no frame may
-  // cross, on any machine. Separately, ONE frame may catch a bounded stall that is not the
-  // sweep's price: a cold frame on this stock measures 270-400 ms with the sweep never
-  // armed, and a mid-run frame on a real terminal stalled at ~340 ms while the 10 000
-  // unlinks ran beside it — isolated, bounded, and indistinguishable from a machine hiccup.
-  // The budget still binds every other frame: a SECOND slow frame is a regime, not a stall.
+  // lands at 541 ms on a warm machine and 0.6-0.9 s on a cold stock: over SWEEP_PAID_MS,
+  // which sits just under the cheapest of those. Separately, ONE frame may catch a bounded
+  // stall that is not the sweep's price: a cold frame on this stock measures 270-400 ms
+  // with the sweep never armed, and a mid-run frame on a real terminal stalled at ~340 ms
+  // while the 10 000 unlinks ran beside it — isolated, bounded, and indistinguishable from
+  // a machine hiccup. The budget still binds every other frame: a SECOND slow frame is a
+  // regime, not a stall.
   assert.ok(
     worst < SWEEP_PAID_MS,
     `a frame paid for the backlog: worst ${worst.toFixed(1)}ms is blocking-sweep territory (>=${SWEEP_PAID_MS}ms) ` +
@@ -140,7 +147,7 @@ test(`no frame pays for the backlog with ${STOCK} snapshots to sweep`, async (t)
   assert.ok(
     allButOne <= BUDGET_MS,
     `more than one frame over budget: ${sorted.filter((f) => f > BUDGET_MS).length} of ${FRAMES} over ${BUDGET_MS}ms ` +
-      `(frames ${frames.map((f) => f.toFixed(0)).join(' ')})`,
+      `(frames ${frames.map((f) => f.toFixed(1)).join(' ')})`,
   );
 
   // …and the budget above is only worth something if the work still gets done. A sweep that
