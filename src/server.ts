@@ -9,6 +9,7 @@ import type { AddressInfo } from 'node:net';
 import { reason, renderLive, renderPage } from './render.ts';
 import type { View } from './render.ts';
 import { SOURCE_PHRASE } from './config.ts';
+import { createHistory, HISTORY_CADENCE_MS } from './history.ts';
 import type { Source } from './config.ts';
 import type { Fleet } from './fleet.ts';
 
@@ -30,10 +31,44 @@ const PAGES = new Map<string, View>([
 
 export interface FleetServerDeps {
   collect: () => Promise<Fleet>;
+  /**
+   * How often the sampler reads the fleet for the record. A parameter for one reason — a
+   * suite that waited a minute per sample would not be run — and deliberately not a flag,
+   * an environment variable or a config key: one minute is the product, and a cadence a
+   * reader could choose is a reader who can make this process spawn `claude` every second.
+   */
+  sampleEveryMs?: number;
 }
 
-export function createFleetServer({ collect }: FleetServerDeps): Server {
-  return http.createServer(async (req, res) => {
+export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS }: FleetServerDeps): Server {
+  // What this serve has already read, kept for a day and never written down. `since` is the
+  // moment this server was made, not the first sample that landed: the span it covers is how
+  // long the process has been up, and an hour of it with nothing in it is a fact worth
+  // showing rather than an empty record pretending to be a young one.
+  const history = createHistory({ since: Date.now(), cadence: sampleEveryMs });
+  // One at a time. `claude agents --json` has a 15s deadline of its own, and a fleet slower
+  // than a slot would otherwise be answered with a queue of processes instead of one missed
+  // minute — the tick that finds a read still running counts the slot and stands down.
+  let reading = false;
+  const sample = async (): Promise<void> => {
+    if (reading) {
+      history.miss(Date.now());
+      return;
+    }
+    reading = true;
+    try {
+      history.record(await collect());
+    } catch {
+      // A collector that throws is the normal weather here: `claude` missing, a laptop that
+      // was asleep. It costs a slot and nothing else — a throw out of this timer would be an
+      // unhandled rejection, and `serve` runs unattended for hours.
+      history.miss(Date.now());
+    } finally {
+      reading = false;
+    }
+  };
+
+  const server = http.createServer(async (req, res) => {
     // Loopback binding alone does not stop a DNS-rebinding page in the user's own browser
     // from reading /api/fleet — which carries cwd paths, session ids and costs.
     if (!isLoopbackHost(req.headers.host)) {
@@ -64,9 +99,31 @@ export function createFleetServer({ collect }: FleetServerDeps): Server {
     // the tabs are plain links, so the view has to be somewhere a reload and a bookmark can
     // both find it. There is no second fragment — one `/live` carries both views, which is
     // what keeps them from ever showing readings of different ages.
-    if (!PAGES.has(url.pathname) && url.pathname !== '/live' && url.pathname !== '/api/fleet') {
+    if (
+      !PAGES.has(url.pathname) &&
+      url.pathname !== '/live' &&
+      url.pathname !== '/api/fleet' &&
+      url.pathname !== '/api/history'
+    ) {
       res.writeHead(404, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
       res.end('not found\n');
+      return;
+    }
+
+    // Served out of the ring, above the collect below and never through it: this route is
+    // what the serve has ALREADY read, and one that collected would let a scrubber spawn
+    // `claude agents --json` on every drag of its handle.
+    if (url.pathname === '/api/history') {
+      res.writeHead(200, {
+        ...IDENTITY,
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+      });
+      // Not indented, alone among the JSON answers here. `/api/fleet` pretty-prints ONE
+      // reading, which a person reads in a terminal; this is up to 1440 of them, where the
+      // indentation is 40% of a body no human will ever open — megabytes of whitespace on
+      // every poll of the replay.
+      res.end(JSON.stringify(history.read()));
       return;
     }
 
@@ -98,6 +155,28 @@ export function createFleetServer({ collect }: FleetServerDeps): Server {
     res.writeHead(200, { ...IDENTITY, 'content-type': type, 'cache-control': 'no-store' });
     res.end(body);
   });
+
+  // The sampler lives exactly as long as the serving does. Started at construction it kept
+  // reading the fleet for a server whose `listen` had refused — a port named on the command
+  // line and taken — into a ring no request could ever reach; and never cleared, it did the
+  // same for every server a suite had closed behind it.
+  //
+  // `close` is the only shutdown this module has. `tarmac serve` itself has no graceful one:
+  // Ctrl-C ends the process, which takes the timer with it. Unref'ing is the belt to that
+  // braces — it keeps the sampler from being a reason `node --test`, or anything else that
+  // embeds this server, stays alive — and it is deliberately not the thing relied on.
+  let sampler: NodeJS.Timeout | null = null;
+  server.on('listening', () => {
+    if (sampler !== null) return;
+    sampler = setInterval(() => void sample(), sampleEveryMs);
+    sampler.unref();
+  });
+  server.on('close', () => {
+    if (sampler === null) return;
+    clearInterval(sampler);
+    sampler = null;
+  });
+  return server;
 }
 
 /**
