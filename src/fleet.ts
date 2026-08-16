@@ -186,6 +186,36 @@ export function buildFleet({
   };
 }
 
+/**
+ * The account's rate limits, as this fleet's sessions report them.
+ *
+ * They belong to the ACCOUNT and not to any one session, but they arrive per snapshot — so the
+ * rows do not carry contradicting numbers, they carry the same number at different ages, and
+ * the youngest is the one still true. Same rule as everything else in this module: the freshest
+ * reading wins.
+ *
+ * A snapshot dated AFTER the clock that read it is refused rather than believed, which is the
+ * verdict `map.ts` reaches on the same value: an NTP correction or a mount whose time runs
+ * ahead does not produce a small age, it produces something that is not an age at all — and
+ * being negative it would beat every real reading for as long as the skew lasts.
+ *
+ * Here rather than in either of its readers: the ring samples it every minute and the page's
+ * header draws it, and two copies of "which session's word counts" is two answers about one
+ * account the day either one is touched.
+ */
+export function accountLimits(rows: FleetRow[]): Record<string, any> | null {
+  let freshest: Record<string, any> | null = null;
+  let youngest = Infinity;
+  for (const r of rows) {
+    if (r.rateLimits === null || r.snapshotAgeMs === null || r.snapshotAgeMs < 0) continue;
+    if (r.snapshotAgeMs < youngest) {
+      freshest = r.rateLimits;
+      youngest = r.snapshotAgeMs;
+    }
+  }
+  return freshest;
+}
+
 // busy first, then unknown (it might be busy), then idle
 const rank = (r: FleetRow): number => (r.busy === true ? 0 : r.busy === null ? 1 : 2);
 const round2 = (n: number): number => Math.round(n * 100) / 100;

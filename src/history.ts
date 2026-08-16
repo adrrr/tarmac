@@ -15,7 +15,8 @@
 
 import { stateOf } from './map.ts';
 import type { NodeState } from './map.ts';
-import type { Fleet, FleetRow, RowCtxState } from './fleet.ts';
+import { accountLimits } from './fleet.ts';
+import type { Fleet, RowCtxState } from './fleet.ts';
 
 /** One sample a minute. Not a setting: see `HISTORY_SLOTS`. */
 export const HISTORY_CADENCE_MS = 60_000;
@@ -148,29 +149,6 @@ function sampleOf({ rows, health }: Fleet): HistorySample {
       ctxPct: r.ctxPct,
       costUsd: r.costUsd,
     })),
-    rateLimits: rateLimitsOf(rows),
+    rateLimits: accountLimits(rows),
   };
-}
-
-/**
- * One account, read at whatever moment each session last drew a frame — so the rows do not
- * carry contradicting numbers, they carry the same number at different ages, and the youngest
- * is the one still true.
- *
- * A snapshot dated AFTER the clock that read it is refused rather than believed, which is the
- * verdict `map.ts` reaches on the same value: an NTP correction or a mount whose time runs
- * ahead does not produce a small age, it produces something that is not an age at all — and
- * being negative it would beat every real reading, every minute, for as long as the skew lasts.
- */
-function rateLimitsOf(rows: FleetRow[]): Record<string, any> | null {
-  let freshest: Record<string, any> | null = null;
-  let youngest = Infinity;
-  for (const r of rows) {
-    if (r.rateLimits === null || r.snapshotAgeMs === null || r.snapshotAgeMs < 0) continue;
-    if (r.snapshotAgeMs < youngest) {
-      freshest = r.rateLimits;
-      youngest = r.snapshotAgeMs;
-    }
-  }
-  return freshest;
 }
