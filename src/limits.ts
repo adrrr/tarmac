@@ -48,6 +48,18 @@ export const LIMIT_WINDOWS: ReadonlyArray<{ key: string; label: string; said: st
   { key: 'seven_day', label: '7d', said: 'seven-day window' },
 ];
 
+/**
+ * How far from the reading a reset may land and still be one.
+ *
+ * The same discipline the percentage gets, one field over: `used_percentage` outside 0-100 is
+ * refused rather than drawn, and a `resets_at` outside a plausible distance is refused for the
+ * same reason. The longest window here is seven days, so nothing this account resets at is more
+ * than eight away — while the two ways this field can move are both far outside that: the same
+ * number in milliseconds lands fifty thousand years out, and `0`, the sentinel an unset field so
+ * often is, lands in 1970. Both were rendered with a straight face ("resets in 19656250d").
+ */
+export const RESET_HORIZON_MS = 8 * 24 * 3600 * 1000;
+
 /** Both windows, always — a window that could not be read is a gauge that says so. */
 export function readLimits(rateLimits: Record<string, any> | null | undefined, now: number): Gauge[] {
   // `rate_limits: []` and `rate_limits: "none"` are legal JSON and not a pair of windows.
@@ -62,6 +74,14 @@ export function readLimits(rateLimits: Record<string, any> | null | undefined, n
     const pct = has && typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? Math.floor(v) : null;
     const why: LimitWhy | null = pct !== null ? null : rateLimits == null || (has && v === null) ? 'absent' : 'drift';
     const at = has && typeof w.resets_at === 'number' && Number.isFinite(w.resets_at) ? w.resets_at : null;
-    return { key, label, said, pct, why, resetsInMs: at === null ? null : at * 1000 - now };
+    const resetsInMs = at === null ? null : at * 1000 - now;
+    return {
+      key,
+      label,
+      said,
+      pct,
+      why,
+      resetsInMs: resetsInMs === null || Math.abs(resetsInMs) > RESET_HORIZON_MS ? null : resetsInMs,
+    };
   });
 }

@@ -558,17 +558,38 @@ test('back to live takes the replayed account down with the rest of the past', a
 });
 
 // The second duplication this feature could not avoid — the gauges are drawn in the browser now
-// — pinned against the server's own render rather than left to drift. Character for character:
-// the words, the dash, the rail and the arithmetic all come from one place, and this is what
-// says so.
-test('a replayed gauge is drawn exactly as the live header would draw it', async () => {
-  const rateLimits = {
-    five_hour: { used_percentage: 63.7, resets_at: (CLOCK + 8040_000) / 1000 },
-    seven_day: { used_percentage: null },
-  };
-  const page = mount(account(0, rateLimits));
-  await page.advance(0);
-  page.el('scrub').drag(0);
-  const server = renderLimits({ rows: [row({ rateLimits, snapshotAgeMs: 1000 })], health: health({ generatedAt: CLOCK }) });
-  assert.equal(page.el('replay-limits').innerHTML, server);
-});
+// — pinned against the server's own render rather than left to drift. Character for character,
+// over the shapes a payload nobody here owns can actually arrive in: the words, the dash, the
+// rail and the arithmetic all come from one place, and this is what says so.
+//
+// One well-formed object would not have said it. The first version of this mirror answered
+// `no reading` where the server answered `schema drift` for every rate_limits that was present
+// but not a pair of windows — an array among them, which `extractTelemetry` lets through — so
+// the same minute read one way live and the opposite way replayed.
+for (const [what, rateLimits] of [
+  ['both windows, one of them due to reset', { five_hour: { used_percentage: 63.7, resets_at: (CLOCK + 8040_000) / 1000 }, seven_day: { used_percentage: 42 } }],
+  ['a window that has already reset', { five_hour: { used_percentage: 90, resets_at: (CLOCK - 1_200_000) / 1000 } }],
+  ['nothing at all', null],
+  ['an empty object', {}],
+  ['an array', [] as any],
+  ['an array of windows', [{ used_percentage: 9 }] as any],
+  ['a string', 'none' as any],
+  ['a number', 42 as any],
+  ['a percentage not taken yet', { five_hour: { used_percentage: null, resets_at: (CLOCK + 60_000) / 1000 } }],
+  ['a percentage of the wrong type', { five_hour: { used_percentage: '17%' } }],
+  ['a percentage out of range', { five_hour: { used_percentage: 101 } }],
+  ['a reset in milliseconds', { five_hour: { used_percentage: 17, resets_at: CLOCK } }],
+  ['a reset at the epoch', { five_hour: { used_percentage: 17, resets_at: 0 } }],
+  ['a window that is not an object', { five_hour: 'soon' as any }],
+] as Array<[string, any]>) {
+  test(`a replayed gauge is drawn exactly as the live header would draw it — ${what}`, async () => {
+    const page = mount(account(0, rateLimits));
+    await page.advance(0);
+    page.el('scrub').drag(0);
+    const server = renderLimits({
+      rows: [row({ rateLimits, snapshotAgeMs: 1000 })],
+      health: health({ generatedAt: CLOCK }),
+    });
+    assert.equal(page.el('replay-limits').innerHTML, server);
+  });
+}

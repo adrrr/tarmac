@@ -102,6 +102,25 @@ test('a reset that is not a number is no reset, and never NaN milliseconds', () 
   }
 });
 
+// The same discipline the percentage gets, one field over. A reset is an epoch in SECONDS, and
+// the shape is someone else's to move: read as seconds, the same number in milliseconds lands
+// fifty thousand years out, and `0` — the sentinel an unset field so often is — lands in 1970.
+// Both rendered with a straight face ("resets in 19656250d", "reset was due 19675d ago"). The
+// longest window here is seven days, so anything outside eight is not this account's reset.
+test('a reset nowhere near the reading that carried it is no reset at all', () => {
+  for (const at of [NOW, 0, -1, 1e15]) {
+    const [five] = readLimits({ five_hour: { used_percentage: 17, resets_at: at } }, NOW);
+    assert.equal(five.resetsInMs, null, String(at));
+    assert.equal(five.pct, 17, 'and the percentage it stands beside is untouched');
+  }
+});
+
+test('a reset inside the horizon is kept, at either end of it', () => {
+  const week = 7 * 24 * 3600;
+  assert.equal(readLimits({ five_hour: { used_percentage: 1, resets_at: NOW / 1000 + week } }, NOW)[0].resetsInMs, week * 1000);
+  assert.equal(readLimits({ five_hour: { used_percentage: 1, resets_at: NOW / 1000 - week } }, NOW)[0].resetsInMs, -week * 1000);
+});
+
 // A measured window is a measured window: `why` exists to name a missing number, and a page
 // that reads it without checking `pct` first must not find a word there.
 test('a window that could be read carries no reason for not being read', () => {
@@ -115,5 +134,10 @@ test('rate limits that are not an object of windows are drift, not a crash', () 
     const gauges = readLimits(rl, NOW);
     assert.equal(gauges.length, 2, JSON.stringify(rl));
     assert.equal(gauges[0].pct, null, JSON.stringify(rl));
+    // The word, and not merely the absence of a number: rate_limits carrying something that is
+    // not a pair of windows is a schema that moved, and saying "no reading" of it would be the
+    // page reporting an account nobody measured. The page script draws these too, and this is
+    // the half of that agreement the server owns.
+    assert.equal(gauges[0].why, 'drift', JSON.stringify(rl));
   }
 });

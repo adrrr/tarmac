@@ -12,7 +12,7 @@ import type { Config, Source } from './config.ts';
 import { buildMap, INTERACTIVE, stateOf } from './map.ts';
 import type { MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
-import { LIMIT_WINDOWS, readLimits } from './limits.ts';
+import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
 import type { Gauge } from './limits.ts';
 import { accountLimits } from './fleet.ts';
 import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
@@ -1095,9 +1095,16 @@ function pageScript(view: View): string {
       var pct = has && typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? Math.floor(v) : null;
       var at = has && typeof w.resets_at === 'number' && Number.isFinite(w.resets_at) ? w.resets_at : null;
       var ms = at === null ? null : at * 1000 - now;
+      // The server's horizon, off the server's own number: a reset further from the reading than
+      // the longest window can be is not this account's reset, whatever it says.
+      if (ms !== null && Math.abs(ms) > ${RESET_HORIZON_MS}) ms = null;
       // Presence, never value: a window that is there and null is a number not taken yet, and
       // one that is gone is a schema that moved. Same discriminant as everywhere else here.
-      var why = pct !== null ? null : (!ok || (has && v === null)) ? 'absent' : 'drift';
+      // Read off rl and NOT off ok: rate_limits carrying something that is not a pair of
+      // windows — an array, which the snapshot reader lets through — is a schema that moved,
+      // not an account nobody measured. Written as !ok, this said the opposite of the server
+      // about the very same minute.
+      var why = pct !== null ? null : (rl === null || rl === undefined || (has && v === null)) ? 'absent' : 'drift';
       html += '<div class="gauge"><span class="lbl" aria-hidden="true">' + LIMITS[i].label + '</span>'
         + '<span class="sr">' + LIMITS[i].said + '</span>'
         + (pct === null
