@@ -801,6 +801,7 @@ function pageScript(view: View): string {
 (function () {
   var live = document.getElementById('live'), age = document.getElementById('age');
   var off = document.getElementById('offline'), why = document.getElementById('why');
+  var limits = document.getElementById('limits');
   var last = Date.now(), failing = false, inFlight = false, since = 0, gen = 0;
 
   function ago(ms) {
@@ -862,6 +863,15 @@ function pageScript(view: View): string {
         if (body.trim() === '') throw new Error('The server answered with an empty page.');
         if (!mineStill()) return;
         live.innerHTML = body;
+        // The account's gauges, lifted out of the fragment and into the header where they
+        // belong. Here rather than in the fragment's own place on the page because a limit is
+        // the account's and not a session's; here rather than in the shell alone because the
+        // NUMBERS arrive with the fleet, and a five-hour window that stopped counting down
+        // would be the one thing on this page still claiming to be about now.
+        // Inside the accepted-answer branch on purpose: a body that was refused is a body
+        // nothing is read out of, the account's numbers included.
+        var src = document.getElementById('limits-src');
+        if (src) limits.innerHTML = src.innerHTML;
         last = Date.now();
         failing = false;
       });
