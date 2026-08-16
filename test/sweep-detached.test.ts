@@ -10,8 +10,11 @@
 // the concurrency case a fast sweep can never build.
 //
 // Stubbing `find` is legitimate here and nowhere else in this suite: the wrapper calls it
-// unqualified, by design, so the PATH is part of its contract with the machine. The stub
-// delegates to the real one, so what is deleted is still decided by the real expression.
+// unqualified, by design, so the PATH is part of its contract with the machine. The delaying
+// stubs delegate to the real one, so what is deleted is still decided by the real expression;
+// the refusing ones (#6) stand in for the two states no permission bit can build — a `touch`
+// that cannot stamp, a `find` with no `-mmin` to answer — and there the pin is that NOTHING
+// is decided: no sweep starts, nothing reaches stderr.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
