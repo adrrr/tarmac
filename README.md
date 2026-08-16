@@ -91,7 +91,9 @@ In the header are the account's **two rate-limit gauges** — the five-hour wind
 seven-day one, each with its used percentage and its reset spelled as the time left. They are
 page-level because that is what a rate limit is: one account, which every session below is
 spending from. A fleet whose snapshots carry no limits says `— no reading` on a dotted rail
-rather than drawing a window at 0%.
+rather than drawing a window at 0%, and a reading past the freshness threshold is dated
+`! 40m ago` — the countdown is recomputed every poll, the percentage is as old as its snapshot,
+and a page that showed both as now would be lying with the moving one.
 
 ### The map
 

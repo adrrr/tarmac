@@ -25,7 +25,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   own rule, with a snapshot dated after the clock that read it refused rather than believed.
   Nothing measured is never a zero: no snapshot carrying limits at all, and a window whose
   percentage is present and null, both read `— no reading` on a dotted rail; a window that is
-  gone or holding something that is not a percentage reads `— schema drift`. The gauges live
+  gone or holding something that is not a percentage reads `— schema drift`; and a reset further
+  from the reading than the longest window can be — the same field in milliseconds, or the `0`
+  an unset field so often is — is refused rather than rendered as `resets in 19656250d`. A
+  reading past the freshness threshold is dated `! 40m ago`, once for the pair: the percentage is
+  as old as its snapshot while the countdown is recomputed every poll, and undated the two would
+  read as one moment. The gauges live
   in the shell so a poll cannot move them, and their numbers ride up out of the fragment on
   every swap so they are never as old as the tab. On replay they come down and sit with the
   fleet they belong to, under the banner that dates it, counted from the sample's own minute —
