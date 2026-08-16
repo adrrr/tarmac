@@ -47,6 +47,20 @@ test('the rate limits travel with the sample, from the freshest reading that car
   assert.equal(h.read().samples[0].rateLimits!.five_hour.used_percentage, 42);
 });
 
+// The same value `map.ts` refuses to call an age: a snapshot dated after the clock that read
+// it (an NTP correction, a mount running ahead) is not the youngest reading, and letting it
+// win would misreport the account's limits for every sample until the skew clears.
+test('a snapshot dated in the future does not get to be the freshest reading', () => {
+  const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });
+  h.record(
+    fleet([
+      row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3 } } }),
+      row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91 } } }),
+    ]),
+  );
+  assert.equal(h.read().samples[0].rateLimits!.five_hour.used_percentage, 91);
+});
+
 test('a fleet whose snapshots carry no rate limits samples them as absent, never as zero', () => {
   const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });
   h.record(fleet());
@@ -68,11 +82,36 @@ test('the ring stops at a day of minutes and drops the oldest one', () => {
 test('a failed collection is a counted slot, not a missing one and not a sample', () => {
   const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });
   h.record(fleet());
-  h.miss();
-  h.miss();
+  h.miss(NOW + 1);
+  h.miss(NOW + 2);
   const { samples, missed } = h.read();
   assert.equal(samples.length, 1);
   assert.equal(missed, 2);
+});
+
+// `since` is what a page reads to say what it covers, so it may not go on naming a moment the
+// record no longer holds. A serve open for 34 hours covers 24 of them.
+test('once the oldest minute has fallen off, `since` is the oldest minute still held', () => {
+  const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });
+  for (let i = 0; i < HISTORY_SLOTS; i++) h.record(fleet([row()], NOW + i));
+  assert.equal(h.read().since, NOW, 'a full ring has dropped nothing, and covers everything since the start');
+  h.record(fleet([row()], NOW + HISTORY_SLOTS));
+  assert.equal(h.read().since, NOW + 1, 'the first minute is gone, and `since` stops claiming it');
+});
+
+// 1440 SLOTS, not 1440 samples: a minute the fleet could not be read is a minute of the day
+// this record covers, and it ages out with the rest. `missed` counted for the life of the
+// process while `since` covered a day would be two spans in one payload.
+test('a missed slot takes its place in the ring, and ages out of it', () => {
+  const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });
+  h.miss(NOW);
+  for (let i = 1; i < HISTORY_SLOTS; i++) h.record(fleet([row()], NOW + i));
+  assert.equal(h.read().missed, 1);
+  assert.equal(h.read().samples.length, HISTORY_SLOTS - 1, 'the failure took a slot from the samples');
+  h.record(fleet([row()], NOW + HISTORY_SLOTS));
+  const after = h.read();
+  assert.equal(after.missed, 0, 'a day later it is no longer part of what the record covers');
+  assert.equal(after.since, NOW + 1);
 });
 
 // What the page reads to say what it covers — the reason no flag needs to.

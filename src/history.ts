@@ -53,16 +53,26 @@ export interface HistorySample {
 }
 
 export interface HistoryPayload {
+  /**
+   * The oldest minute this record still covers — the serve's own start until the ring has
+   * dropped something, and the oldest slot it holds from then on. It is what a page reads to
+   * say what it covers, so it may not go on naming a moment the record has since forgotten.
+   */
   since: number;
   cadence: number;
   samples: HistorySample[];
-  /** Slots a reading was due for and never filled. A gap that says so is not a gap. */
+  /**
+   * Slots inside that same span a reading was due for and never filled. A gap that says it is
+   * a gap is not a gap — and counted for the life of the process instead, it would be a
+   * second span in a payload that already has one.
+   */
   missed: number;
 }
 
 export interface FleetHistory {
   record(fleet: Fleet): void;
-  miss(): void;
+  /** `t` is the tick's own clock: a reading that failed left no reading to date the slot by. */
+  miss(t: number): void;
   read(): HistoryPayload;
 }
 
@@ -72,23 +82,47 @@ export interface HistoryOptions {
   cadence: number;
 }
 
+/** A minute of the day this record covers: the reading taken, or the fact that none was. */
+interface Slot {
+  t: number;
+  sample: HistorySample | null;
+}
+
 export function createHistory({ since, cadence }: HistoryOptions): FleetHistory {
-  const samples: HistorySample[] = [];
-  let missed = 0;
+  const slots: Slot[] = [];
+  // Whether anything has aged out yet, which is the only thing that can move `since` off the
+  // moment the serve started. A ring that is exactly full has dropped nothing.
+  let dropped = false;
+
+  const push = (slot: Slot): void => {
+    slots.push(slot);
+    // Trimmed on the way in and never on the way out: the array's own length is the
+    // guarantee, so no reader has to be told the ring is bounded for it to be true.
+    if (slots.length > HISTORY_SLOTS) {
+      slots.splice(0, slots.length - HISTORY_SLOTS);
+      dropped = true;
+    }
+  };
 
   return {
     record(fleet: Fleet): void {
-      samples.push(sampleOf(fleet));
-      // Trimmed on the way in and never on the way out: the array's own length is the
-      // guarantee, so no reader has to be told the ring is bounded for it to be true.
-      if (samples.length > HISTORY_SLOTS) samples.splice(0, samples.length - HISTORY_SLOTS);
+      const sample = sampleOf(fleet);
+      push({ t: sample.t, sample });
     },
-    miss(): void {
-      missed++;
+    miss(t: number): void {
+      push({ t, sample: null });
     },
-    // A copy: this ring is the only one there is, and no file to rebuild it from. A reader
-    // that spliced what it was handed would edit the record itself.
-    read: (): HistoryPayload => ({ since, cadence, samples: [...samples], missed }),
+    // Rebuilt per read, and never the ring itself: this is the only copy there is and no file
+    // to restore it from, so a reader that spliced what it was handed would edit the record.
+    read: (): HistoryPayload => {
+      const samples = slots.filter((s) => s.sample !== null).map((s) => s.sample!);
+      return {
+        since: dropped ? slots[0].t : since,
+        cadence,
+        samples,
+        missed: slots.length - samples.length,
+      };
+    },
   };
 }
 
@@ -121,15 +155,22 @@ function sampleOf({ rows, health }: Fleet): HistorySample {
 /**
  * One account, read at whatever moment each session last drew a frame — so the rows do not
  * carry contradicting numbers, they carry the same number at different ages, and the youngest
- * is the one still true. A row with no snapshot has no age and cannot be the youngest.
+ * is the one still true.
+ *
+ * A snapshot dated AFTER the clock that read it is refused rather than believed, which is the
+ * verdict `map.ts` reaches on the same value: an NTP correction or a mount whose time runs
+ * ahead does not produce a small age, it produces something that is not an age at all — and
+ * being negative it would beat every real reading, every minute, for as long as the skew lasts.
  */
 function rateLimitsOf(rows: FleetRow[]): Record<string, any> | null {
-  let freshest: FleetRow | null = null;
+  let freshest: Record<string, any> | null = null;
+  let youngest = Infinity;
   for (const r of rows) {
-    if (r.rateLimits === null) continue;
-    if (freshest === null || age(r) < age(freshest)) freshest = r;
+    if (r.rateLimits === null || r.snapshotAgeMs === null || r.snapshotAgeMs < 0) continue;
+    if (r.snapshotAgeMs < youngest) {
+      freshest = r.rateLimits;
+      youngest = r.snapshotAgeMs;
+    }
   }
-  return freshest === null ? null : freshest.rateLimits;
+  return freshest;
 }
-
-const age = (r: FleetRow): number => r.snapshotAgeMs ?? Infinity;

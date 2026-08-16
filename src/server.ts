@@ -52,7 +52,7 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS 
   let reading = false;
   const sample = async (): Promise<void> => {
     if (reading) {
-      history.miss();
+      history.miss(Date.now());
       return;
     }
     reading = true;
@@ -62,17 +62,11 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS 
       // A collector that throws is the normal weather here: `claude` missing, a laptop that
       // was asleep. It costs a slot and nothing else — a throw out of this timer would be an
       // unhandled rejection, and `serve` runs unattended for hours.
-      history.miss();
+      history.miss(Date.now());
     } finally {
       reading = false;
     }
   };
-  const sampler = setInterval(() => void sample(), sampleEveryMs);
-  // The sampler is not a reason to stay alive: unref'd it never holds `node --test` open,
-  // and it never argues with a Ctrl-C. Unref alone is not enough, though — an interval that
-  // is never cleared keeps SPAWNING for a server nobody can reach any more, so it comes off
-  // with the server it belongs to.
-  sampler.unref();
 
   const server = http.createServer(async (req, res) => {
     // Loopback binding alone does not stop a DNS-rebinding page in the user's own browser
@@ -125,7 +119,11 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS 
         'content-type': 'application/json; charset=utf-8',
         'cache-control': 'no-store',
       });
-      res.end(JSON.stringify(history.read(), null, 2));
+      // Not indented, alone among the JSON answers here. `/api/fleet` pretty-prints ONE
+      // reading, which a person reads in a terminal; this is up to 1440 of them, where the
+      // indentation is 40% of a body no human will ever open — megabytes of whitespace on
+      // every poll of the replay.
+      res.end(JSON.stringify(history.read()));
       return;
     }
 
@@ -158,9 +156,26 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS 
     res.end(body);
   });
 
-  // The only shutdown this module has: `close` is what the CLI's Ctrl-C and every test that
-  // starts a server go through, and past it there is nobody left to serve the record to.
-  server.on('close', () => clearInterval(sampler));
+  // The sampler lives exactly as long as the serving does. Started at construction it kept
+  // reading the fleet for a server whose `listen` had refused — a port named on the command
+  // line and taken — into a ring no request could ever reach; and never cleared, it did the
+  // same for every server a suite had closed behind it.
+  //
+  // `close` is the only shutdown this module has. `tarmac serve` itself has no graceful one:
+  // Ctrl-C ends the process, which takes the timer with it. Unref'ing is the belt to that
+  // braces — it keeps the sampler from being a reason `node --test`, or anything else that
+  // embeds this server, stays alive — and it is deliberately not the thing relied on.
+  let sampler: NodeJS.Timeout | null = null;
+  server.on('listening', () => {
+    if (sampler !== null) return;
+    sampler = setInterval(() => void sample(), sampleEveryMs);
+    sampler.unref();
+  });
+  server.on('close', () => {
+    if (sampler === null) return;
+    clearInterval(sampler);
+    sampler = null;
+  });
   return server;
 }
 

@@ -322,6 +322,11 @@ session ids, working directories and costs. So the record starts when the serve 
 `since` says so — a page that needs to state what it covers reads that field rather than
 assuming a full day. Restarting `serve` is how you clear it.
 
+`since` is the oldest minute the record still **holds**, not the oldest it ever held: for the
+first day it is the moment `serve` started, and from the first eviction on it moves with the
+ring. A serve that has been up 34 hours covers 24 of them and says 24 — the alternative is a
+page that reads `since`, promises a day and a half, and shows a day.
+
 **A sample carries no names.** A background session is named after the prompt it was given
 (see [the map](#the-map)), which the live surfaces show because someone is looking at their own
 screen in the present tense. A day of them, retained by a process and served on a route, is a
@@ -331,7 +336,9 @@ there, with its `sid`, its project and its state; it is the field that is missin
 **A reading that failed is a counted slot.** `missed` is how many minutes were due and never
 filled — a collector that threw, or a fleet still being read when the next tick came (only one
 read runs at a time, so a slow `claude agents --json` costs a minute, never a queue of
-processes). A gap that says it is a gap is not a gap.
+processes). A gap that says it is a gap is not a gap. It counts slots inside the span `since`
+names, not since the process booted: the 1440 slots hold minutes, and a minute nobody could
+read is one of them — it takes a slot from the samples and ages out with them.
 
 **One minute and one day are the product.** There is no flag, no environment variable and no
 config key for the cadence or the retention, and none is planned: a cadence knob is a way to

@@ -692,6 +692,32 @@ test('a tick that finds the previous reading still running is a missed slot, not
   );
 });
 
+// A server object that was made and never bound serves nobody, so there is nobody to keep a
+// record for. The sampler starting at construction meant a `createFleetServer` whose `listen`
+// refused — a port named on the command line that is taken — went on spawning `claude agents
+// --json` once a minute into a ring no request could ever reach.
+test('a server that never listened never samples, and starts when it begins serving', async () => {
+  let collected = 0;
+  const counting = async (): Promise<Fleet> => {
+    collected++;
+    return { rows: [row()], health: health() };
+  };
+  const server = createFleetServer({ collect: counting, sampleEveryMs: 20 });
+  await sleep(200);
+  assert.equal(collected, 0, 'ten slots went by and nothing was read');
+  await new Promise<void>((r) => {
+    server.listen(0, '127.0.0.1', () => r());
+  });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    await historyUntil(base, (h) => h.samples.length >= 1, 'the first sample once it was serving');
+  } finally {
+    await new Promise<void>((r) => {
+      server.close(() => r());
+    });
+  }
+});
+
 // The timer is unref'd — it may not be what keeps `node --test` or a Ctrl-C'd serve alive —
 // but an unref'd timer that is never cleared still SPAWNS: a suite that starts and stops
 // servers would leave a sampler per test reading the fleet behind it.
