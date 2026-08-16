@@ -12,6 +12,25 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A scrubber under the map that replays the day the serve has seen.** Drag it and the dials
+  render the fleet as it was at that minute; a play button walks the readings, one every 100ms
+  — one a second for a reader who asked their system for less motion — and stops at the end
+  rather than looping. The record comes from `GET /api/history`, fetched once at load, so a
+  drag is a lookup in samples the page already holds and not a request, let alone a `claude
+  agents --json`, per position. A replay is never allowed to pass for the present: a sticky
+  banner names the minute it is showing and carries one button back to live, the live fragment
+  — map, totals, timestamp and warnings, all of them about now — is hidden while the past is
+  up, **halos stay off** because a sample never "just landed", and a session absent from a
+  minute is absent from the map rather than a dial at zero. Agents replay as the ring holds
+  them: kind and numbers, no name. The live poll keeps running underneath, so returning to the
+  present is instant and a page left on replay does not rot; a tab that has been away picks up
+  the minutes it missed. The range says what it really covers — a serve ten minutes old offers
+  ten minutes — along with how many minutes have no reading, and it says plainly that the
+  record keeps each reading and not how old that reading was, so nothing replayed is dated.
+  All of it lives in the page shell rather than in the polled fragment, which is what keeps a
+  refresh from dragging the reader back to the present every five seconds. With JavaScript off
+  there is no scrubber at all. (#36)
+
 - **A day of what `serve` already read, on `GET /api/history`.** The dashboard read the whole
   fleet on every request and forgot it on the next one; it now also reads it on a timer of its
   own — one sample a minute into a ring of 1440 slots, after which the oldest minute falls off

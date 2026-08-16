@@ -101,6 +101,13 @@ sharing its working directory, because the working directory is the only thing t
 share; nothing is nested, and no edge is drawn for a relationship the sources do not publish.
 Details in [the manual](docs/MANUAL.md#the-map).
 
+Under the map is a **scrubber over the day this serve has seen**. Drag it and the dials render
+the fleet as it was at that minute; press play and the day walks past. The record is fetched
+once, so scrubbing asks the server nothing. A replay never poses as the present: a banner names
+the minute and holds the way back, the live fragment is hidden while it is up, halos stay off
+because a sample never "just landed", and a session absent from a minute is absent from the
+map. The range says what it truly covers — a serve ten minutes old offers ten minutes.
+
 ## Why it does not break
 
 The usual ways to watch a Claude Code fleet read something Claude Code never promised would
