@@ -40,6 +40,23 @@ test('the controls ship hidden, so a page with no script shows no dead handle', 
   }
 });
 
+// Found by opening the page: `hidden` is a UA rule of `display:none`, and any `display` a
+// stylesheet gives the same element beats it. Both replay containers are laid out with flex,
+// so both came up on load — a banner announcing a replay nobody had asked for, over a live
+// map, which is this feature's own worst failure shipped as its default state.
+test('a container the script hides is never given a display that outranks hidden', () => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(page())![1];
+  let checked = 0;
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const [, selector, declarations] = m;
+    if (!/display\s*:/.test(declarations)) continue;
+    if (!/\.replay\b|\.replaying-note\b/.test(selector)) continue;
+    checked++;
+    assert.match(selector, /:not\(\[hidden\]\)/, `${selector.trim()} would show while hidden`);
+  }
+  assert.ok(checked > 0, 'the rules this is about were found at all');
+});
+
 // The replay is a claim about the past, and the loudest thing on the page has to say so —
 // with the minute it is showing, and the way back, in the same breath.
 test('the banner names the replay and carries the way back to live', () => {
@@ -49,11 +66,12 @@ test('the banner names the replay and carries the way back to live', () => {
   assert.match(banner.slice(0, 400), /id="to-live"/, 'and one gesture returns to the present');
 });
 
-// The live map and the replayed one occupy the same place. While the past is on screen the
-// present one is not — two maps of two different moments, stacked, is the confusion this
-// whole feature has to avoid.
-test('a replaying page hides the live map, and only on the map view is any of it shown', () => {
+// The whole fragment, and not merely its map. Hiding the map alone left the LIVE header —
+// "4 sessions · 2 busy · $31.60 · 2026-08-16T09:50:14Z" — sitting directly above the replayed
+// one, so the page showed two totals of two different moments and dated the pair with the
+// present. Found by opening it; the warnings above them are about the present too.
+test('a replaying page hides the whole live fragment, not just its map', () => {
   const html = page();
-  assert.match(html, /body\.replaying \.view-map \{ display:none/);
+  assert.match(html, /body\.replaying #live \{ display:none/);
   assert.match(html, /body\[data-view="table"\] #replay(-view)?[^{]*\{ display:none/);
 });

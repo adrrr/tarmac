@@ -241,6 +241,19 @@ test('a poll landing mid-replay does not repaint what the reader is holding', as
   assert.equal(page.el('replaying').hidden, false, 'and the page still says it is replaying');
 });
 
+// The handle stays where it was let go of, so what it shows and what play would do next are
+// the same thing. Resetting the position while leaving the handle at half past two made the
+// next press of play jump to the start for no reason the page had given.
+test('leaving the replay leaves the handle where the reader left it, and play resumes there', async () => {
+  const page = mount(record(10, (i) => [session({ project: `p${i}` })]));
+  await page.advance(0);
+  page.el('scrub').drag(6);
+  page.el('to-live').fire('click');
+  assert.equal(page.el('scrub').value, '6');
+  page.el('play').fire('click');
+  assert.match(page.el('replay-map').innerHTML, /p6/, 'it picked up where the handle was');
+});
+
 // ── play ────────────────────────────────────────────────────────────────────────────────
 
 test('play walks the record forward and stops at the end rather than looping', async () => {

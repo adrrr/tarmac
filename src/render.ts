@@ -465,10 +465,17 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      swapped into innerHTML every five seconds, and a handle inside it would be dragged back
      to the present by a poll nobody asked for. */
   body[data-view="table"] #replay, body[data-view="table"] #replay-view { display:none; }
-  /* One map at a time. The past and the present stacked, both drawn as dials, is the exact
-     confusion this feature exists to avoid. */
-  body.replaying .view-map { display:none; }
-  .replay { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-top:1rem;
+  /* One fleet at a time, and the whole fragment rather than only its map: the fragment's
+     header is the LIVE count, cost and timestamp, and hiding the map alone left it sitting
+     directly above the replayed one — two totals of two different moments, the pair dated
+     with the present. The warnings above them are about the present too. The failure banner
+     is in the shell, so a refresh that breaks mid-replay still says so. */
+  body.replaying #live { display:none; }
+  /* Both of these are laid out with flex, and both are hidden by the attribute until a script
+     raises them — so the display is refused to a hidden one explicitly. The hidden attribute
+     is only a UA rule of display:none, and any display a stylesheet gives the same element
+     beats it: unguarded, this page came up announcing a replay nobody had asked for. */
+  .replay:not([hidden]) { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-top:1rem;
             padding-top:.7rem; border-top:1px solid var(--line); }
   .replay button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent;
             border:1px solid var(--line); border-radius:99px; padding:.15rem .8rem; cursor:pointer; }
@@ -483,7 +490,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   /* Sticky, because the handle is at the bottom of a map that can be taller than the
      viewport: a reader dragging with the "this is the past" banner scrolled off the top is
      a reader the banner is not warning. */
-  .replaying-note { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap;
+  .replaying-note:not([hidden]) { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap;
             position:sticky; top:0; z-index:1; }
   .replaying-note button { font:inherit; font-size:.75rem; font-weight:600; color:inherit;
             background:transparent; border:1px solid currentColor; border-radius:99px;
@@ -926,10 +933,11 @@ function pageScript(): string {
   }
 
   // Back to now, in one gesture, with nothing of the past left behind a hidden attribute.
+  // The position is NOT reset: the handle stays where the reader let go of it, so what it
+  // shows and where play would pick up are the same place.
   function present() {
     stopPlay();
     replaying = false;
-    at = -1;
     note.hidden = true;
     rview.hidden = true;
     rmap.innerHTML = '';
