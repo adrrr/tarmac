@@ -129,7 +129,7 @@ table is in [`docs/MANUAL.md`](docs/MANUAL.md).
 | Command | What it does | Options |
 |---|---|---|
 | `tarmac list` | one-shot fleet table — the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
-| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin` |
+| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin` |
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
