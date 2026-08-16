@@ -458,6 +458,37 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   body[data-view="table"] .view-map { display:none; }
   body[data-view="map"] .view-table { display:none; }
 
+  /* ── the scrubber ────────────────────────────────────────────────────────────────────
+     Under the map, and only under the map: the record holds what the MAP draws, so a
+     scrubber over the table would offer a drag onto rows it cannot fill.
+     Everything here lives in the shell for the same reason the tabs do: the /live fragment is
+     swapped into innerHTML every five seconds, and a handle inside it would be dragged back
+     to the present by a poll nobody asked for. */
+  body[data-view="table"] #replay, body[data-view="table"] #replay-view { display:none; }
+  /* One map at a time. The past and the present stacked, both drawn as dials, is the exact
+     confusion this feature exists to avoid. */
+  body.replaying .view-map { display:none; }
+  .replay { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-top:1rem;
+            padding-top:.7rem; border-top:1px solid var(--line); }
+  .replay button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent;
+            border:1px solid var(--line); border-radius:99px; padding:.15rem .8rem; cursor:pointer; }
+  .replay input[type="range"] { flex:1; min-width:10rem; accent-color:var(--dim); }
+  .replay input[type="range"]:disabled { opacity:.4; }
+  /* The two things the reader has to be able to read while dragging: the minute under the
+     handle, and what the whole range covers. Tabular, so neither jitters as it counts. */
+  #replay-at { font-variant-numeric:tabular-nums; font-weight:600; }
+  .replay .covers { flex-basis:100%; color:var(--dim); font-size:.75rem; }
+  /* The banner wears the warning style on purpose: a page showing a past minute as though it were the
+     fleet is the worst thing this dashboard could do, so it wears the loudest thing it has. */
+  /* Sticky, because the handle is at the bottom of a map that can be taller than the
+     viewport: a reader dragging with the "this is the past" banner scrolled off the top is
+     a reader the banner is not warning. */
+  .replaying-note { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap;
+            position:sticky; top:0; z-index:1; }
+  .replaying-note button { font:inherit; font-size:.75rem; font-weight:600; color:inherit;
+            background:transparent; border:1px solid currentColor; border-radius:99px;
+            padding:.05rem .7rem; cursor:pointer; }
+
   /* ── the map ─────────────────────────────────────────────────────────────────────────
      One node per session. The arc is the context, its weight is how much that reading may
      be believed, and the halo — the only thing on this page that moves — says a frame
@@ -566,8 +597,29 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   <strong>&#9888; refresh failing</strong> — nothing below has moved since the time in the header.
   <span id="why"></span>
 </div>
+<!-- The one claim on this page that could be a lie, so it is the loudest element on it and it
+     carries the minute it is showing. Hidden until a script raises it: with no script there
+     is no replay, and a banner about one would be a warning about nothing. -->
+<div class="warn replaying-note" id="replaying" hidden>
+  <strong>&#9209; replaying <span id="replay-at"></span></strong>
+  <span>&mdash; a reading from the past, not the fleet now.</span>
+  <button type="button" id="to-live">Back to live</button>
+</div>
 <noscript><div class="warn">JavaScript is off, so this page will not refresh itself. Reload it to see the fleet now.</div></noscript>
 <div id="live">${renderLive(fleet)}</div>
+<!-- Where the past is drawn: the shell's own map, in the place the live one occupies, so
+     that swapping the fragment underneath cannot repaint what the reader is scrubbing. -->
+<div id="replay-view" hidden>
+  <div class="meta" id="replay-meta"></div>
+  <div class="map" id="replay-map"></div>
+</div>
+<!-- A dead handle is worse than no handle: this is revealed once the record is in hand, and
+     what it says it covers is whatever the record answered with. -->
+<div class="replay" id="replay" hidden>
+  <button type="button" id="play">Play</button>
+  <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
+  <div class="covers" id="covers"></div>
+</div>
 <script>${SCRIPT}</script>
 </body></html>
 `;
