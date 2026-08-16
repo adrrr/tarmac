@@ -286,9 +286,66 @@ screenshot of a real fleet is therefore a screenshot of what its agents were tol
 is ellipsised on a node to fit its column, which is a width, not a redaction: the whole string
 is still in the markup and in both JSON surfaces, and the first half of a prompt is usually
 the half that gives it away. Worth knowing before the screen, or the payload, goes anywhere.
+The one surface it never reaches is the retained record — see
+[what the serve remembers](#what-the-serve-remembers).
 
-There is no history and no time scrubber: every node is the fleet as of the reading in the
-header, and nothing on the page remembers an earlier one.
+The page itself has no time scrubber: every node is the fleet as of the reading in the header,
+and nothing on it points at an earlier one. What the *serve* remembers is below.
+
+## What the serve remembers
+
+`serve` reads the whole fleet on every request. Since it is running anyway, it also reads it
+on a timer of its own — **once a minute, into a ring of 1440 slots**: 24 hours, after which
+the oldest minute falls off. `GET /api/history` hands that ring back.
+
+```json
+{
+  "since": 1786240000000,
+  "cadence": 60000,
+  "missed": 0,
+  "samples": [
+    {
+      "t": 1786240060000,
+      "rateLimits": { "five_hour": { "used_percentage": 17 } },
+      "sessions": [
+        { "sid": "ea6a607c-…", "project": "alpha", "kind": "interactive",
+          "state": "busy", "ctxState": "ok", "ctxPct": 26, "costUsd": 27.75 }
+      ]
+    }
+  ]
+}
+```
+
+**In memory, and nowhere else.** A fleet journal on disk is the one file this tool promised
+never to write: it would outlive the process that made it and sit in a home directory carrying
+session ids, working directories and costs. So the record starts when the serve starts, and
+`since` says so — a page that needs to state what it covers reads that field rather than
+assuming a full day. Restarting `serve` is how you clear it.
+
+`since` is the oldest minute the record still **holds**, not the oldest it ever held: for the
+first day it is the moment `serve` started, and from the first eviction on it moves with the
+ring. A serve that has been up 34 hours covers 24 of them and says 24 — the alternative is a
+page that reads `since`, promises a day and a half, and shows a day.
+
+**A sample carries no names.** A background session is named after the prompt it was given
+(see [the map](#the-map)), which the live surfaces show because someone is looking at their own
+screen in the present tense. A day of them, retained by a process and served on a route, is a
+different object — so no name enters the ring, for any kind of session. The agent is still
+there, with its `sid`, its project and its state; it is the field that is missing, not the row.
+
+**A reading that failed is a counted slot.** `missed` is how many minutes were due and never
+filled — a collector that threw, or a fleet still being read when the next tick came (only one
+read runs at a time, so a slow `claude agents --json` costs a minute, never a queue of
+processes). A gap that says it is a gap is not a gap. It counts slots inside the span `since`
+names, not since the process booted: the 1440 slots hold minutes, and a minute nobody could
+read is one of them — it takes a slot from the samples and ages out with them.
+
+**One minute and one day are the product.** There is no flag, no environment variable and no
+config key for the cadence or the retention, and none is planned: a cadence knob is a way to
+ask this process to spawn `claude agents --json` every second, and a retention knob is a way to
+ask it to hold a week of fleets in RAM. `/api/history` carries the same `X-Tarmac: 1` identity
+header and `Cache-Control: no-store` as every other answer, and — alone among the routes — it
+never reads the fleet to answer: it serves what was already read.
 
 ## Configuration
 

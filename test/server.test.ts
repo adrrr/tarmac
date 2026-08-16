@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { renderLive, renderPage, servingLine } from '../src/render.ts';
@@ -10,6 +11,8 @@ import { buildFleet } from '../src/fleet.ts';
 import { parseAgents } from '../src/sessions.ts';
 import { health, row } from './fleet-fixtures.ts';
 import { rawGet } from './bounded.ts';
+import { HISTORY_CADENCE_MS } from '../src/history.ts';
+import type { HistoryPayload } from '../src/history.ts';
 import type { Fleet, FleetRow } from '../src/fleet.ts';
 
 // ── render ────────────────────────────────────────────────────────────────────────────
@@ -369,8 +372,12 @@ test('a reader without JavaScript is told the page will not refresh itself', () 
 });
 
 // ── server ────────────────────────────────────────────────────────────────────────────
-async function withServer(collect: () => Promise<Fleet>, fn: (base: string) => Promise<void>): Promise<void> {
-  const server = createFleetServer({ collect });
+async function withServer(
+  collect: () => Promise<Fleet>,
+  fn: (base: string) => Promise<void>,
+  opts: { sampleEveryMs?: number } = {},
+): Promise<void> {
+  const server = createFleetServer({ collect, ...opts });
   await new Promise<void>((r) => {
     server.listen(0, '127.0.0.1', () => r());
   });
@@ -529,7 +536,7 @@ test('a failing collector answers 500 with the reason, not a blank page', async 
 // page quotes as its own reason.
 test('every answer identifies itself as tarmac, refusals and failures included', async () => {
   await withServer(collectOk, async (base) => {
-    for (const p of ['/', '/live', '/api/fleet']) {
+    for (const p of ['/', '/live', '/api/fleet', '/api/history']) {
       const res = await fetch(base + p, { signal: AbortSignal.timeout(4000) });
       assert.equal(res.headers.get('x-tarmac'), '1', p);
       await res.text();
@@ -554,6 +561,184 @@ test('the page says when two snapshot files claimed the same session', () => {
   const html = renderPage({ rows: [row()], health: health({ snapshotsDuplicates: 1 }) });
   assert.match(html, /1 snapshot/i);
   assert.match(html, /freshest/i);
+});
+
+// ── history ───────────────────────────────────────────────────────────────────────────
+// The serve reads the whole fleet on every request and used to forget it on the next one.
+// A sampler on its own timer keeps a day of those readings in memory, and `/api/history`
+// hands the ring back. Every wait below is bounded: a sampler that never fires must be a
+// failure with a message, not a file that hangs.
+
+/**
+ * Polls the record until `pred` holds, and throws at the deadline — `bounded.ts`'s rule for
+ * the network waits, applied to a timer. The payload is in the message because a poll that
+ * gives up carries no other clue about which half of the sampler never arrived.
+ */
+async function historyUntil(
+  base: string,
+  pred: (h: HistoryPayload) => boolean,
+  what: string,
+  timeoutMs = 4000,
+): Promise<HistoryPayload> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const res = await fetch(base + '/api/history', { signal: AbortSignal.timeout(4000) });
+    const h = (await res.json()) as HistoryPayload;
+    if (pred(h)) return h;
+    if (Date.now() >= deadline) throw new Error(`waited ${timeoutMs}ms for ${what}, and got ${JSON.stringify(h)}`);
+    await sleep(10);
+  }
+}
+
+// Asking what happened must not read the present: a route that collected would let a scrubber
+// spawn `claude agents --json` on every drag.
+test('GET /api/history serves the record without reading the fleet to do it', async () => {
+  let collected = 0;
+  const counting = async (): Promise<Fleet> => {
+    collected++;
+    return { rows: [row()], health: health() };
+  };
+  const started = Date.now();
+  await withServer(counting, async (base) => {
+    const res = await fetch(base + '/api/history', { signal: AbortSignal.timeout(4000) });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type')!, /application\/json/);
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    const h = (await res.json()) as HistoryPayload;
+    assert.deepEqual(h.samples, [], 'a serve that just started has nothing to replay yet');
+    assert.equal(h.missed, 0);
+    assert.equal(h.cadence, HISTORY_CADENCE_MS);
+    assert.ok(h.since >= started && h.since <= Date.now(), 'the record starts when the serve does');
+    assert.equal(collected, 0, 'and the past was served without reading the present');
+  });
+});
+
+test('the sampler fills the record on its own timer, one reading per slot', async () => {
+  await withServer(
+    collectOk,
+    async (base) => {
+      const h = await historyUntil(base, (x) => x.samples.length >= 2, 'two samples');
+      assert.equal(h.samples[0].sessions[0].ctxPct, 26);
+      assert.equal(h.samples[0].sessions[0].sid, 's1');
+      assert.equal(h.missed, 0);
+    },
+    { sampleEveryMs: 20 },
+  );
+});
+
+// The privacy line the ring exists behind. `claude agents --json` names a background session
+// after the PROMPT it was given, and tarmac carries that verbatim onto the page and into
+// /api/fleet — the present tense, on a screen someone is looking at. A day of them, retained
+// by a process and served on a route, is a different object, so no name goes in at all.
+test("a background agent's name never enters the record", async () => {
+  const PROMPT = 'audit the payroll export for the Q3 board memo';
+  const withAgent = async (): Promise<Fleet> => ({
+    rows: [row(), row({ sessionId: 's2', name: PROMPT, kind: 'background', status: 'running', busy: true })],
+    health: health({ sessions: 2, busy: 1 }),
+  });
+  await withServer(
+    withAgent,
+    async (base) => {
+      await historyUntil(base, (x) => x.samples.length >= 1, 'a sample');
+      const raw = await (await fetch(base + '/api/history', { signal: AbortSignal.timeout(4000) })).text();
+      assert.equal(raw.includes(PROMPT), false, 'not under any field');
+      assert.equal(raw.includes('payroll'), false, 'nor a word of it');
+      // The agent is IN the record — this is an omitted field, not an omitted session, and
+      // the fleet route still carries the name, so the difference is the history's own.
+      const h = JSON.parse(raw) as HistoryPayload;
+      assert.equal(h.samples[0].sessions.length, 2);
+      assert.equal(h.samples[0].sessions[1].sid, 's2');
+      assert.equal(h.samples[0].sessions[1].kind, 'background');
+      const fleet = await (await fetch(base + '/api/fleet', { signal: AbortSignal.timeout(4000) })).text();
+      assert.ok(fleet.includes(PROMPT), 'the live reading still says it');
+    },
+    { sampleEveryMs: 20 },
+  );
+});
+
+// A collector that throws is the normal weather here — `claude` missing, a machine asleep.
+// It costs a slot and nothing else: not the timer, not the process, not the record.
+test('a reading that fails is a counted slot, and the sampler keeps going', async () => {
+  const boom = async (): Promise<Fleet> => {
+    throw new Error('claude: not found');
+  };
+  await withServer(
+    boom,
+    async (base) => {
+      const h = await historyUntil(base, (x) => x.missed >= 2, 'two missed slots');
+      assert.deepEqual(h.samples, []);
+    },
+    { sampleEveryMs: 20 },
+  );
+});
+
+// `claude agents --json` has a 15s deadline of its own, which is longer than a slot. Ticking
+// into a read that has not come back would spawn a second one, and a third — a hung fleet
+// answering with a queue of processes instead of one missed minute.
+test('a tick that finds the previous reading still running is a missed slot, not a second spawn', async () => {
+  let started = 0;
+  const wedged = (): Promise<Fleet> => {
+    started++;
+    return new Promise<Fleet>(() => {});
+  };
+  await withServer(
+    wedged,
+    async (base) => {
+      const h = await historyUntil(base, (x) => x.missed >= 2, 'two ticks that found a read in flight');
+      assert.equal(started, 1, 'and only one read was ever started');
+      assert.deepEqual(h.samples, []);
+    },
+    { sampleEveryMs: 20 },
+  );
+});
+
+// A server object that was made and never bound serves nobody, so there is nobody to keep a
+// record for. The sampler starting at construction meant a `createFleetServer` whose `listen`
+// refused — a port named on the command line that is taken — went on spawning `claude agents
+// --json` once a minute into a ring no request could ever reach.
+test('a server that never listened never samples, and starts when it begins serving', async () => {
+  let collected = 0;
+  const counting = async (): Promise<Fleet> => {
+    collected++;
+    return { rows: [row()], health: health() };
+  };
+  const server = createFleetServer({ collect: counting, sampleEveryMs: 20 });
+  await sleep(200);
+  assert.equal(collected, 0, 'ten slots went by and nothing was read');
+  await new Promise<void>((r) => {
+    server.listen(0, '127.0.0.1', () => r());
+  });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    await historyUntil(base, (h) => h.samples.length >= 1, 'the first sample once it was serving');
+  } finally {
+    await new Promise<void>((r) => {
+      server.close(() => r());
+    });
+  }
+});
+
+// The timer is unref'd — it may not be what keeps `node --test` or a Ctrl-C'd serve alive —
+// but an unref'd timer that is never cleared still SPAWNS: a suite that starts and stops
+// servers would leave a sampler per test reading the fleet behind it.
+test('closing the serve stops its sampler', async () => {
+  let collected = 0;
+  const counting = async (): Promise<Fleet> => {
+    collected++;
+    return { rows: [row()], health: health() };
+  };
+  const server = createFleetServer({ collect: counting, sampleEveryMs: 20 });
+  await new Promise<void>((r) => {
+    server.listen(0, '127.0.0.1', () => r());
+  });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  await historyUntil(base, (h) => h.samples.length >= 1, 'a first sample');
+  await new Promise<void>((r) => {
+    server.close(() => r());
+  });
+  const after = collected;
+  await sleep(200);
+  assert.equal(collected, after, 'ten slots later, nothing was read');
 });
 
 // ── binding ───────────────────────────────────────────────────────────────────────────

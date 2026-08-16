@@ -10,7 +10,25 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **A day of what `serve` already read, on `GET /api/history`.** The dashboard read the whole
+  fleet on every request and forgot it on the next one; it now also reads it on a timer of its
+  own — one sample a minute into a ring of 1440 slots, after which the oldest minute falls off
+  — and hands that ring back as `{ since, cadence, samples, missed }`. Per session and per
+  minute: `sid`, `project`, `kind`, `state`, `ctxState`, `ctxPct`, `costUsd`, with the
+  account's rate limits beside them as the payload carries them. In memory and nowhere else,
+  by design: a fleet journal on disk would outlive the process that wrote it and is the one
+  file this tool promised never to write, so the record starts when the serve starts and
+  `since` says so out loud — and once the ring has begun dropping minutes, `since` moves with
+  it rather than going on naming an hour the record no longer holds. **No name enters the
+  ring, for any kind of session** — a background
+  session is named after its prompt, which the live surfaces may show and a retained day of
+  readings may not, and a test pins it. A reading that failed, or one still running when the
+  next tick came, is a counted slot in `missed` rather than a dead timer, a second `claude`
+  process or a dead serve; the route itself never collects, so asking about the past cannot
+  spawn anything in the present. One minute and 24 hours are the product: no flag, no
+  environment variable, no config key. (#35)
 
 ## [0.3.0] — 2026-08-16
 
