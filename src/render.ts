@@ -12,7 +12,7 @@ import type { Config, Source } from './config.ts';
 import { buildMap, INTERACTIVE, stateOf } from './map.ts';
 import type { MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
-import { readLimits } from './limits.ts';
+import { LIMIT_WINDOWS, readLimits } from './limits.ts';
 import type { Gauge } from './limits.ts';
 import { accountLimits } from './fleet.ts';
 import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
@@ -900,6 +900,7 @@ function pageScript(view: View): string {
   var playBtn = document.getElementById('play'), covers = document.getElementById('covers');
   var rview = document.getElementById('replay-view'), rmap = document.getElementById('replay-map');
   var rmeta = document.getElementById('replay-meta'), note = document.getElementById('replaying');
+  var rlimits = document.getElementById('replay-limits');
   var atEl = document.getElementById('replay-at'), toLive = document.getElementById('to-live');
   var record = null, recordAt = 0, at = -1, replaying = false, playing = null, hgen = 0;
 
@@ -1048,6 +1049,64 @@ function pageScript(view: View): string {
       + ' stroke-dasharray="' + r2(filled) + ' ' + r2(C - filled) + '"/>';
   }
 
+  // ── the account, as it stood that minute ────────────────────────────────────────────
+  //
+  // The second thing this page interprets twice, and for the same reason as the dials: a
+  // replay is a lookup in samples the page already holds, and the ring holds the payload's own
+  // rate_limits rather than anything rendered. The vocabulary, the dash and the two windows are
+  // handed over below rather than written again; what is mirrored is the arithmetic, and a
+  // test compares this output with the server's character for character.
+  //
+  // What it counts the reset against is the SAMPLE's own clock, never Date.now(). A reset is a
+  // moment, and "how long is left" is a question about the minute being replayed: at 09:14 the
+  // five-hour window had two hours to run, and it had two hours to run whatever time it is now.
+  // Counted against the present, every reset in the record would read as long overdue the
+  // moment it aged past — a page announcing an account over its limit for a day that ended.
+  var LIMITS = ${JSON.stringify(LIMIT_WINDOWS)}, LIMIT_WHY = ${JSON.stringify(LIMIT_WHY)};
+  var DASH = ${JSON.stringify(dash())};
+
+  function left(ms) {
+    var m = Math.floor(ms / 60000);
+    if (m < 1) return '<1m';
+    if (m < 60) return m + 'm';
+    var h = Math.floor(m / 60);
+    if (h < 24) return m % 60 === 0 ? h + 'h' : h + 'h ' + (m % 60) + 'm';
+    var d = Math.floor(h / 24);
+    return h % 24 === 0 ? d + 'd' : d + 'd ' + (h % 24) + 'h';
+  }
+
+  function gaugesOf(rl, now) {
+    // Anything can be in a sample: rate_limits is a shape someone else versions, and the ring
+    // stored whatever the payload had. None of it may throw in the header of a dashboard.
+    var ok = rl !== null && rl !== undefined && typeof rl === 'object' && !Array.isArray(rl);
+    var html = '';
+    for (var i = 0; i < LIMITS.length; i++) {
+      var w = ok ? rl[LIMITS[i].key] : undefined;
+      var has = w !== null && w !== undefined && typeof w === 'object' && !Array.isArray(w) && 'used_percentage' in w;
+      var v = has ? w.used_percentage : undefined;
+      var pct = has && typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? Math.floor(v) : null;
+      var at = has && typeof w.resets_at === 'number' && Number.isFinite(w.resets_at) ? w.resets_at : null;
+      var ms = at === null ? null : at * 1000 - now;
+      // Presence, never value: a window that is there and null is a number not taken yet, and
+      // one that is gone is a schema that moved. Same discriminant as everywhere else here.
+      var why = pct !== null ? null : (!ok || (has && v === null)) ? 'absent' : 'drift';
+      html += '<div class="gauge"><span class="lbl" aria-hidden="true">' + LIMITS[i].label + '</span>'
+        + '<span class="sr">' + LIMITS[i].said + '</span>'
+        + (pct === null
+          ? '<span class="rail unmeasured" aria-hidden="true"></span>'
+          : '<span class="rail" aria-hidden="true"><i style="width:' + pct + '%"></i></span>')
+        + '<span class="num">' + (pct === null ? DASH : pct + '%') + '</span>'
+        + '<span class="reset">'
+        + (pct === null
+          ? LIMIT_WHY[why]
+          : ms === null
+            ? 'reset ' + DASH
+            : ms > 0 ? 'resets in ' + left(ms) : 'reset was due ' + left(-ms) + ' ago')
+        + '</span></div>';
+    }
+    return html;
+  }
+
   function nodesOf(s) {
     var anchored = false, html = '', i;
     for (i = 0; i < s.sessions.length; i++) if (s.sessions[i].kind === INTERACTIVE) anchored = true;
@@ -1083,6 +1142,11 @@ function pageScript(view: View): string {
     atEl.textContent = hhmm(s.t);
     rmeta.textContent = metaOf(s);
     rmap.innerHTML = nodesOf(s);
+    // The account of that minute, in the place the live pair occupies — which the body class
+    // has just taken down. One allowance on screen at a time, and it is the one belonging to
+    // the fleet being shown.
+    rlimits.innerHTML = gaugesOf(s.rateLimits, s.t);
+    rlimits.hidden = false;
     note.hidden = false;
     rview.hidden = false;
     document.body.classList.toggle('replaying', true);
@@ -1101,6 +1165,8 @@ function pageScript(view: View): string {
     replaying = false;
     note.hidden = true;
     rview.hidden = true;
+    rlimits.hidden = true;
+    rlimits.innerHTML = '';
     rmap.innerHTML = '';
     scrub.removeAttribute('aria-valuetext');
     document.body.classList.toggle('replaying', false);
