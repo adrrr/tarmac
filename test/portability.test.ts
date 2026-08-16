@@ -43,6 +43,9 @@ const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 const DEAD = 'ffffffff-1111-2222-3333-444444444444';
 const QUIET = 'ffffffff-5555-6666-7777-888888888888';
 
+/** 0555 denies root nothing, so the read-only fixture below cannot be built here. */
+const ROOT = process.getuid?.() === 0;
+
 interface RunResult {
   stdout: string;
   stderr: string;
@@ -108,6 +111,12 @@ for (const shell of SHELLS) {
     const ok = runUnder(shell, payload(), 'echo CHAINED');
     assert.match(ok.stdout, /CHAINED/, 'the chained display still renders');
     assert.equal(ok.status, 0);
+    // The stderr pin was written for the read-only case, where the leak was found, and that
+    // case is the one this suite is least often able to build — it needs a directory 0555
+    // really denies. This is the path every frame of every session takes instead, where the
+    // stream is empty today under every shell here, and where a leak would be one line of
+    // noise per frame on a terminal drawing a status line.
+    assert.equal(ok.stderr, '', 'and says nothing on the stream the user is looking at');
     assert.deepEqual(listSnapshots(ok.snapDir), [`${SID}.json`], 'the payload is filed under its session id');
     assert.deepEqual(
       JSON.parse(fs.readFileSync(path.join(ok.snapDir, `${SID}.json`), 'utf8')),
@@ -189,6 +198,9 @@ for (const shell of SHELLS) {
     });
     assert.match(swept.stdout, /CHAINED/, 'the display renders on a sweeping frame too');
     assert.equal(swept.status, 0);
+    // Silent on the sweeping frame too — the one that runs the most code, and whose `find`
+    // is a child holding this frame's stderr unless the redirections say otherwise.
+    assert.equal(swept.stderr, '', 'and the frame that sweeps says nothing either');
     await waitFor(
       () => !fs.existsSync(path.join(swept.snapDir, `${DEAD}.json`)),
       `the sweep ${shell.label} detached to remove the dead session`,
@@ -207,7 +219,9 @@ for (const shell of SHELLS) {
     // directory exits dash 2 and ksh 1 with the status line never printed, while bash
     // shrugs and carries on. RULE 1, broken on exactly the platform the package targets.
     // Skipped under root, which ignores 0555: the fixture would not be the state it claims.
-    if (process.getuid?.() !== 0) {
+    // A skip inside a test that passes says nothing at all, so the guard at the end of this
+    // file says it instead — and, where the claim has to hold, fails.
+    if (!ROOT) {
       const blocked = runUnder(shell, payload(), 'echo CHAINED', { [`${DEAD}.json`]: SNAPSHOT_TTL_MIN + 60 }, true);
       try {
         assert.match(blocked.stdout, /CHAINED/, 'the display renders even when nothing can be written');
@@ -254,6 +268,23 @@ test('the collation case was built for at least one shell', (t) => {
   // for a case it cannot build. The regression this protects against is NOT left to a skip:
   // `test/wrapper.test.ts` asserts, on every machine, that the rule contains no range at all.
   t.skip('no installed locale makes any shell here read `a-f` past ASCII: the case cannot be built on this machine');
+});
+
+// The read-only fixture is skipped under root, and a skip INSIDE a test that passes scrolls
+// past with the test still green: in a root container the suite reports a full pass with the
+// stderr pin and the three sweep assertions beside it never asked at all. Nothing there is
+// root-specific — the block exists because `: > "$marker"` aborts dash on a directory it
+// cannot write — so the case is only unbuildable, not inapplicable. Same treatment as dash,
+// one property further out: a skip everywhere it is honest, a failure where the claim has to
+// HOLD, and TARMAC_REQUIRE_READONLY is how a caller says which of the two it is asking for.
+test('the read-only snapshot dir — where RULE 1 breaks on dash — was exercised', (t) => {
+  if (!ROOT) {
+    assert.ok(true);
+    return;
+  }
+  const why = 'running as root: 0555 denies nothing, so RULE 1 on an unwritable dir was NOT proven here';
+  if (process.env.TARMAC_REQUIRE_READONLY) assert.fail(why);
+  t.skip(why);
 });
 
 test('dash — the /bin/sh of Debian and Ubuntu — was exercised', (t) => {
