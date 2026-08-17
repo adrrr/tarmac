@@ -26,6 +26,35 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   signal; its colour now follows the node, off the same four states as the glyph under the
   name, and the suite compares the two palettes rather than listing the hues twice. (#47)
 
+- **The two amber banners that never left the dashboard are footnotes now.** A normal fleet
+  carried both at all times. The first counted readings past the freshness threshold — but a
+  statusline is only written when a terminal draws a frame, so a fleet that mostly idles has
+  most of its readings past it at any hour: the steady state, restated on every poll. The
+  second named Claude Code versions no fixture covers — true, and a maintainer's job, up on
+  every user's page until a release ships the capture. A box that is always there is not a
+  warning, it is wallpaper, and wallpaper is what teaches a reader to skip the boxes that do
+  need them. **The freshness banner now appears for one shape only**: not one reading anywhere
+  is fresh, AND at least one of the cold ones belongs to a session that is busy right now. A
+  busy session redraws its status line, so a fleet where nothing has been written while
+  something is plainly working is the writer stopped — an uninstalled wrapper, an unwritable
+  snapshot directory — where an idle fleet past the threshold is just the night. One fresh
+  reading anywhere ends it, and so does a fleet with nobody busy. **The dating is unchanged,
+  and is what carries this now**: the thin amber arc, the `! 3h ago` beside the value, the `!`
+  in the AS OF column — every reading still says its own age, one by one, which is the surface
+  the banner was talking over. The threshold that put those marks there is named in the
+  footnote, because a `!` you cannot argue with is worse than no `!`; the shape-check keeps
+  every word it had, at a footnote's weight, under the fleet rather than over it. Amber is
+  left to what needs the reader: a refresh that is failing, a schema that moved, a column that
+  is hiding something. `tarmac list` is untouched — a one-shot dump has no top of the page to
+  occupy, and its `!` line is the legend for the marks in the column. (#53)
+
+### Added
+
+- **The statusline payload of Claude Code 2.1.232 is captured**, so the shape-check footnote
+  goes quiet on the build most fleets are running. The `agents` half of the pair has been
+  frozen since #44; this is the other half, and every field name tarmac reads off a payload is
+  now one it has been seen carrying on 2.1.232. (#53)
+
 ## [0.4.0] — 2026-08-17
 
 ### Added

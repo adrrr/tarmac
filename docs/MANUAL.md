@@ -23,7 +23,7 @@ confident `0`.
 | a cost key that is absent | `—` for the row, and a total qualified by how many sessions really report one |
 | no snapshot carrying the account's rate limits | `— no reading` in both gauges, on a dotted rail — never a window at 0% |
 | a rate-limit reset nowhere near the reading that carried it | `reset —`; the percentage stands, the impossible countdown does not |
-| a Claude Code version no fixture covers | a notice naming that version — nothing blocked, nothing hidden |
+| a Claude Code version no fixture covers | a footnote naming that version — nothing blocked, nothing hidden |
 
 That last line is the smoke detector to the rest's alarm. The fields above were *observed*
 on the Claude Code builds frozen in `fixtures/`; when a session shows up on a build nobody
@@ -297,6 +297,15 @@ session's terminal wrote whenever it last drew a frame. A busy session with a tw
 reading is **both** live and stale, and the node says both — a solid green dot beside a thin
 amber arc dated `! 2h ago`.
 
+One session in that state is normal and the node is the only place it is said. The dashboard
+raises a banner over it in exactly one case: **no reading anywhere on the fleet is fresh, and
+one of the cold ones belongs to a session that is busy**. A statusline is written when a
+terminal draws a frame, so a fleet that idles keeps yesterday's numbers — that is the resting
+state, not an event, and it is what the per-node dating is for. A fleet where nothing at all
+has been written while something is demonstrably working is the writer having stopped: the
+wrapper uninstalled from `settings.json`, the snapshots directory gone or unwritable, a full
+disk. A single fresh reading anywhere ends the question, and so does a fleet with nobody busy.
+
 "How old is the file" and "is there a number in it" are a third pair that is never merged.
 A session that has taken no turn yet, and one whose payload drifted, both have a snapshot as
 current as any on the machine and neither has a percentage: they get the dotted dial, not the
@@ -474,8 +483,9 @@ pinned in the file and a threshold tightened for one run is the normal case.
 ```
 
 `tarmac serve` opens by printing each effective value **and which of the four sources it
-came from**, and the freshness threshold is named in every warning that puts a `!` on a
-reading — a mark whose threshold is invisible is one you cannot argue with.
+came from**, and the freshness threshold is named wherever a `!` is put on a reading — beside
+the marks in `list`, in the footnote under the dashboard's fleet. A mark whose threshold is
+invisible is one you cannot argue with.
 
 **The default port gets out of the way; a port you named does not.** Nobody chose `4477`,
 so a `4477` that is taken — the dashboard you left running this morning — is not a reason
