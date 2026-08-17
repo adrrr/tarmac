@@ -13,6 +13,7 @@ import { spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CHECKED_VERSIONS, guardVersions, schemaNotice } from '../src/schema.ts';
+import { extractTelemetry } from '../src/snapshots.ts';
 import { tempDir } from './sandbox.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -88,6 +89,46 @@ test('every key the agents reader takes off an entry is carried by some fixture'
   assert.deepEqual([...read].filter((k) => !carried.has(k)), [], 'read off a shape no capture ever showed');
 });
 
+// The statusline twin of the test above, and the half that was missing: adding a version to
+// `CHECKED_VERSIONS` buys permanent silence about that build for every user, and the only
+// thing behind that silence is a file in `fixtures/`. Until this existed, nothing opened the
+// statusline captures at all beyond their filenames — a payload could carry the wrong
+// `version`, or a drifted context window, and the suite stayed green while the guard went on
+// vouching for it.
+//
+// Two claims per file, both read through the module that will have to read the real thing:
+// the build named in the filename is the build the payload says wrote it, and the tag is the
+// verdict `extractTelemetry` actually reaches (the mapping `scripts/capture-fixtures.ts` uses
+// to choose the name in the first place).
+const CTX_STATE_BY_TAG: Record<string, string> = { live: 'ok', fresh: 'fresh', drift: 'drift' };
+
+test('every statusline fixture is the build and the state its name claims', () => {
+  const files = fs.readdirSync(fixturesDir).filter((f) => /^statusline-payload-/.test(f));
+  assert.ok(files.length > 0, 'no statusline fixtures found — this test has stopped watching anything');
+
+  for (const f of files) {
+    const [, version, tag] = /^statusline-payload-(.+)-([^-]+)\.json$/.exec(f)!;
+    const t = extractTelemetry(JSON.parse(fs.readFileSync(path.join(fixturesDir, f), 'utf8')));
+    assert.equal(t.ccVersion, version, `${f}: the payload names a different build than the filename`);
+    assert.equal(t.ctxState, CTX_STATE_BY_TAG[tag!], `${f}: the tag is not the verdict the reader reaches`);
+  }
+});
+
+// And the coverage claim itself: a `-live` capture is the one that shows every field this tool
+// reads carrying a real value. A fixture where half of them come back null would freeze a
+// version as "checked" on a payload that never demonstrated the shape.
+test('a live statusline fixture carries every field the reader takes off a payload', () => {
+  const live = fs.readdirSync(fixturesDir).filter((f) => /^statusline-payload-.+-live\.json$/.test(f));
+  assert.ok(live.length > 0, 'no live statusline fixture — nothing proves the fields exist anywhere');
+
+  for (const f of live) {
+    const t = extractTelemetry(JSON.parse(fs.readFileSync(path.join(fixturesDir, f), 'utf8')));
+    for (const [field, value] of Object.entries(t)) {
+      assert.notEqual(value, null, `${f}: ${field} came back null on a capture named "live"`);
+    }
+  }
+});
+
 // ── the guard ─────────────────────────────────────────────────────────────────────────
 test('a version tarmac has checked says nothing at all', () => {
   const g = guardVersions(['2.1.226']);
@@ -132,8 +173,20 @@ test('a version nobody captured is named even when a newer, checked one is in fl
   assert.match(schemaNotice(g)!, /2\.1\.222/);
 });
 
-// `claude agents --json` has one fixture (2.1.226), the statusline has two (2.1.220 too).
-// A version covered on one surface and not the other must say which is which.
+// The shape-check line is a maintainer's, and it stands on every user's page until a release
+// ships the fixture that ends it (#53). This is that release for 2.1.232, whose `agents` half
+// has been frozen since #44 and whose statusline half had never been captured — the exact
+// half-covered state the notice was reporting, verbatim, to everyone.
+test('2.1.232 is checked on both surfaces, so a fleet running it is told nothing', () => {
+  const g = guardVersions(['2.1.232']);
+  assert.equal(g.state, 'ok');
+  assert.deepEqual(g.unchecked, []);
+  assert.equal(schemaNotice(g), null);
+});
+
+// The two surfaces do not cover the same builds — `2.1.220` is frozen on the statusline
+// side and nowhere on the agents side. A version covered on one surface and not the other
+// must say which one is missing rather than accusing both.
 test('a version checked on one surface only names the surface that is not', () => {
   const g = guardVersions(['2.1.220']);
   assert.equal(g.state, 'unchecked');

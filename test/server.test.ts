@@ -222,6 +222,145 @@ test('a finished background agent raises no banner about an unknown status', () 
   assert.doesNotMatch(live, /data-state="unknown"/);
 });
 
+// ── what is amber, and what is a footnote ─────────────────────────────────────────────
+//
+// #53: the top of the page carried two amber boxes on a perfectly healthy fleet — one saying
+// readings were older than the threshold (the steady state of a fleet that idles, since a
+// statusline is only written when a terminal draws a frame), one naming Claude Code versions
+// no fixture covers (true, and a maintainer's job, not the reader's). A banner that is always
+// there is not a warning, it is wallpaper, and it teaches the reader to skip the amber boxes
+// that DO need them. Amber is kept for the failing refresh, the moved schema, the column that
+// is hiding something; the rest went to a footnote below the fleet.
+
+/** The amber boxes the fragment itself raises — the shell's own (offline, replay) are not here. */
+const amber = (fragment: string): string[] =>
+  [...fragment.matchAll(/<div class="warn">([\s\S]*?)<\/div>/g)].map((m) => m[1]!);
+
+/** The quiet line under the fleet: the same facts, at the weight they are worth. */
+const footnotes = (fragment: string): string[] =>
+  [...fragment.matchAll(/<div class="note">([\s\S]*?)<\/div>/g)].map((m) => m[1]!);
+
+test('an idle fleet past the freshness threshold raises no banner at all', () => {
+  const live = renderLive({
+    rows: [
+      row({ sessionId: 'a', busy: false, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+      row({ sessionId: 'b', busy: false, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+    ],
+    health: health({ sessions: 2, covered: 2, stale: 2 }),
+  });
+  assert.deepEqual(amber(live), [], 'nothing amber on a fleet that is merely resting');
+  assert.match(live, /4h ago/, 'and the rows still carry their own dates, which is the point');
+});
+
+// The one shape that means something: nothing anywhere is fresh, and a session that is
+// working right now is looking at a cold number too. That is the writer stopped.
+test('raises a banner when nothing is fresh and a busy session is among the cold readings', () => {
+  const live = renderLive({
+    rows: [
+      row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+      row({ sessionId: 'b', busy: false, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+    ],
+    health: health({ sessions: 2, covered: 2, stale: 2, busy: 1 }),
+  });
+  assert.equal(amber(live).length, 1, 'and it is amber — this one is worth the reader');
+  assert.match(amber(live)[0]!, /busy/i);
+  assert.match(amber(live)[0]!, /1 session/, 'how many are working on a cold reading');
+});
+
+// The banner says "every context reading is stale". A reading dated in the future is one the
+// page names, in its own box, as NOT being datable at all — so the two boxes together would
+// have the page contradicting itself in the space of two lines. The skew warning stands; the
+// stall banner stands down.
+test('never claims every reading is stale beside a warning that names one which is not', () => {
+  const live = renderLive({
+    rows: [
+      row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+      row({ sessionId: 'b', busy: false, stale: false, snapshotAgeMs: -600_000 }),
+    ],
+    health: health({ sessions: 2, covered: 2, stale: 1, busy: 1 }),
+  });
+  assert.equal(amber(live).length, 1, 'one box, not two that disagree');
+  assert.match(amber(live)[0]!, /dated in the future/, 'and it is the skew one that survives');
+  assert.equal(/Every context reading is stale/.test(live), false);
+});
+
+// The banner already names the threshold. Printing the footnote under it too puts the alarm
+// and its own excuse on the same screen — "the writer looks stopped" over "an idle session's
+// number is as of its last frame", which is the reading it is telling you not to accept.
+test('does not repeat the threshold footnote under the banner that already names it', () => {
+  const live = renderLive({
+    rows: [
+      row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+      row({ sessionId: 'b', busy: false, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+    ],
+    health: health({ sessions: 2, covered: 2, stale: 2, busy: 1 }),
+  });
+  assert.match(amber(live)[0]!, /10m/, 'the banner carries the threshold');
+  assert.equal(/freshness threshold are dated where they sit/.test(live), false, 'and the footnote stands down');
+});
+
+// A `!` whose threshold is invisible is a mark the reader cannot argue with — the rule the
+// terminal table has always kept. Demoting the banner must not take the number with it.
+test('names the freshness threshold in the footnote whenever a reading is dated', () => {
+  const live = renderLive({
+    rows: [row({ stale: true, snapshotAgeMs: 4 * 3600_000 })],
+    health: health({ stale: 1, staleAfterMs: 7_200_000 }),
+  });
+  assert.match(footnotes(live).join(' '), /2h/, 'the threshold the reading was judged against');
+  assert.deepEqual(amber(live), [], 'said quietly, not in a box');
+});
+
+test('says nothing about a threshold nothing was judged past', () => {
+  const live = renderLive({ rows: [row()], health: health() });
+  assert.equal(/--stale-after/.test(live), false, 'no legend where there is no mark to explain');
+});
+
+// The maintainer's line: true, useful, and up for every user of a released tarmac until the
+// next one ships the fixture. It keeps every word — and loses the amber box.
+test('an unchecked Claude Code version is a footnote, never a banner', () => {
+  const live = renderLive({ rows: [row()], health: health({ schemaGuard: guardVersions(['2.9.9']) }) });
+  const quiet = footnotes(live).join(' ');
+  assert.match(quiet, /2\.9\.9/, 'the version it is actually being fed');
+  assert.match(quiet, /never been checked/i, 'in the same words as before');
+  assert.match(quiet, /github\.com\/adrrr\/tarmac\/issues/, 'and where to send it');
+  assert.deepEqual(amber(live), [], 'no amber for a fleet where nothing is wrong');
+});
+
+// Below the fleet, not above it: a reader scanning for what their sessions are doing must
+// reach the sessions first, and a maintainer looking for this knows to go to the bottom.
+test('puts the footnote under the fleet, where a scan ends rather than starts', () => {
+  const live = renderLive({ rows: [row()], health: health({ schemaGuard: guardVersions(['2.9.9']) }) });
+  assert.ok(live.indexOf('<div class="note">') > live.indexOf('<table'), 'after the rows');
+  assert.ok(live.indexOf('<div class="note">') > live.indexOf('class="view view-map"'), 'and after the map');
+});
+
+// Moving the legend below every row is free for a reader who can glance down the page and a
+// regression for one who cannot: they meet `! 3h ago` on every row before anything says what
+// threshold put it there. Both views carry the reference, and the target is rendered whether
+// or not it holds anything, so it can never dangle.
+test('both views point at the footnote, and the footnote is always there to point at', () => {
+  for (const fleet of [
+    { rows: [row({ stale: true, snapshotAgeMs: 4 * 3600_000 })], health: health({ stale: 1 }) },
+    { rows: [row()], health: health() }, // nothing to say, and the target still exists
+  ]) {
+    const live = renderLive(fleet);
+    assert.match(live, /<table aria-describedby="fleet-notes">/, 'the table');
+    assert.match(live, /class="view view-map" role="group" aria-label="fleet map" aria-describedby="fleet-notes"/, 'and the map — with the role that makes the description reachable, a generic div is not');
+    assert.match(live, /<div id="fleet-notes">/, 'and the thing they both point at');
+  }
+});
+
+// The banners that stay: a schema that has moved is hiding a column, and no per-node dating
+// says that. #53 demotes two, and only two.
+test('keeps the amber for a schema that moved under the page', () => {
+  const live = renderLive({
+    rows: [row({ ctxState: 'drift', ctxPct: null })],
+    health: health({ drift: 1, schemaBroken: true }),
+  });
+  assert.equal(amber(live).length, 1);
+  assert.match(amber(live)[0]!, /schema/i);
+});
+
 // ── weight: busy first, and visible as such from across a room ────────────────────────
 // The sort is already right. What was missing is that a busy row and an idle one weighed
 // the same on screen, and that the difference between them was a colour — which is no

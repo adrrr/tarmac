@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accountLimits, buildFleet } from '../src/fleet.ts';
+import { accountLimits, buildFleet, busyOnStaleFleet } from '../src/fleet.ts';
 import { row } from './fleet-fixtures.ts';
 import type { Session } from '../src/sessions.ts';
 import type { Snapshot } from '../src/snapshots.ts';
@@ -386,4 +386,117 @@ test('a row with no snapshot age cannot be the freshest reading', () => {
     row({ sessionId: 's2', snapshotAgeMs: 60_000, rateLimits: { five_hour: { used_percentage: 88 } } }),
   ]);
   assert.equal(limits!.rateLimits.five_hour.used_percentage, 88);
+});
+
+// ── the fleet-wide freshness verdict ──────────────────────────────────────────────────
+//
+// #53: a statusline is only written when a terminal draws a frame, so on a fleet that mostly
+// idles "N readings are stale" is the steady state, not an event. What is NOT the steady
+// state is a session that is working right now and whose reading has gone cold anyway, on a
+// fleet where nothing else is fresh either — that is the writer having stopped, not the
+// fleet resting. These tests pin both directions of that predicate.
+
+test('a fleet where nothing is fresh and a busy session is among the stale readings reports the busy ones', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: false, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 1);
+});
+
+// The wallpaper case the issue is about: seven idle sessions past the threshold overnight is
+// what an idle fleet LOOKS like, and the rows already say it one by one.
+test('an idle fleet whose every reading has gone stale says nothing', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: false, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: false, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 0);
+});
+
+// One reading anyone wrote recently is proof the writer works. A busy session cold beside it
+// is that session's business — a background agent draws no frames — not the fleet's.
+test('one fresh reading anywhere clears the fleet, busy stragglers included', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: false, stale: false, snapshotAgeMs: 30_000 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 0);
+});
+
+// A fleet nothing has ever written for has no readings to judge — and its own warning
+// already ("statusline chained on 0/N"), which is about installing, not about a stall.
+test('a fleet with no readings at all is not a stalled writer', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, ctxState: 'absent', ctxPct: null, snapshotAgeMs: null, stale: false }),
+    row({ sessionId: 'b', busy: false, ctxState: 'absent', ctxPct: null, snapshotAgeMs: null, stale: false }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 0);
+});
+
+// A busy session with no snapshot at all is the coverage warning's, not this one's: there is
+// no reading of its to have gone cold.
+test('a busy session that was never written for does not accuse the writer', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, ctxState: 'absent', ctxPct: null, snapshotAgeMs: null, stale: false }),
+    row({ sessionId: 'b', busy: false, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 0);
+});
+
+// One session is a fleet. Nothing here is a proportion, so a fleet of one busy session whose
+// reading is hours old is the same verdict as a fleet of seven.
+test('a lone busy session on a cold reading is enough', () => {
+  assert.equal(busyOnStaleFleet([row({ busy: true, stale: true, snapshotAgeMs: 3 * 3600_000 })]), 1);
+});
+
+// An empty fleet accuses nobody. The explicit empty-fleet clause was removed for leaning on
+// every()'s vacuity; this pins the behaviour the removal leaned on.
+test('an empty fleet is not a dead writer', () => {
+  assert.equal(busyOnStaleFleet([]), 0);
+});
+
+// A snapshot dated AFTER the clock that read it has no age at all, and this verdict is an
+// accusation. Leaving it out of the denominator instead would let the page say "every reading
+// is stale" one box above the warning naming the reading that is not — and a file dated in the
+// future may have been written a second ago, which is the opposite of the evidence this banner
+// claims to hold. So it ENDS the question rather than sitting it out.
+test('a reading dated in the future clears the fleet rather than leaving the denominator', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: false, stale: false, snapshotAgeMs: -1 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 0, 'one millisecond ahead is still ahead');
+});
+
+// The number is printed in the banner, so it has to be a count. A predicate that answered
+// "yes, at least one" would tell a fleet of four that 1 session is busy.
+test('counts every busy session on a cold reading, not just the first', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: true, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+    row({ sessionId: 'c', busy: false, stale: true, snapshotAgeMs: 6 * 3600_000 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 2);
+});
+
+// A snapshot written in the same millisecond as the collect is the freshest reading there can
+// be. Dropping it from the denominator would make a fleet with something demonstrably writing
+// to it read as a fleet where nothing is.
+test('a reading dated this very millisecond is a reading, and clears the fleet', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: false, stale: false, snapshotAgeMs: 0 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 0);
+});
+
+// `busy: null` is "tarmac does not know what this session is doing", and a session that may
+// or may not be working cannot be the evidence that the writer stopped.
+test('a session whose status tarmac cannot read is not counted as busy', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: null, status: 'transmogrifying', stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: false, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 0);
 });

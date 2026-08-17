@@ -33,7 +33,7 @@ export type Surface = 'statusline' | 'agents';
  * directory, so the two cannot drift apart in the repo.
  */
 export const CHECKED_VERSIONS: Record<Surface, readonly string[]> = {
-  statusline: ['2.1.220', '2.1.226'],
+  statusline: ['2.1.220', '2.1.226', '2.1.232'],
   agents: ['2.1.226', '2.1.232'],
 };
 
