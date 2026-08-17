@@ -10,6 +10,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.0] — 2026-08-17
+
 ### Added
 
 - **The session that is blocked on you, drawn as such.** `claude agents --json` reports
