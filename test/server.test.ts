@@ -345,7 +345,7 @@ test('both views point at the footnote, and the footnote is always there to poin
   ]) {
     const live = renderLive(fleet);
     assert.match(live, /<table aria-describedby="fleet-notes">/, 'the table');
-    assert.match(live, /class="view view-map" aria-describedby="fleet-notes"/, 'and the map');
+    assert.match(live, /class="view view-map" role="group" aria-label="fleet map" aria-describedby="fleet-notes"/, 'and the map — with the role that makes the description reachable, a generic div is not');
     assert.match(live, /<div id="fleet-notes">/, 'and the thing they both point at');
   }
 });
