@@ -201,6 +201,49 @@ test('the halo says in words that a reading just landed', () => {
   assert.doesNotMatch(one({ ctxPct: null, ctxState: 'drift', snapshotAgeMs: 1200, stale: false }), /just landed/);
 });
 
+// The colour a node's halo ends up with, as the cascade resolves it: the `.node[data-state=…]`
+// rule if the stylesheet has one, and the bare `.halo` otherwise — the class selector on the
+// left of the descendant combinator can never outrank it.
+const paint = (cls: string, prop: string, state: string): string => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet([row()]), 'map'))![1]
+    // Comments first, or a selector captured as "everything since the last brace" is the prose
+    // above the rule as well — and every rule down here is explained by a paragraph naming it.
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  let base = '';
+  let override = '';
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const [, selector, declarations] = m;
+    if (!new RegExp(`\\.${cls}\\b`).test(selector)) continue;
+    const value = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`).exec(declarations)?.[1].trim();
+    if (value === undefined) continue;
+    const on = /data-state="(\w+)"/.exec(selector)?.[1];
+    if (on === undefined) base = value;
+    else if (on === state) override = value;
+  }
+  return override || base;
+};
+
+// The halo was strokeed `var(--busy)` with a single idle override — which is already the
+// admission that its colour was never a pure freshness token, because somebody refused to
+// pulse green over an idle node. The refusal was never extended: on main an unknown node
+// pulses green, and since #46 a waiting one does too, in the hue of the one state it is
+// certainly not. Its PRESENCE is the freshness signal; its colour is the node's own.
+test("the halo pulses in the node's own hue, never in a state the node is not", () => {
+  assert.equal(paint('halo', 'stroke', 'busy'), 'var(--busy)');
+  assert.equal(paint('halo', 'stroke', 'waiting'), 'var(--wait)');
+  assert.equal(paint('halo', 'stroke', 'unknown'), 'var(--warn)');
+  assert.equal(paint('halo', 'stroke', 'idle'), 'var(--dim)');
+});
+
+// Two channels saying the state of one node, so they may not be able to disagree about it.
+// Written as a comparison rather than a second list of hues: the day a state changes colour,
+// the ring around the dial and the glyph under the name change together or this goes red.
+test('the halo and the glyph beside it agree on what every state looks like', () => {
+  for (const state of ['busy', 'waiting', 'unknown', 'idle']) {
+    assert.equal(paint('halo', 'stroke', state), paint('shape', 'color', state), state);
+  }
+});
+
 // Both views are in the fragment, and one of them is behind `display:none` — so a sentence
 // each rendered for itself was read twice by anything that goes through the markup rather
 // than looking at the page.

@@ -108,6 +108,30 @@ test('sorts busy sessions first, then by context descending', () => {
   assert.deepEqual(rows.map((r) => r.sessionId), ['c', 'b', 'a']);
 });
 
+// The sort decides one thing: what is on screen without scrolling. A waiting session used to
+// be filed with `unknown` — one bucket below busy, on a fleet where busy is most of the rows —
+// which put the only session that has STOPPED for a human under the fold of the map that #46
+// gave it a hue on. It goes first: it is the one row that is work for the reader, and there
+// are never many of it, so the sessions it displaces move down by a row or two.
+test('sorts the session blocked on a human first, then busy, then unknown, then idle', () => {
+  const sessions = [
+    session({ sessionId: 'idle', busy: false, cwd: '/idle' }),
+    session({ sessionId: 'unknown', busy: null, status: 'compacting', cwd: '/unknown' }),
+    session({ sessionId: 'busy', busy: true, status: 'busy', cwd: '/busy' }),
+    session({ sessionId: 'waiting', busy: null, status: 'waiting', waitingFor: 'permission prompt', cwd: '/waiting' }),
+  ];
+  // The percentages run the other way on purpose: each session is above the one it must sort
+  // below, so a rank that ties any pair together hands the tiebreak the wrong order.
+  const snapshots = new Map([
+    ['idle', telemetry({ sessionId: 'idle', ctxPct: 90 })],
+    ['unknown', telemetry({ sessionId: 'unknown', ctxPct: 70 })],
+    ['busy', telemetry({ sessionId: 'busy', ctxPct: 50 })],
+    ['waiting', telemetry({ sessionId: 'waiting', ctxPct: 10 })],
+  ]);
+  const { rows } = buildFleet({ sessions, snapshots, now: NOW });
+  assert.deepEqual(rows.map((r) => r.sessionId), ['waiting', 'busy', 'unknown', 'idle']);
+});
+
 test('summarises coverage so a blind sensor is visible, not silent', () => {
   const sessions = [session({ sessionId: 'a' }), session({ sessionId: 'b' }), session({ sessionId: 'c' })];
   const snapshots = new Map([

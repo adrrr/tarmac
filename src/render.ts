@@ -539,7 +539,8 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .pill.waiting { color:var(--wait); }
   .pill.unknown { color:var(--warn); }
   .pill.idle { color:var(--dim); font-weight:400; }
-  /* The weight the sort deserves: busy rows carry an accent and a bold name. */
+  /* Accented states carry their own hue down the row edge. Bold stays on busy alone — it
+     says "working", not "read me first"; waiting's weight is the top of the sort. */
   td:first-child { border-left:3px solid transparent; }
   tr[data-state="busy"] td:first-child { border-left-color:var(--busy); }
   tr[data-state="waiting"] td:first-child { border-left-color:var(--wait); }
@@ -678,9 +679,17 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   /* Once per arrival, not forever: the fragment is replaced on every poll, so a single run
      per swap is what makes the fleet breathe at the rate its frames actually land. A looping
      animation would say "a frame just arrived" for five seconds after it stopped being true. */
-  .halo { fill:none; stroke:var(--busy); stroke-width:2; opacity:0; transform-origin:50% 50%;
+  /* What the halo says is that a frame landed, and it says it by being there at all. Its
+     COLOUR is free, and it was spending it on a claim: stroked with the busy hue under a lone
+     idle override, it pulsed green over an unrecognised status and — since the fourth state — over
+     a session halted on a human, in the hue of the one thing it is certainly not doing. Same
+     palette as the glyph under the name, off the same four states, so the two channels drawing
+     one node cannot end up disagreeing about it. */
+  .halo { fill:none; stroke:var(--dim); stroke-width:2; opacity:0; transform-origin:50% 50%;
           animation:halo 1.6s ease-out 1; }
-  .node[data-state="idle"] .halo { stroke:var(--dim); }
+  .node[data-state="busy"] .halo { stroke:var(--busy); }
+  .node[data-state="waiting"] .halo { stroke:var(--wait); }
+  .node[data-state="unknown"] .halo { stroke:var(--warn); }
   @keyframes halo { from { opacity:.5; transform:scale(1); } to { opacity:0; transform:scale(1.22); } }
   /* Motion is the one thing here nobody can look away from, so it is the first thing a
      reader who asked for less of it stops getting. The reading is still readable without it. */
@@ -1274,9 +1283,10 @@ function pageScript(view: View): string {
 }
 
 /**
- * The sort puts busy first, unknown next, idle last. This is where that order is given its
- * weight — an accent down the row and a bold name for the ones that are working, a quiet row
- * for the ones that are not.
+ * The sort puts waiting first — the one row that is work for the reader — then busy, then
+ * unknown, idle last. This is where that order is given its weight — an accent down the row
+ * in the state's own hue, a bold name for the ones that are working, a quiet row for the
+ * ones that are not.
  *
  * The state travels three ways at once: a shape, a word, and an attribute. Colour alone is
  * no signal to a reader who cannot separate two of ours, and `data-state` is what the narrow

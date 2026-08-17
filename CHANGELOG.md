@@ -10,7 +10,21 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **The session blocked on you is read first, and pulses in its own colour.** 0.4.0 gave
+  `waiting` a glyph, a hue and a caption, and left two places treating it as something else.
+  The sort ranked it by how busy it is, the question that put it in the `unknown` bucket —
+  one rank under a fleet that is mostly busy, which on the map is under the fold, on the one
+  row that has STOPPED and will not start again until someone answers it. It leads now:
+  busy, unknown and idle are the fleet reporting on itself, and a fleet holds one or two
+  waiting sessions at a time, so what it displaces moves down a row. The halo — the pulse
+  that means a reading just landed — stroked the busy hue under a lone idle override, which
+  was already the admission that its colour was never a pure freshness token, and it was
+  never extended: an unrecognised status pulsed green, and since 0.4.0 a waiting session did
+  too, in the hue of the one thing it is certainly not doing. Its PRESENCE is the freshness
+  signal; its colour now follows the node, off the same four states as the glyph under the
+  name, and the suite compares the two palettes rather than listing the hues twice. (#47)
 
 ## [0.4.0] — 2026-08-17
 

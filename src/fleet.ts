@@ -232,6 +232,15 @@ export function accountLimits(rows: FleetRow[]): AccountReading | null {
   return freshest;
 }
 
-// busy first, then unknown (it might be busy), then idle
-const rank = (r: FleetRow): number => (r.busy === true ? 0 : r.busy === null ? 1 : 2);
+// Blocked on a human first, then busy, then unknown (it might be busy), then idle.
+//
+// Waiting leads because it is the only rank that is work for the reader: everything below it
+// is the fleet reporting on itself, while a waiting session has STOPPED and will not start
+// again until someone answers it. Ranking it by how busy it is — the question the rest of this
+// sort asks — is what filed it with `unknown`, one bucket under a fleet that is mostly busy,
+// which on the map is under the fold. It costs the ranks below it almost nothing: a fleet has
+// one or two of these at a time, so busy moves down a row or two, and losing sight of a busy
+// session for a poll is not a thing that can go wrong. Losing sight of a waiting one is.
+const rank = (r: FleetRow): number =>
+  isWaiting(r) ? 0 : r.busy === true ? 1 : r.busy === null ? 2 : 3;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
