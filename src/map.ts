@@ -3,9 +3,10 @@
 // A view over the fleet `buildFleet` already produced. It opens no second source: every
 // field below is derived from a row that is already on the page as a table line.
 
+import { isWaiting } from './sessions.ts';
 import type { Fleet, FleetRow } from './fleet.ts';
 
-export type NodeState = 'busy' | 'idle' | 'unknown';
+export type NodeState = 'busy' | 'waiting' | 'idle' | 'unknown';
 
 /**
  * How much a node's context reading may be believed. The state above and this are two
@@ -149,4 +150,13 @@ function readingOf(r: FleetRow): Reading {
   return r.stale ? 'stale' : 'live';
 }
 
-export const stateOf = (r: FleetRow): NodeState => (r.busy === true ? 'busy' : r.busy === false ? 'idle' : 'unknown');
+/**
+ * The four words a node can be, out of a boolean that only has three answers.
+ *
+ * `waiting` is asked BEFORE the boolean's `null`, and that order is the point: a session
+ * halted until a human answers carries `busy: null` — "is it working" has no honest answer —
+ * which is the same null an unrecognised word gets. Left to the boolean alone, the one
+ * session that is blocked on YOU drew as the amber "tarmac does not know this word".
+ */
+export const stateOf = (r: FleetRow): NodeState =>
+  r.busy === true ? 'busy' : isWaiting(r) ? 'waiting' : r.busy === false ? 'idle' : 'unknown';

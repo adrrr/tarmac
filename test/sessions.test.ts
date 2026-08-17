@@ -26,6 +26,7 @@ test('maps a live agent entry to a session record', () => {
     kind: 'interactive',
     startedAt: 1786237453919,
     status: 'busy',
+    waitingFor: null,
     busy: true,
   });
 });
@@ -97,13 +98,59 @@ test('a running background agent is working, and a finished one is not', () => {
   assert.equal(busyFor('done'), false);
 });
 
+// A session halted until a human answers — the shape captured off a real machine (CC 2.1.232,
+// frozen in fixtures/agents-2.1.232-waiting.json), the values synthetic per the fixtures
+// standard. `waitingFor` is the field that says which human answer, out of a vocabulary the
+// surface documents: permission prompt, input needed, sandbox request, worker request,
+// dialog open.
+const WAITING_ENTRY = JSON.stringify([
+  {
+    pid: 42713,
+    cwd: '/Users/jane/alpha',
+    kind: 'interactive',
+    startedAt: 1786731044918,
+    sessionId: '8c1f6b70-49d2-4e83-a5c7-b21e0f9d3a64',
+    name: 'alpha-8c',
+    status: 'waiting',
+    waitingFor: 'dialog open',
+  },
+]);
+
+test('a waiting session says so, and says what it is waiting for', () => {
+  const { sessions } = parseAgents(WAITING_ENTRY);
+  assert.equal(sessions[0].status, 'waiting');
+  assert.equal(sessions[0].waitingFor, 'dialog open');
+});
+
+// The boolean still cannot answer for it — "is this session working" has no answer here, and
+// `false` would read as calm on the one session that needs you. What changes is the COUNT: a
+// word the tool knows, and now renders as a state of its own, is not a schema it failed to
+// recognise, and the banner that says so must not name it.
+test('a waiting session is a state tarmac knows, not an unknown status', () => {
+  const { sessions, health } = parseAgents(WAITING_ENTRY);
+  assert.equal(sessions[0].busy, null, 'the boolean still says "I cannot answer that"');
+  assert.equal(health.unknownStatus, 0);
+});
+
+// The reason is a field, and a field can be absent. A waiting session with no reason is still
+// waiting: the state comes from `status`, never from the presence of its caption.
+test('a waiting session with no reason is still waiting', () => {
+  const { sessions, health } = parseAgents(JSON.stringify([{ sessionId: 'a', status: 'waiting' }]));
+  assert.equal(sessions[0].status, 'waiting');
+  assert.equal(sessions[0].waitingFor, null);
+  assert.equal(health.unknownStatus, 0);
+});
+
 // The words that outrank their own boolean. `failed` and `stopped` are "not working" and that
-// is the least interesting true thing about them; `blocked` and `waiting` are a session halted
-// until a human answers something, where "not working" reads as calm and "working" as fine.
-// Unknown is the only bucket whose node prints the word itself, so these keep it: an amber
-// node captioned `failed` says what no boolean here could.
+// is the least interesting true thing about them; `blocked` is a session halted until a human
+// answers something, where "not working" reads as calm and "working" as fine. Unknown is the
+// only bucket whose node prints the word itself, so these keep it: an amber node captioned
+// `failed` says what no boolean here could.
+//
+// `waiting` used to be on this list. It has a state of its own now, and a documented reason
+// to print beside it — which is more than the amber node ever said.
 test('a word the boolean would flatten stays unknown, and reaches the page as it came', () => {
-  for (const word of ['failed', 'stopped', 'blocked', 'waiting']) {
+  for (const word of ['failed', 'stopped', 'blocked']) {
     const { sessions, health } = parseAgents(JSON.stringify([{ sessionId: 'a', state: word }]));
     assert.equal(sessions[0].busy, null, word);
     assert.equal(sessions[0].status, word);

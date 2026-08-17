@@ -128,7 +128,7 @@ tarmac reads two things instead:
 
 | Source | What it gives | How solid |
 |---|---|---|
-| `claude agents --json` | which sessions exist, busy or idle, cwd, uptime | a documented CLI surface (`--help`: *"Print active sessions … as a JSON array … for scripting"*) |
+| `claude agents --json` | which sessions exist, busy, idle or waiting on you, cwd, uptime | a documented CLI surface (`--help`: *"Print active sessions … as a JSON array … for scripting"*) |
 | the status line payload | context %, model, effort, cost | the JSON Claude Code hands to your own `statusLine.command` on every frame — **observed, not published as a schema** |
 
 That second line is the honest caveat, and it is the reason the real defence is not
@@ -187,10 +187,11 @@ filable.
 
 ## What it deliberately does not do
 
-- **No "waiting for you" signal.** The obvious missing column — which session is blocked on
-  a human — is deliberately absent: the status line payload carries nothing that means it,
-  and `agents --json` reports `idle` for a session waiting on you and for one that finished.
-  Inferring it would mean reading a transcript, which is the one thing this tool will not do.
+- **No inferred "waiting for you".** `agents --json` reports `waiting` with a reason —
+  a permission prompt, an open dialog — and tarmac draws exactly that, on both surfaces.
+  What it will not do is guess at the rest: a session that asked you a question in prose
+  still reports `idle`, and the only way to know better is to read a transcript, which is
+  the one thing this tool will not do. The signal is as good as the surface, and no better.
 - **No history.** Each run is a snapshot in time; context and cost curves come later.
 - **No Windows.** The generated wrapper is POSIX `sh`.
 - **No remote fleets.** It watches the machine it runs on.

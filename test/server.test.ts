@@ -248,6 +248,38 @@ test('each state pill carries a shape as well as a word', () => {
   assert.match(unknown, /▲\s*transmogrifying/);
 });
 
+// The row an operator is looking for. It used to draw as the amber "tarmac does not know this
+// word", beside a banner saying so — over the one session where nothing is wrong with the
+// tool and something is wanted from the reader.
+test('a waiting row is a state of its own, and says what it is waiting for', () => {
+  const live = renderLive({
+    rows: [row({ busy: null, status: 'waiting', waitingFor: 'dialog open' })],
+    health: health(),
+  });
+  assert.match(live, /<tr data-state="waiting">/);
+  assert.match(live, /◐\s*waiting · dialog open/);
+  assert.doesNotMatch(live, /data-state="unknown"/);
+  assert.doesNotMatch(live, /does not know/, 'and no banner about an unrecognised status');
+});
+
+// The reason is read off the entry as it came, and it is the WORD that decides the state. An
+// entry carrying both a reason and some other status is a source that has moved; drawing the
+// leftover would caption a working session with what it was blocked on a moment ago.
+test('a reason left beside another state is not drawn on either surface', () => {
+  const live = renderLive({
+    rows: [row({ busy: true, status: 'busy', waitingFor: 'dialog open' })],
+    health: health({ busy: 1 }),
+  });
+  assert.doesNotMatch(live, /dialog open/);
+});
+
+// The pill is one string, so an absent reason has to be absent from it rather than appended:
+// "waiting · " is a sentence cut off, and "waiting · null" is worse.
+test('a waiting row that gave no reason carries the word alone', () => {
+  const live = renderLive({ rows: [row({ busy: null, status: 'waiting', waitingFor: null })], health: health() });
+  assert.match(live, /◐\s*waiting<\/span>/);
+});
+
 // ── a phone-width viewport ────────────────────────────────────────────────────────────
 // Where the columns stack, a value with no header above it is a number with no name — and
 // "—" with no name is exactly the missing measurement the product refuses to render as 0.
@@ -300,7 +332,8 @@ test('a row with nothing measured renders no zero and no empty cell', () => {
   const live = renderLive({
     rows: [
       {
-        sessionId: null, name: null, project: null, cwd: null, pid: null, kind: null, status: null, busy: null,
+        sessionId: null, name: null, project: null, cwd: null, pid: null, kind: null, status: null,
+        waitingFor: null, busy: null,
         uptimeMs: null, ctxState: 'absent', ctxPct: null, ctxTokens: null, ctxWindow: null, model: null,
         effort: null, costUsd: null, snapshotAgeMs: null, stale: false, rateLimits: null,
       },
