@@ -40,6 +40,27 @@ test('the checked versions are exactly the ones fixtures/ covers', () => {
   );
 });
 
+// The other half of the same promise, and the half nothing was checking: the guard says
+// every field tarmac reads was OBSERVED, so a key the reader takes off an entry and no
+// fixture carries is a claim with nothing behind it. `state` was exactly that — read since
+// the map landed, frozen nowhere (#28). The keys come off the reader's own source rather
+// than a list kept beside it, because a list beside it is a list that stops being updated.
+// Across the family, not per file: the 2.1.226 capture caught no background session (which
+// says nothing about the field's existence there), and a fixture is a capture of one build,
+// not a checklist to be filled in.
+test('every key the agents reader takes off an entry is carried by some fixture', () => {
+  const read = new Set([...fs.readFileSync(path.join(repo, 'src', 'sessions.ts'), 'utf8').matchAll(/\bentry\.(\w+)/g)].map((m) => m[1]!));
+  assert.ok(read.size > 0, 'no `entry.` reads found — this test has stopped watching anything');
+
+  const carried = new Set<string>();
+  for (const f of fs.readdirSync(fixturesDir).filter((f) => /^agents-/.test(f) && f.endsWith('.json'))) {
+    for (const e of JSON.parse(fs.readFileSync(path.join(fixturesDir, f), 'utf8')) as Record<string, unknown>[]) {
+      for (const k of Object.keys(e)) carried.add(k);
+    }
+  }
+  assert.deepEqual([...read].filter((k) => !carried.has(k)), [], 'read off a shape no capture ever showed');
+});
+
 // ── the guard ─────────────────────────────────────────────────────────────────────────
 test('a version tarmac has checked says nothing at all', () => {
   const g = guardVersions(['2.1.226']);
