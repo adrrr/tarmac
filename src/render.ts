@@ -167,7 +167,7 @@ export function renderTable({ rows, health }: Fleet): string {
   const head = ['PROJECT', 'STATE', 'CTX', 'AS OF', 'MODEL', 'EFFORT', 'COST', 'UP'];
   const body = rows.map((r) => [
     r.project ?? '—',
-    r.busy === true ? 'busy' : r.busy === false ? 'idle' : `?${r.status ?? ''}`,
+    stateCell(r),
     r.ctxPct === null ? `— ${r.ctxState}` : `${r.ctxPct}%`,
     // The age of the reading, never implied to be "now".
     r.snapshotAgeMs === null ? '—' : ahead(r) ? '— ahead' : `${age(r.snapshotAgeMs)}${r.stale ? ' !' : ''}`,
@@ -224,6 +224,21 @@ export function renderTable({ rows, health }: Fleet): string {
     (warns.length ? '\n' + warns.join('\n') + '\n' : '') +
     `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n`
   );
+}
+
+/**
+ * The STATE column, out of the same verdict the page draws from.
+ *
+ * `?` is this column's word for "a status tarmac does not recognise", so it may not lead the
+ * one status tarmac knows by name and now has a state for. The reason follows the word, in
+ * the separator this renderer already uses for two facts on one line — and it is the only
+ * value here that can widen a column: it does so on a fleet that has a session blocked on a
+ * human, which is the fleet you wanted it on.
+ */
+function stateCell(r: FleetRow): string {
+  const state = stateOf(r);
+  if (state === 'unknown') return `?${r.status ?? ''}`;
+  return state === 'waiting' && r.waitingFor !== null ? `waiting · ${r.waitingFor}` : state;
 }
 
 /**
@@ -494,8 +509,10 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>tarmac — fleet</title>
 <style>
-  :root { color-scheme: light dark; --fg:#111; --dim:#6b7280; --line:#e5e7eb; --bg:#fff; --warn:#b45309; --warnbg:#fffbeb; --busy:#047857; }
-  @media (prefers-color-scheme: dark) { :root { --fg:#e5e7eb; --dim:#9ca3af; --line:#374151; --bg:#0b0f14; --warn:#fbbf24; --warnbg:#231a06; --busy:#34d399; } }
+  /* --wait is a fourth hue rather than the warning one: a session blocked on a human is not
+     a fault, and painting it amber puts it in the same column as "tarmac cannot read this". */
+  :root { color-scheme: light dark; --fg:#111; --dim:#6b7280; --line:#e5e7eb; --bg:#fff; --warn:#b45309; --warnbg:#fffbeb; --busy:#047857; --wait:#1d4ed8; }
+  @media (prefers-color-scheme: dark) { :root { --fg:#e5e7eb; --dim:#9ca3af; --line:#374151; --bg:#0b0f14; --warn:#fbbf24; --warnbg:#231a06; --busy:#34d399; --wait:#93c5fd; } }
   body { margin:0; padding:2rem 1.25rem; background:var(--bg); color:var(--fg);
          font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",sans-serif; }
   header { display:flex; align-items:baseline; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
@@ -519,11 +536,13 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .pill { display:inline-block; font-size:.8rem; font-weight:600; padding:.05rem .5rem;
           border:1px solid currentColor; border-radius:99px; white-space:nowrap; }
   .pill.busy { color:var(--busy); }
+  .pill.waiting { color:var(--wait); }
   .pill.unknown { color:var(--warn); }
   .pill.idle { color:var(--dim); font-weight:400; }
   /* The weight the sort deserves: busy rows carry an accent and a bold name. */
   td:first-child { border-left:3px solid transparent; }
   tr[data-state="busy"] td:first-child { border-left-color:var(--busy); }
+  tr[data-state="waiting"] td:first-child { border-left-color:var(--wait); }
   tr[data-state="unknown"] td:first-child { border-left-color:var(--warn); }
   tr[data-state="busy"] .project { font-weight:700; }
   /* The bar reads a magnitude at a glance; the number beside it is what is authoritative.
@@ -621,6 +640,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node { border:1px solid var(--line); border-radius:10px; padding:.8rem .85rem .7rem;
           display:flex; flex-direction:column; align-items:center; text-align:center; }
   .node[data-state="busy"] { border-color:color-mix(in srgb, var(--busy) 45%, var(--line)); }
+  .node[data-state="waiting"] { border-color:color-mix(in srgb, var(--wait) 45%, var(--line)); }
   /* An agent is a smaller body in the same system, next to the session it shares a directory
      with — never inside it. Tinted rather than outlined, and hooked, so it reads as the
      session's dependent without a line claiming a parentage the source never published. */
@@ -678,8 +698,12 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node[data-state="busy"] .who .project { font-weight:700; }
   .shape { font-size:.7rem; color:var(--dim); }
   .node[data-state="busy"] .shape { color:var(--busy); }
+  .node[data-state="waiting"] .shape { color:var(--wait); }
   .node[data-state="unknown"] .shape { color:var(--warn); }
   .sub { color:var(--dim); font-size:.76rem; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* The one caption that is not a footnote: it is why this node is not working, and it sits
+     directly under the name in the state's own hue rather than in the grey of the rest. */
+  .sub.waiting-for { color:var(--wait); font-weight:600; }
   .asof { font-size:.72rem; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:.15rem; }
   .asof.stale { color:var(--warn); font-weight:600; }
   @media (max-width: 30rem) { .map { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); gap:.6rem; } }
@@ -696,6 +720,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     tr { border:1px solid var(--line); border-left-width:3px; border-radius:8px;
          padding:.35rem .7rem; margin-bottom:.6rem; }
     tr[data-state="busy"] { border-left-color:var(--busy); }
+    tr[data-state="waiting"] { border-left-color:var(--wait); }
     tr[data-state="unknown"] { border-left-color:var(--warn); }
     td, td:first-child { border:0; padding:.2rem 0; white-space:normal;
          display:flex; justify-content:space-between; align-items:baseline; gap:1rem; }
@@ -1057,6 +1082,10 @@ function pageScript(view: View): string {
       + '<div class="who"><span class="shape" aria-hidden="true">' + SHAPE[state] + '</span>'
       + '<span class="sr">' + state + '</span>'
       + '<span class="project">' + esc(x.project) + '</span></div>'
+      // The one caption the ring can fill. Guarded on the state as well as on the field: a
+      // reason left over beside another state is not a session waiting for anything, and esc()
+      // answers an absent field with a dash, which would caption a node "waiting for —".
+      + (state === 'waiting' && x.waitingFor ? '<div class="sub waiting-for">' + esc(x.waitingFor) + '</div>' : '')
       + (x.kind === null || x.kind === undefined || x.kind === INTERACTIVE ? '' : '<div class="sub">' + esc(x.kind) + '</div>')
       + (typeof x.costUsd === 'number' ? '<div class="sub">$' + x.costUsd.toFixed(2) + '</div>' : '')
       + '</article>';
@@ -1255,7 +1284,7 @@ function pageScript(view: View): string {
  */
 function renderRow(r: FleetRow): string {
   const state = stateOf(r);
-  const word = stateWord(state, r);
+  const word = stateLabel(state, r);
   // `data-label` is not decoration: below ~46rem the columns stack, the header row is gone,
   // and a value whose column has no name is a bare "—" that could mean anything.
   // Every cell holds exactly ONE element. Stacked on a phone the label sits left and the
@@ -1273,7 +1302,7 @@ function renderRow(r: FleetRow): string {
   </tr>`;
 }
 
-const SHAPE: Record<NodeState, string> = { busy: '●', unknown: '▲', idle: '○' };
+const SHAPE: Record<NodeState, string> = { busy: '●', waiting: '◐', unknown: '▲', idle: '○' };
 
 /**
  * The state in words, for both surfaces — derived from the state the MODEL decided, never
@@ -1285,6 +1314,15 @@ const SHAPE: Record<NodeState, string> = { busy: '●', unknown: '▲', idle: '�
  */
 const stateWord = (state: NodeState, r: FleetRow): string =>
   state === 'unknown' ? (r.status ?? 'unknown') : state;
+
+/**
+ * The same word with the reason attached, for the table — which has one cell per session and
+ * no room for a caption of its own. The map keeps them apart instead: the word is what a
+ * screen reader is handed in place of the glyph, and repeating the reason there would read it
+ * twice, once hidden and once out of the caption below it.
+ */
+const stateLabel = (state: NodeState, r: FleetRow): string =>
+  state === 'waiting' && r.waitingFor !== null ? `${stateWord(state, r)} · ${r.waitingFor}` : stateWord(state, r);
 
 /**
  * Which kind of missing a missing percentage is. One lookup for both surfaces: the table
@@ -1317,6 +1355,10 @@ export function renderMap(fleet: Fleet): string {
  * dial is no reading at all, the shape beside the name is the session's state, and the halo
  * says one landed moments ago. The words under them are the same ones the table uses for the
  * same conditions — including the halo's, which would otherwise live only in a drawing.
+ *
+ * One state brings a caption with it. A waiting session is the only one where the shape
+ * leaves a question the source can answer — which human answer it is halted on — and it is
+ * printed directly under the name, not hidden in a title attribute nobody hovers on a phone.
  */
 function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode): string {
   // The model owns "is there a number"; this reads its verdict rather than asking the row a
@@ -1344,6 +1386,7 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
         ${pulse ? `<span class="sr">a reading just landed</span>` : ''}
       </div>
       <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span></div>
+      ${state === 'waiting' && r.waitingFor !== null ? `<div class="sub waiting-for">${esc(r.waitingFor)}</div>` : ''}
       <div class="sub">${esc(r.name)}</div>
       ${r.kind === null || r.kind === INTERACTIVE ? '' : `<div class="sub">${esc(r.kind)}</div>`}
       <div class="sub">${esc(r.model)}${r.effort === null ? '' : ` · ${esc(r.effort)}`}</div>

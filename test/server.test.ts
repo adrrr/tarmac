@@ -248,6 +248,20 @@ test('each state pill carries a shape as well as a word', () => {
   assert.match(unknown, /▲\s*transmogrifying/);
 });
 
+// The row an operator is looking for. It used to draw as the amber "tarmac does not know this
+// word", beside a banner saying so — over the one session where nothing is wrong with the
+// tool and something is wanted from the reader.
+test('a waiting row is a state of its own, and says what it is waiting for', () => {
+  const live = renderLive({
+    rows: [row({ busy: null, status: 'waiting', waitingFor: 'dialog open' })],
+    health: health(),
+  });
+  assert.match(live, /<tr data-state="waiting">/);
+  assert.match(live, /◐\s*waiting · dialog open/);
+  assert.doesNotMatch(live, /data-state="unknown"/);
+  assert.doesNotMatch(live, /does not know/, 'and no banner about an unrecognised status');
+});
+
 // ── a phone-width viewport ────────────────────────────────────────────────────────────
 // Where the columns stack, a value with no header above it is a number with no name — and
 // "—" with no name is exactly the missing measurement the product refuses to render as 0.

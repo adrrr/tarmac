@@ -21,6 +21,21 @@ test('prints a header, a row and the fleet summary', () => {
   assert.match(out, /1 sessions · 0 busy · \$27\.75/);
 });
 
+// `?` is this column's word for "a status tarmac does not recognise", and it may not lead the
+// one status tarmac now knows by name. The reason travels beside the word rather than being
+// left to the page: `list` is the whole product for someone who never starts a serve.
+test('a waiting session is named in the state column, with what it is waiting for', () => {
+  const out = renderTable(fleet([row({ busy: null, status: 'waiting', waitingFor: 'permission prompt' })]));
+  assert.match(out, /waiting · permission prompt/);
+  assert.equal(/\?waiting/.test(out), false, 'not a word the tool failed to recognise');
+});
+
+// The state comes from the word, never from the presence of its caption — and a column that
+// widens for a reason nobody gave is a column of trailing spaces.
+test('a waiting session that gave no reason is still named waiting', () => {
+  assert.match(renderTable(fleet([row({ busy: null, status: 'waiting', waitingFor: null })])), /alpha +waiting +26%/);
+});
+
 test('renders a missing measurement as a dash and its reason, never as a zero', () => {
   const out = renderTable(fleet([row({ ctxState: 'absent', ctxPct: null, model: null, costUsd: null, snapshotAgeMs: null })], { covered: 0, costUsd: null }));
   assert.match(out, /— absent/);

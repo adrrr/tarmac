@@ -20,10 +20,23 @@ test('a sample carries, per session, the fields a replay reads back', () => {
     project: 'alpha',
     kind: 'interactive',
     state: 'idle',
+    waitingFor: null,
     ctxState: 'ok',
     ctxPct: 26,
     costUsd: 27.75,
   });
+});
+
+// A waiting session ages like every other reading, and the reason ages with it: "blocked on a
+// permission prompt at 14:02" is the sentence a replay is opened to find. It is also the one
+// field of its kind the ring is allowed to keep — a closed vocabulary the surface documents,
+// where a session NAME is a background agent's prompt and stays out.
+test('a waiting session keeps its reason in the ring', () => {
+  const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });
+  h.record(fleet([row({ busy: null, status: 'waiting', waitingFor: 'permission prompt' })]));
+  const [session] = h.read().samples[0].sessions;
+  assert.equal(session.state, 'waiting');
+  assert.equal(session.waitingFor, 'permission prompt');
 });
 
 // The three words the map draws, out of the same function: a replay that disagreed with the

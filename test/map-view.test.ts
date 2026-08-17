@@ -123,6 +123,23 @@ test('a busy session is marked busy, and an unknown status is not marked idle', 
   assert.match(one({ busy: null, status: 'compacting' }), /data-state="unknown"/);
 });
 
+// The node this whole lot is for: a session blocked on a human, drawn as its own state and
+// captioned with the answer it is waiting for — the one thing a reader can act on.
+test('a waiting node is drawn as waiting, captioned with what it waits for', () => {
+  const html = one({ busy: null, status: 'waiting', waitingFor: 'permission prompt' });
+  assert.match(html, /data-state="waiting"/);
+  assert.match(html, /<span class="sr">waiting<\/span>/, 'and the word, for a reader handed only a glyph');
+  assert.match(html, /class="sub waiting-for">permission prompt</);
+});
+
+// The caption is a field, and the field can be absent. An empty line under the name says
+// "waiting for nothing", which is the one thing it never means.
+test('a waiting node with no reason carries no caption at all', () => {
+  const html = one({ busy: null, status: 'waiting', waitingFor: null });
+  assert.match(html, /data-state="waiting"/);
+  assert.doesNotMatch(html, /waiting-for/);
+});
+
 test('a background agent is drawn as an agent, and names what it is', () => {
   const html = renderMap(
     fleet([
@@ -200,6 +217,10 @@ test('every value the machine supplies is escaped', () => {
     const html = renderMap(fleet([row({ [field]: nasty, busy: null, kind: field === 'kind' ? nasty : 'background', cwd: '/w' })]));
     assert.doesNotMatch(html, /<script>/, field);
   }
+  // The reason a session is waiting is one of them, and it only reaches the page beside the
+  // word that puts it there — a documented vocabulary today, a string off another process
+  // either way.
+  assert.doesNotMatch(renderMap(fleet([row({ busy: null, status: 'waiting', waitingFor: nasty })])), /<script>/);
 });
 
 // ── the page around it ───────────────────────────────────────────────────────────────────

@@ -40,6 +40,7 @@ const session = (over: Partial<HistorySession> = {}): HistorySession => ({
   project: 'alpha',
   kind: 'interactive',
   state: 'idle',
+  waitingFor: null,
   ctxState: 'ok',
   ctxPct: 26,
   costUsd: 1.5,
@@ -243,6 +244,25 @@ test('a state the vocabulary does not contain is unknown, even when Object has a
   const html = page.el('replay-map').innerHTML;
   assert.match(html, /data-state="unknown"/);
   assert.doesNotMatch(html, /native code|function/, 'no function body reached the page');
+});
+
+// A waiting minute replays as a waiting minute. The caption is drawn from the sample's own
+// field, out of the same branch the live map uses — a replay that showed the state without
+// the reason would answer "what was it blocked on?" with the one word the reader already had.
+test('a waiting session replays as waiting, with the reason it was waiting for', async () => {
+  const page = mount(record(1, () => [session({ state: 'waiting', waitingFor: 'dialog open' })]));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  const html = page.el('replay-map').innerHTML;
+  assert.match(html, /data-state="waiting"/);
+  assert.match(html, /waiting-for">dialog open</);
+});
+
+test('a replayed waiting session with no reason carries no caption', async () => {
+  const page = mount(record(1, () => [session({ state: 'waiting', waitingFor: null })]));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  assert.doesNotMatch(page.el('replay-map').innerHTML, /waiting-for/);
 });
 
 // A background agent replays as what the ring holds: what kind of thing it was and what it

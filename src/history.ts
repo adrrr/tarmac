@@ -40,6 +40,14 @@ export interface HistorySession {
    * states, and the two would disagree the day either one changed.
    */
   state: NodeState;
+  /**
+   * Which human answer a `waiting` session was halted on, kept for the minute it was true of.
+   * The one string off the source this record keeps beside the numbers, and it is kept for
+   * the reason the NAMES are not: it is a closed vocabulary the surface documents — five
+   * words about the fleet's own machinery — where a background session's name is the prompt
+   * somebody typed. `null` on every other state, and on a waiting one that gave no reason.
+   */
+  waitingFor: string | null;
   ctxState: RowCtxState;
   ctxPct: number | null;
   costUsd: number | null;
@@ -145,6 +153,7 @@ function sampleOf({ rows, health }: Fleet): HistorySample {
       project: r.project,
       kind: r.kind,
       state: stateOf(r),
+      waitingFor: r.waitingFor,
       ctxState: r.ctxState,
       ctxPct: r.ctxPct,
       costUsd: r.costUsd,

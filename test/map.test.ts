@@ -25,6 +25,19 @@ test('an unrecognised status is unknown, never idle', () => {
   assert.equal(only({ busy: null, status: 'compacting' }).state, 'unknown');
 });
 
+// A state of its own, and the reason it cannot be read off the boolean: `busy` is null for a
+// waiting session — the same null an unrecognised word has — so a map that asked only the
+// boolean drew the one session blocked on a human as the amber "we have no idea".
+test('a session halted on a human is waiting, not unknown', () => {
+  assert.equal(only({ busy: null, status: 'waiting', waitingFor: 'permission prompt' }).state, 'waiting');
+});
+
+// The word is what makes it waiting, never the caption: the reason is a field the entry may
+// simply not carry, and a session with no reason is not thereby a session with no state.
+test('a waiting session with no reason is still waiting', () => {
+  assert.equal(only({ busy: null, status: 'waiting', waitingFor: null }).state, 'waiting');
+});
+
 test('a reading inside the freshness threshold is live', () => {
   assert.equal(only({ snapshotAgeMs: 1200, stale: false }).reading, 'live');
 });
