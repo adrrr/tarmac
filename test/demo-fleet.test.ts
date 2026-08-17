@@ -54,6 +54,9 @@ test('nothing the demo publishes comes off the machine that runs it', () => {
   // home is nowhere near the real one — every CI runner — and it accuses the fixtures' own
   // standard on a machine whose home is `/Users` or is not set at all. So it runs only where
   // it can mean something, and the prefix check below is what actually holds every path.
+  // The constant itself is pinned first: every check below compares paths to DEMO_HOME, so a
+  // DEMO_HOME rewritten to a real home would satisfy them all while `meaningful` stands down.
+  assert.equal(DEMO_HOME, '/Users/jane');
   const home = os.homedir();
   const meaningful = home.length > 1 && !`${DEMO_HOME}/`.startsWith(`${home}/`);
   for (const minute of [0, 1, 400, 812, DEMO_MINUTES - 1]) {

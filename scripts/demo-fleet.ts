@@ -107,9 +107,9 @@ interface Actor {
   fresh?: { from: number; to: number };
 }
 
-// Five sessions, two of which are not there at midnight, and one of which is a background
-// agent placed beside the session sharing its directory. The names are the fixtures' standard:
-// invented projects under an invented home, and an agent named after the prompt it was given.
+// Six actors — four sessions and two background agents placed beside the session sharing
+// their directory — four of which are not there at midnight. The names are the fixtures'
+// standard: invented projects under an invented home, and agents named after their prompt.
 const ACTORS: Actor[] = [
   {
     sid: '3a91c7d2-5e48-4f06-8b13-97d40a62e5f1',
