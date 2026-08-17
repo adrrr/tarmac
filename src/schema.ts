@@ -34,7 +34,7 @@ export type Surface = 'statusline' | 'agents';
  */
 export const CHECKED_VERSIONS: Record<Surface, readonly string[]> = {
   statusline: ['2.1.220', '2.1.226'],
-  agents: ['2.1.226'],
+  agents: ['2.1.226', '2.1.232'],
 };
 
 const SURFACE_LABEL: Record<Surface, string> = {

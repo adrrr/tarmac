@@ -1,0 +1,29 @@
+[
+  {
+    "pid": 30412,
+    "cwd": "/Users/jane/alpha",
+    "kind": "interactive",
+    "startedAt": 1786724901337,
+    "sessionId": "3a91c7d2-5e48-4f06-8b13-97d40a62e5f1",
+    "name": "alpha-3f",
+    "status": "busy"
+  },
+  {
+    "pid": 31877,
+    "cwd": "/Users/jane/projects/echo-tracker",
+    "kind": "interactive",
+    "startedAt": 1786725114602,
+    "sessionId": "c48b2d19-7f0a-4c65-9b3e-5da0117c8e44",
+    "name": "echo-tracker-90",
+    "status": "idle"
+  },
+  {
+    "id": "2f5c8a04",
+    "cwd": "/Users/jane/alpha",
+    "kind": "background",
+    "startedAt": 1786727883345,
+    "sessionId": "2f5c8a04-6d31-42f7-b0aa-9e7c4415d8b1",
+    "name": "draft the release notes",
+    "state": "working"
+  }
+]
