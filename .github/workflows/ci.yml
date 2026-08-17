@@ -23,6 +23,7 @@ jobs:
   test:
     name: test · node ${{ matrix.node }} · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +44,7 @@ jobs:
   artifact:
     name: artifact · node 20 · the published dist/
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
