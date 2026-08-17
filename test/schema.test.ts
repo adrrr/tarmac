@@ -132,6 +132,17 @@ test('a version nobody captured is named even when a newer, checked one is in fl
   assert.match(schemaNotice(g)!, /2\.1\.222/);
 });
 
+// The shape-check line is a maintainer's, and it stands on every user's page until a release
+// ships the fixture that ends it (#53). This is that release for 2.1.232, whose `agents` half
+// has been frozen since #44 and whose statusline half had never been captured — the exact
+// half-covered state the notice was reporting, verbatim, to everyone.
+test('2.1.232 is checked on both surfaces, so a fleet running it is told nothing', () => {
+  const g = guardVersions(['2.1.232']);
+  assert.equal(g.state, 'ok');
+  assert.deepEqual(g.unchecked, []);
+  assert.equal(schemaNotice(g), null);
+});
+
 // `claude agents --json` has one fixture (2.1.226), the statusline has two (2.1.220 too).
 // A version covered on one surface and not the other must say which is which.
 test('a version checked on one surface only names the surface that is not', () => {
