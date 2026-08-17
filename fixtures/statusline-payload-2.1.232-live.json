@@ -1,0 +1,63 @@
+{
+  "session_id": "3a91c7d2-5e48-4f06-8b13-97d40a62e5f1",
+  "transcript_path": "/Users/jane/.claude/projects/-Users-jane-alpha/3a91c7d2-5e48-4f06-8b13-97d40a62e5f1.jsonl",
+  "cwd": "/Users/jane/alpha",
+  "prompt_id": "b7e41d55-2c60-4a8e-9f37-6081ad3c5e42",
+  "effort": {
+    "level": "high"
+  },
+  "session_name": "Wire the retry budget",
+  "model": {
+    "id": "claude-opus-5",
+    "display_name": "Opus 5"
+  },
+  "workspace": {
+    "current_dir": "/Users/jane/alpha",
+    "project_dir": "/Users/jane/alpha",
+    "added_dirs": [],
+    "repo": {
+      "host": "github.com",
+      "owner": "octocat",
+      "name": "alpha"
+    }
+  },
+  "version": "2.1.232",
+  "output_style": {
+    "name": "default"
+  },
+  "cost": {
+    "total_cost_usd": 8.9012345678901,
+    "total_duration_ms": 20551338,
+    "total_api_duration_ms": 6142907,
+    "total_lines_added": 1873,
+    "total_lines_removed": 402
+  },
+  "context_window": {
+    "total_input_tokens": 318204,
+    "total_output_tokens": 2048,
+    "context_window_size": 1000000,
+    "current_usage": {
+      "input_tokens": 4,
+      "output_tokens": 2048,
+      "cache_creation_input_tokens": 2210,
+      "cache_read_input_tokens": 315942
+    },
+    "used_percentage": 32,
+    "remaining_percentage": 68
+  },
+  "exceeds_200k_tokens": true,
+  "fast_mode": false,
+  "thinking": {
+    "enabled": true
+  },
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 23,
+      "resets_at": 1786741200
+    },
+    "seven_day": {
+      "used_percentage": 61,
+      "resets_at": 1787212800
+    }
+  }
+}
