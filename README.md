@@ -10,6 +10,26 @@
 busy or idle, how full its context is, which model, what it has cost so far. It reads
 documented surfaces only, never an internal format.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/replay-dark.gif">
+  <img src="docs/media/replay-light.gif" width="1100"
+       alt="The tarmac map with the scrubber dragged across the record: five sessions drawn as dials, each arc a context window, the account's five-hour and seven-day gauges above them. As the handle moves, sessions appear and disappear, the arcs fill and reset, the five-hour window fills and rolls over, and a banner names the minute being replayed until Back to live is pressed.">
+</picture>
+
+[Quickstart](#quickstart) · [The map](#the-map) · [The dashboard](#the-dashboard) ·
+[Install](#install) · [Commands](#commands) · [Configuration](#configuration) ·
+[Manual](docs/MANUAL.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/adrrr/tarmac/issues)
+
+## Quickstart
+
+```bash
+npx @adrrr/tarmac              # one-shot fleet table
+npx @adrrr/tarmac --watch      # the same table, redrawn every 5s until ^C
+npx @adrrr/tarmac serve        # the same fleet in the browser
+npx @adrrr/tarmac install      # chain the status line: unlocks ctx, model, effort and cost
+npx @adrrr/tarmac uninstall    # hand your status line back
+```
+
 ```
 $ npx @adrrr/tarmac
 
@@ -31,17 +51,65 @@ same command still lists every session, its state and its uptime, straight from
 
 Node ≥ 20. **Zero runtime dependencies** — no framework, no bundler, nothing to audit.
 
-[Manual](docs/MANUAL.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/adrrr/tarmac/issues)
+## The map
+
+`tarmac serve` puts the same fleet in the browser — every session a row, ages that keep
+climbing, and a banner the moment a refresh fails instead of a table quietly going stale.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/map-dark.png">
+  <img src="docs/media/map-light.png" width="1100"
+       alt="The tarmac map, live. Five nodes: beacon halted on a permission prompt, harbor busy with its context arc at 90%, a background agent named after its prompt beside it, quay reporting a status tarmac does not know, and atlas idle at 36%. The account's five-hour and seven-day gauges sit above them, and one warning above the fleet names the unrecognised status rather than filing it as idle.">
+</picture>
+
+The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
+its context, the shape by the name its state, and a single halo when a reading for it landed
+moments ago. It is the same reading in the same fragment, so the two views can never disagree.
+
+Four states, and the fleet above is showing all of them: `waiting` leads the sort and says
+which answer it is halted on, `busy`, `idle`, and `unknown` — a word `claude agents --json`
+printed that tarmac has no boolean for, named above the fleet rather than quietly filed as
+`idle`.
+
+The rules the table follows, the map follows: a reading past the freshness threshold is drawn
+thin, amber and dated `! 3h ago` rather than as a live one, and a percentage nobody measured
+is an empty dotted dial that names which kind of nothing it is — never a ring at zero, and
+never a halo, however new the file it came in. A background agent is placed beside the session
+sharing its working directory, because the working directory is the only thing the two provably
+share; nothing is nested, and no edge is drawn for a relationship the sources do not publish.
+Details in [the manual](docs/MANUAL.md#the-map).
+
+Under the map is a **scrubber over the day this serve has seen**. Drag it and the dials render
+the fleet as it was at that minute; press play and the day walks past. The record is fetched on
+load, never per position, so scrubbing asks the server nothing. A replay never poses as the present: a banner names
+the minute and holds the way back, the live fragment is hidden while it is up, halos stay off
+because a sample never "just landed", and a session absent from a minute is absent from the
+map. The range says what it truly covers — a serve ten minutes old offers ten minutes. The
+account's gauges replay too, counted from the minute being shown rather than from now, so the
+five-hour window can be watched draining and refilling across a day.
+
+## The dashboard
+
+`serve` prints the settings it resolved, then the URL it got:
+
+```
+tarmac serving http://127.0.0.1:4477
+```
+
+It binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
+does not mark same-origin — your cwd paths and costs never leave the machine. A busy
+**default** port walks up to the next free one and says so; a port you chose yourself — flag,
+environment or config file — refuses instead, because you chose it.
+
+In the header are the account's **two rate-limit gauges** — the five-hour window and the
+seven-day one, each with its used percentage and its reset spelled as the time left. They are
+page-level because that is what a rate limit is: one account, which every session below is
+spending from. A fleet whose snapshots carry no limits says `— no reading` on a dotted rail
+rather than drawing a window at 0%, and a reading past the freshness threshold is dated
+`! 40m ago` — the countdown is recomputed every poll, the percentage is as old as its snapshot,
+and a page that showed both as now would be lying with the moving one.
 
 ## Install
-
-```bash
-npx @adrrr/tarmac              # one-shot fleet table
-npx @adrrr/tarmac --watch      # the same table, redrawn every 5s until ^C
-npx @adrrr/tarmac serve        # the same fleet in the browser
-npx @adrrr/tarmac install      # chain the status line: unlocks ctx, model, effort and cost
-npx @adrrr/tarmac uninstall    # hand your status line back
-```
 
 `install` changes the `statusLine` key of `~/.claude/settings.json`, and never on your
 say-so alone. It prints the whole plan first — including the exact command that undoes it —
@@ -71,52 +139,6 @@ frame go to `$XDG_STATE_HOME/tarmac/snapshots` (`~/.local/state/tarmac/snapshots
 default), because `~/.claude` is a directory people commit. Coming from 0.1.x, `install`
 clears the payloads an older version left in there, says how many and from where, and — when
 `~/.claude` is a git repository — prints the `.gitignore` line worth adding.
-
-## The dashboard
-
-`tarmac serve` puts the same fleet in the browser — every session a row, ages that keep
-climbing, and a banner the moment a refresh fails instead of a table quietly going stale. It
-prints the settings it resolved, then the URL it got:
-
-```
-tarmac serving http://127.0.0.1:4477
-```
-
-It binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
-does not mark same-origin — your cwd paths and costs never leave the machine. A busy
-**default** port walks up to the next free one and says so; a port you chose yourself — flag,
-environment or config file — refuses instead, because you chose it.
-
-In the header are the account's **two rate-limit gauges** — the five-hour window and the
-seven-day one, each with its used percentage and its reset spelled as the time left. They are
-page-level because that is what a rate limit is: one account, which every session below is
-spending from. A fleet whose snapshots carry no limits says `— no reading` on a dotted rail
-rather than drawing a window at 0%, and a reading past the freshness threshold is dated
-`! 40m ago` — the countdown is recomputed every poll, the percentage is as old as its snapshot,
-and a page that showed both as now would be lying with the moving one.
-
-### The map
-
-The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
-its context, the shape by the name its state, and a single halo when a reading for it landed
-moments ago. It is the same reading in the same fragment, so the two views can never disagree.
-
-The rules the table follows, the map follows: a reading past the freshness threshold is drawn
-thin, amber and dated `! 3h ago` rather than as a live one, and a percentage nobody measured
-is an empty dotted dial that names which kind of nothing it is — never a ring at zero, and
-never a halo, however new the file it came in. A background agent is placed beside the session
-sharing its working directory, because the working directory is the only thing the two provably
-share; nothing is nested, and no edge is drawn for a relationship the sources do not publish.
-Details in [the manual](docs/MANUAL.md#the-map).
-
-Under the map is a **scrubber over the day this serve has seen**. Drag it and the dials render
-the fleet as it was at that minute; press play and the day walks past. The record is fetched on
-load, never per position, so scrubbing asks the server nothing. A replay never poses as the present: a banner names
-the minute and holds the way back, the live fragment is hidden while it is up, halos stay off
-because a sample never "just landed", and a session absent from a minute is absent from the
-map. The range says what it truly covers — a serve ten minutes old offers ten minutes. The
-account's gauges replay too, counted from the minute being shown rather than from now, so the
-five-hour window can be watched draining and refilling across a day.
 
 ## Why it does not break
 
@@ -199,9 +221,15 @@ filable.
 ## Development
 
 ```bash
-npm test           # typecheck (src + test + scripts), then run the suite
-npm run build      # flat JavaScript into dist/
+npm test                       # typecheck (src + test + scripts), then run the suite
+npm run build                  # flat JavaScript into dist/
+node scripts/demo-fleet.ts     # the invented fleet the captures above are taken of
 ```
+
+Every capture on this page is taken of a fleet that does not exist. `demo-fleet` plays an
+invented day into a real `serve` — the real collector, the real renderer, both documented
+sources standing in as a shell script and a directory of payloads — because a screenshot of a
+real machine carries working directories, prompts and costs, and nothing real enters this repo.
 
 CI runs the suite on Node 22 and 24, on Linux and macOS, with `TARMAC_REQUIRE_DASH=1` so a
 machine without dash cannot report a green build it did not earn; a separate job builds

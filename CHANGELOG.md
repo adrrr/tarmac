@@ -61,6 +61,18 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   is hiding something. `tarmac list` is untouched — a one-shot dump has no top of the page to
   occupy, and its `!` line is the legend for the marks in the column. (#53)
 
+- **The README shows the thing.** Three badges and then prose: the map, the scrubber and the
+  gauges could not be seen without installing, which is the wrong bet for a tool whose whole
+  output is a screen. Under the badges is a GIF of the map replaying a day — the handle
+  dragged from one end of the record to the other, sessions coming and going, the five-hour
+  window filling and rolling over — and the map section carries a screenshot with all four
+  session states in it. Both follow the reader's colour scheme — the operating system's, which
+  is not always the one their GitHub theme is set to — so a browser only ever fetches one of
+  each. The quickstart moved above the long prose, the sections are ordered so the depth
+  is below the first screen, and nothing was cut. Every capture is taken of an invented fleet
+  (`scripts/demo-fleet.ts`) served through the real collector and the real renderer, because
+  a screenshot of a real machine carries working directories, prompts and costs. (#52)
+
 ## [0.4.0] — 2026-08-17
 
 ### Added
