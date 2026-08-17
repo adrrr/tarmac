@@ -678,9 +678,17 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   /* Once per arrival, not forever: the fragment is replaced on every poll, so a single run
      per swap is what makes the fleet breathe at the rate its frames actually land. A looping
      animation would say "a frame just arrived" for five seconds after it stopped being true. */
-  .halo { fill:none; stroke:var(--busy); stroke-width:2; opacity:0; transform-origin:50% 50%;
+  /* What the halo says is that a frame landed, and it says it by being there at all. Its
+     COLOUR is free, and it was spending it on a claim: stroked with the busy hue under a lone
+     idle override, it pulsed green over an unrecognised status and — since the fourth state — over
+     a session halted on a human, in the hue of the one thing it is certainly not doing. Same
+     palette as the glyph under the name, off the same four states, so the two channels drawing
+     one node cannot end up disagreeing about it. */
+  .halo { fill:none; stroke:var(--dim); stroke-width:2; opacity:0; transform-origin:50% 50%;
           animation:halo 1.6s ease-out 1; }
-  .node[data-state="idle"] .halo { stroke:var(--dim); }
+  .node[data-state="busy"] .halo { stroke:var(--busy); }
+  .node[data-state="waiting"] .halo { stroke:var(--wait); }
+  .node[data-state="unknown"] .halo { stroke:var(--warn); }
   @keyframes halo { from { opacity:.5; transform:scale(1); } to { opacity:0; transform:scale(1.22); } }
   /* Motion is the one thing here nobody can look away from, so it is the first thing a
      reader who asked for less of it stops getting. The reading is still readable without it. */
