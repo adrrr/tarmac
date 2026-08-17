@@ -265,6 +265,15 @@ test('a replayed waiting session with no reason carries no caption', async () =>
   assert.doesNotMatch(page.el('replay-map').innerHTML, /waiting-for/);
 });
 
+// The same rule as the server's, in the copy of it that ships to the browser: the state is
+// what puts a caption on a node, never the field on its own.
+test('a replayed reason beside another state is not drawn', async () => {
+  const page = mount(record(1, () => [session({ state: 'idle', waitingFor: 'dialog open' })]));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  assert.doesNotMatch(page.el('replay-map').innerHTML, /dialog open/);
+});
+
 // A background agent replays as what the ring holds: what kind of thing it was and what it
 // had cost. The ring stores no name, because a background session is named after its prompt.
 test('an agent replays as a kind and its numbers', async () => {

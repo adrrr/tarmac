@@ -262,6 +262,24 @@ test('a waiting row is a state of its own, and says what it is waiting for', () 
   assert.doesNotMatch(live, /does not know/, 'and no banner about an unrecognised status');
 });
 
+// The reason is read off the entry as it came, and it is the WORD that decides the state. An
+// entry carrying both a reason and some other status is a source that has moved; drawing the
+// leftover would caption a working session with what it was blocked on a moment ago.
+test('a reason left beside another state is not drawn on either surface', () => {
+  const live = renderLive({
+    rows: [row({ busy: true, status: 'busy', waitingFor: 'dialog open' })],
+    health: health({ busy: 1 }),
+  });
+  assert.doesNotMatch(live, /dialog open/);
+});
+
+// The pill is one string, so an absent reason has to be absent from it rather than appended:
+// "waiting · " is a sentence cut off, and "waiting · null" is worse.
+test('a waiting row that gave no reason carries the word alone', () => {
+  const live = renderLive({ rows: [row({ busy: null, status: 'waiting', waitingFor: null })], health: health() });
+  assert.match(live, /◐\s*waiting<\/span>/);
+});
+
 // ── a phone-width viewport ────────────────────────────────────────────────────────────
 // Where the columns stack, a value with no header above it is a number with no name — and
 // "—" with no name is exactly the missing measurement the product refuses to render as 0.
