@@ -539,7 +539,8 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .pill.waiting { color:var(--wait); }
   .pill.unknown { color:var(--warn); }
   .pill.idle { color:var(--dim); font-weight:400; }
-  /* The weight the sort deserves: busy rows carry an accent and a bold name. */
+  /* Accented states carry their own hue down the row edge. Bold stays on busy alone — it
+     says "working", not "read me first"; waiting's weight is the top of the sort. */
   td:first-child { border-left:3px solid transparent; }
   tr[data-state="busy"] td:first-child { border-left-color:var(--busy); }
   tr[data-state="waiting"] td:first-child { border-left-color:var(--wait); }
@@ -1282,9 +1283,10 @@ function pageScript(view: View): string {
 }
 
 /**
- * The sort puts busy first, unknown next, idle last. This is where that order is given its
- * weight — an accent down the row and a bold name for the ones that are working, a quiet row
- * for the ones that are not.
+ * The sort puts waiting first — the one row that is work for the reader — then busy, then
+ * unknown, idle last. This is where that order is given its weight — an accent down the row
+ * in the state's own hue, a bold name for the ones that are working, a quiet row for the
+ * ones that are not.
  *
  * The state travels three ways at once: a shape, a word, and an attribute. Colour alone is
  * no signal to a reader who cannot separate two of ours, and `data-state` is what the narrow
