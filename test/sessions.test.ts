@@ -48,10 +48,11 @@ test('missing status yields busy=null', () => {
   assert.equal(sessions[0].busy, null);
 });
 
-// A background agent, captured verbatim off a real machine. It carries none of the keys an
-// interactive session does: no `pid`, no `status` — its state lives under `state`, and the
-// entry has an `id` of its own beside the session id. Reading only `status` made every
-// satellite on a healthy fleet an amber "unknown".
+// A background agent, captured verbatim off a real machine (CC 2.1.232, the shape frozen in
+// fixtures/agents-2.1.232.json). It carries none of the keys an interactive session does: no
+// `pid`, no `status` — its state lives under `state`, and the entry has an `id` of its own
+// beside the session id. Reading only `status` made every satellite on a healthy fleet an
+// amber "unknown".
 const BACKGROUND = JSON.stringify([
   {
     id: '6ea4b4ee',
