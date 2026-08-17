@@ -1,0 +1,12 @@
+[
+  {
+    "pid": 42713,
+    "cwd": "/Users/jane/alpha",
+    "kind": "interactive",
+    "startedAt": 1786731044918,
+    "sessionId": "8c1f6b70-49d2-4e83-a5c7-b21e0f9d3a64",
+    "name": "alpha-8c",
+    "status": "waiting",
+    "waitingFor": "dialog open"
+  }
+]

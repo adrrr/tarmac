@@ -24,12 +24,29 @@ const fixturesDir = path.join(repo, 'fixtures');
 // `CHECKED_VERSIONS` is baked into src because only `dist/` is published — a released
 // tarmac has no fixtures/ to read. This test is what keeps the baked list honest: the
 // guard would otherwise be free to claim a version nobody ever captured.
+
+/**
+ * The version an agents fixture was captured from, and nothing else in its name.
+ *
+ * One build can be worth capturing twice — the plain capture, and one showing a state the
+ * first happened not to catch (a `waiting` session, #44). The second is named for what it
+ * shows, and that word is a description of the CAPTURE, never a version: read as one it puts
+ * `2.1.232-waiting` into the checked list, where it silently vouches for a build that does
+ * not exist and, being an exact-equality member, silences nothing real.
+ *
+ * The tag is peeled only when the rest of the name cannot claim it: lazily, so
+ * `agents-2.1.226-rc.1.json` is still the prerelease it says it is rather than `2.1.226`
+ * wearing a tag. A tag is a lowercase word for that reason — anything a version could
+ * contain would take the ambiguity back.
+ */
+const agentsVersion = (file: string): string | null => /^agents-(.+?)(?:-[a-z]+)?\.json$/.exec(file)?.[1] ?? null;
+
 test('the checked versions are exactly the ones fixtures/ covers', () => {
   const files = fs.readdirSync(fixturesDir).filter((f) => f.endsWith('.json'));
   const statusline = files
     .map((f) => /^statusline-payload-(.+)-[^-]+\.json$/.exec(f)?.[1])
     .filter((v): v is string => Boolean(v));
-  const agents = files.map((f) => /^agents-(.+)\.json$/.exec(f)?.[1]).filter((v): v is string => Boolean(v));
+  const agents = files.map(agentsVersion).filter((v): v is string => Boolean(v));
 
   assert.deepEqual([...CHECKED_VERSIONS.statusline].sort(), [...new Set(statusline)].sort());
   assert.deepEqual([...CHECKED_VERSIONS.agents].sort(), [...new Set(agents)].sort());
@@ -38,6 +55,16 @@ test('the checked versions are exactly the ones fixtures/ covers', () => {
     statusline.length + agents.length,
     'every .json in fixtures/ is named so the guard can see it — an unrecognised name is an invisible fixture',
   );
+});
+
+// Both directions, because each one alone is a rule half kept: a tag read as a version
+// invents a build, and a version mistaken for a tag drops a real one out of the checked list
+// — which is silence about a shape nobody captured, the failure this whole file exists for.
+test('a tagged agents fixture is a second capture of one build, never a version of its own', () => {
+  assert.equal(agentsVersion('agents-2.1.232-waiting.json'), '2.1.232', 'the tag says what the capture shows');
+  assert.equal(agentsVersion('agents-2.1.232.json'), '2.1.232', 'and an untagged name is not shortened');
+  assert.equal(agentsVersion('agents-2.1.226-rc.1.json'), '2.1.226-rc.1', 'a prerelease is a version, not a tag');
+  assert.equal(agentsVersion('statusline-payload-2.1.226-live.json'), null, 'the other family is not this one');
 });
 
 // The other half of the same promise, and the half nothing was checking: the guard says
