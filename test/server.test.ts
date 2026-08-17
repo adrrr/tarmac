@@ -267,6 +267,38 @@ test('raises a banner when nothing is fresh and a busy session is among the cold
   assert.match(amber(live)[0]!, /1 session/, 'how many are working on a cold reading');
 });
 
+// The banner says "every context reading is stale". A reading dated in the future is one the
+// page names, in its own box, as NOT being datable at all — so the two boxes together would
+// have the page contradicting itself in the space of two lines. The skew warning stands; the
+// stall banner stands down.
+test('never claims every reading is stale beside a warning that names one which is not', () => {
+  const live = renderLive({
+    rows: [
+      row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+      row({ sessionId: 'b', busy: false, stale: false, snapshotAgeMs: -600_000 }),
+    ],
+    health: health({ sessions: 2, covered: 2, stale: 1, busy: 1 }),
+  });
+  assert.equal(amber(live).length, 1, 'one box, not two that disagree');
+  assert.match(amber(live)[0]!, /dated in the future/, 'and it is the skew one that survives');
+  assert.equal(/Every context reading is stale/.test(live), false);
+});
+
+// The banner already names the threshold. Printing the footnote under it too puts the alarm
+// and its own excuse on the same screen — "the writer looks stopped" over "an idle session's
+// number is as of its last frame", which is the reading it is telling you not to accept.
+test('does not repeat the threshold footnote under the banner that already names it', () => {
+  const live = renderLive({
+    rows: [
+      row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+      row({ sessionId: 'b', busy: false, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+    ],
+    health: health({ sessions: 2, covered: 2, stale: 2, busy: 1 }),
+  });
+  assert.match(amber(live)[0]!, /10m/, 'the banner carries the threshold');
+  assert.equal(/freshness threshold are dated where they sit/.test(live), false, 'and the footnote stands down');
+});
+
 // A `!` whose threshold is invisible is a mark the reader cannot argue with — the rule the
 // terminal table has always kept. Demoting the banner must not take the number with it.
 test('names the freshness threshold in the footnote whenever a reading is dated', () => {

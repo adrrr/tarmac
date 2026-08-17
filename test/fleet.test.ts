@@ -450,15 +450,39 @@ test('a lone busy session on a cold reading is enough', () => {
   assert.equal(busyOnStaleFleet([row({ busy: true, stale: true, snapshotAgeMs: 3 * 3600_000 })]), 1);
 });
 
-// The same value every other reader here refuses to treat as an age: a snapshot dated after
-// the clock that read it is neither fresh nor stale, so it can neither vouch for the writer
-// nor accuse it. It leaves the denominator rather than deciding it, and has its own warning.
-test('a reading dated in the future is left out of the verdict entirely', () => {
+// A snapshot dated AFTER the clock that read it has no age at all, and this verdict is an
+// accusation. Leaving it out of the denominator instead would let the page say "every reading
+// is stale" one box above the warning naming the reading that is not — and a file dated in the
+// future may have been written a second ago, which is the opposite of the evidence this banner
+// claims to hold. So it ENDS the question rather than sitting it out.
+test('a reading dated in the future clears the fleet rather than leaving the denominator', () => {
   const rows = [
     row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
-    row({ sessionId: 'b', busy: false, stale: false, snapshotAgeMs: -600_000 }),
+    row({ sessionId: 'b', busy: false, stale: false, snapshotAgeMs: -1 }),
   ];
-  assert.equal(busyOnStaleFleet(rows), 1, 'the skewed one neither clears the fleet nor joins it');
+  assert.equal(busyOnStaleFleet(rows), 0, 'one millisecond ahead is still ahead');
+});
+
+// The number is printed in the banner, so it has to be a count. A predicate that answered
+// "yes, at least one" would tell a fleet of four that 1 session is busy.
+test('counts every busy session on a cold reading, not just the first', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: true, stale: true, snapshotAgeMs: 5 * 3600_000 }),
+    row({ sessionId: 'c', busy: false, stale: true, snapshotAgeMs: 6 * 3600_000 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 2);
+});
+
+// A snapshot written in the same millisecond as the collect is the freshest reading there can
+// be. Dropping it from the denominator would make a fleet with something demonstrably writing
+// to it read as a fleet where nothing is.
+test('a reading dated this very millisecond is a reading, and clears the fleet', () => {
+  const rows = [
+    row({ sessionId: 'a', busy: true, stale: true, snapshotAgeMs: 4 * 3600_000 }),
+    row({ sessionId: 'b', busy: false, stale: false, snapshotAgeMs: 0 }),
+  ];
+  assert.equal(busyOnStaleFleet(rows), 0);
 });
 
 // `busy: null` is "tarmac does not know what this session is doing", and a session that may

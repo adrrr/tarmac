@@ -213,17 +213,33 @@ export function buildFleet({
  *     is the wrapper gone, the snapshot directory unwritable, a disk full — the writer, not
  *     the fleet.
  *
- * Both halves are needed. Busy-and-cold beside a fresh reading is one session's business (a
- * background agent draws no frames at all, and is busy the whole time); everything cold with
- * nobody busy is just the night.
+ * Both halves are needed. Busy-and-cold beside a fresh reading is one session's business — a
+ * terminal in a tmux window nobody has selected draws no frames while its session works, so
+ * its reading ages exactly like an idle one; everything cold with nobody busy is just the
+ * night.
  *
  * Readings only — a session with no snapshot has nothing that could have gone cold, and is the
- * coverage warning's. Ages that are not ages are left out with them: a snapshot dated after
- * the clock that read it is neither fresh nor stale, so it can neither clear the fleet nor
- * accuse it, exactly as `accountLimits` above refuses to let it win on freshness.
+ * coverage warning's.
+ *
+ * Known window, and the reason there is no floor under it: a session that has just been given
+ * something to do is `busy` on the spine before its first frame lands, so a fleet waking from
+ * a quiet night can raise this for one poll. A grace period would be a second threshold
+ * nobody set, and the honest reading of that moment is that the newest reading on the machine
+ * is still hours old.
  */
 export function busyOnStaleFleet(rows: FleetRow[]): number {
-  const readings = rows.filter((r) => r.snapshotAgeMs !== null && r.snapshotAgeMs >= 0);
+  // A snapshot dated AFTER the clock that read it does not have an age at all, and this
+  // verdict is an ACCUSATION — so it ends the question rather than sitting it out. Leaving it
+  // out of the denominator was the first cut, and it let the page print "every context reading
+  // is stale" directly above its own warning naming the reading that is not. It also had the
+  // evidence backwards: a file the filesystem dates in the future may have been written a
+  // second ago, which is the one thing that would prove the writer is alive.
+  //
+  // Not the same call as `accountLimits` below, which refuses a skewed reading so it cannot
+  // WIN on freshness. The question there is which reading is youngest; the question here is
+  // whether anything wrote at all, and for that an unreadable date is a reason to say nothing.
+  if (rows.some((r) => r.snapshotAgeMs !== null && r.snapshotAgeMs < 0)) return 0;
+  const readings = rows.filter((r) => r.snapshotAgeMs !== null);
   // A fleet with no readings needs no clause of its own: nothing is what `every` is vacuously
   // true of, and nothing is also what the count below comes to.
   if (!readings.every((r) => r.stale)) return 0;

@@ -336,7 +336,10 @@ export function renderLive(fleet: Fleet): string {
   // stands for every user of a released tarmac until the next release ships the fixture, so
   // amber would mean amber forever. Both keep every word they had.
   const notes: string[] = [];
-  if (health.stale > 0) {
+  // Not under the stall banner, which names the same threshold two lines up: the pair reads as
+  // the alarm followed by its own excuse, and the excuse is the reading the alarm exists to
+  // tell you not to accept.
+  if (health.stale > 0 && stalled === 0) {
     notes.push(
       `Readings past the ${formatDuration(health.staleAfterMs)} freshness threshold are dated where they sit — a statusline is only written when its terminal draws a frame, so an idle session's number is "as of" its last one. Set another with --stale-after.`,
     );
@@ -354,19 +357,24 @@ export function renderLive(fleet: Fleet): string {
   const body =
     rows.length === 0
       ? empty(health)
-      : `<div class="view view-table"><div class="wrap"><table>
+      : // `aria-describedby` on both views, because demoting the footnote moved it BELOW every
+        // row and every node: a reader going through the markup now meets `! 3h ago` N times
+        // before anything says what threshold put it there. Sighted readers glance down; this
+        // is the same glance for anyone who cannot. The target is rendered whether or not it
+        // has anything in it, so the reference is never dangling.
+        `<div class="view view-table"><div class="wrap"><table aria-describedby="fleet-notes">
       <thead><tr>
         <th>Project</th><th>Session</th><th>State</th><th>Context</th><th>Model</th><th>Effort</th><th>Cost</th><th>Uptime</th>
       </tr></thead>
       <tbody>${rows.map(renderRow).join('')}</tbody>
     </table></div></div>
-<div class="view view-map">${renderMap(fleet)}</div>`;
+<div class="view view-map" aria-describedby="fleet-notes">${renderMap(fleet)}</div>`;
 
   return `<div id="limits-src" hidden>${renderLimits(fleet)}</div>
 <div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>
 ${warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}
 ${body}
-${notes.map((n) => `<div class="note">${esc(n)}</div>`).join('')}`;
+<div id="fleet-notes">${notes.map((n) => `<div class="note">${esc(n)}</div>`).join('')}</div>`;
 }
 
 /**
