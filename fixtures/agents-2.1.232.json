@@ -4,7 +4,7 @@
     "cwd": "/Users/jane/alpha",
     "kind": "interactive",
     "startedAt": 1786724901337,
-    "sessionId": "6ea4b4ee-8852-44d5-a1bb-b38b703797db",
+    "sessionId": "3a91c7d2-5e48-4f06-8b13-97d40a62e5f1",
     "name": "alpha-3f",
     "status": "busy"
   },
@@ -18,7 +18,7 @@
     "status": "idle"
   },
   {
-    "id": "9c17ba52",
+    "id": "2f5c8a04",
     "cwd": "/Users/jane/alpha",
     "kind": "background",
     "startedAt": 1786727883345,
