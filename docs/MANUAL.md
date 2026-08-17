@@ -18,6 +18,7 @@ confident `0`.
 | a live session whose id it will never file under | `— not chained`, and a count saying how many — never "run tarmac install" |
 | a reading older than the threshold | the value, **dated** — a stale number is still true, of an earlier moment |
 | a status string it does not know | that string, never "idle" |
+| a session halted until you answer something | `waiting`, and which answer — `permission prompt`, `dialog open`, … |
 | a snapshot directory it could not read | the errno, not "run tarmac install" |
 | a cost key that is absent | `—` for the row, and a total qualified by how many sessions really report one |
 | no snapshot carrying the account's rate limits | `— no reading` in both gauges, on a dotted rail — never a window at 0% |
@@ -279,14 +280,15 @@ views are rendered into the same fragment, out of the same reading, which is why
 never disagree about a session on the same screen.
 
 One node per session, and the count matches the table's rows exactly. A node says five things
-at once, in five channels that never rely on colour alone:
+at once — six on a session that is waiting — in channels that never rely on colour alone:
 
 | What | Where it is | What it means |
 |---|---|---|
 | context | the arc | how full the window is, drawn to the size of the reading |
 | the reading's age | the arc's weight | solid: fresh. Thin, amber and dated `! 3h ago`: past the freshness threshold |
 | no reading at all | a dotted, empty dial | nothing was measured, and the middle says which kind of nothing — `not chained`, `no turn yet`, `schema drift` |
-| the session's state | the shape by the name | `●` busy or an agent working, `○` idle or an agent finished, `▲` a word tarmac does not flatten into either — printed as it came |
+| the session's state | the shape by the name | `●` busy or an agent working, `○` idle or an agent finished, `◐` halted until a human answers, `▲` a word tarmac does not flatten into any of those — printed as it came |
+| what a waiting session waits for | a caption under the name | `permission prompt`, `input needed`, `sandbox request`, `worker request`, `dialog open` — the vocabulary the source publishes |
 | a reading just landed | one halo, once | a measured reading for that session is under 10s old |
 
 The state and the reading are two different clocks and are never merged. `busy` comes from
@@ -404,7 +406,7 @@ the oldest minute falls off. `GET /api/history` hands that ring back.
       "rateLimits": { "five_hour": { "used_percentage": 17 } },
       "sessions": [
         { "sid": "ea6a607c-…", "project": "alpha", "kind": "interactive",
-          "state": "busy", "ctxState": "ok", "ctxPct": 26, "costUsd": 27.75 }
+          "state": "busy", "waitingFor": null, "ctxState": "ok", "ctxPct": 26, "costUsd": 27.75 }
       ]
     }
   ]
@@ -427,6 +429,11 @@ page that reads `since`, promises a day and a half, and shows a day.
 screen in the present tense. A day of them, retained by a process and served on a route, is a
 different object — so no name enters the ring, for any kind of session. The agent is still
 there, with its `sid`, its project and its state; it is the field that is missing, not the row.
+
+`waitingFor` is the one string off the source that the ring does keep, and the difference is
+what it is: a closed vocabulary the surface publishes — five words about the fleet's own
+machinery — rather than a sentence somebody typed. "Blocked on a permission prompt at 14:02"
+is the reason to keep a day of readings at all.
 
 **A reading that failed is a counted slot.** `missed` is how many minutes were due and never
 filled — a collector that threw, or a fleet still being read when the next tick came (only one
@@ -532,3 +539,8 @@ from claiming a coverage nobody verified. **Read both files before committing, a
 them**: they come off your machine carrying real paths, session names and costs. The
 fixtures in this repo are the real shapes with synthetic values, and that is the standard a
 new one has to meet.
+
+One build is sometimes worth capturing twice — a `waiting` session, say, which the first
+capture happened not to catch. Rename the copy `agents-<version>-<tag>.json`, one lowercase
+word for what the capture *shows*; the guard reads the version and ignores the tag, so a
+second capture does not invent a build called `2.1.232-waiting`.

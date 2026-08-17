@@ -12,6 +12,20 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The session that is blocked on you, drawn as such.** `claude agents --json` reports
+  `status: "waiting"` with a `waitingFor` naming the answer it is halted on — a permission
+  prompt, an input, a sandbox or worker request, an open dialog. Tarmac collapsed all of it
+  into the amber "a word tarmac does not know", beside a banner saying so, over a fleet where
+  nothing was wrong with the tool and something was wanted from the reader. It is a state of
+  its own now: a fourth glyph and hue on the map, with the reason captioned under the session
+  name; the reason beside the word in both tables, where `list` no longer prefixes it with the
+  `?` that means "unrecognised"; and the field kept in the ring, so a replayed minute still
+  says what that minute was blocked on. The boolean underneath is unchanged and deliberately
+  so — "is this session working" has no honest answer here, and `false` would read as calm on
+  the one session that needs you. The signal is as good as the surface and no better: a
+  session that asked its question in prose still reports `idle`, and inferring more would mean
+  reading a transcript. (#44)
+
 - **The account's two rate-limit windows, drawn at the top of the page.** The five-hour and
   seven-day allowances the statusline payload has been carrying all along — used percentage, and
   the reset spelled as the time left rather than as an epoch. They are page-level because that is
