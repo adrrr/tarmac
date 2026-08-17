@@ -228,17 +228,18 @@ export function buildFleet({
  * is still hours old.
  */
 export function busyOnStaleFleet(rows: FleetRow[]): number {
-  // A snapshot dated AFTER the clock that read it does not have an age at all, and this
-  // verdict is an ACCUSATION — so it ends the question rather than sitting it out. Leaving it
-  // out of the denominator was the first cut, and it let the page print "every context reading
-  // is stale" directly above its own warning naming the reading that is not. It also had the
-  // evidence backwards: a file the filesystem dates in the future may have been written a
-  // second ago, which is the one thing that would prove the writer is alive.
+  // Every dated snapshot, INCLUDING one dated after the clock that read it. That is the whole
+  // handling of clock skew here, and it is deliberate: such a reading is never `stale` (a
+  // negative age is not greater than any threshold), so leaving it in the denominator makes
+  // `every` below fail and the verdict come to nothing — which is the answer we want. A
+  // snapshot the filesystem dates in the future may have been written a second ago, and that
+  // is the one fact that would prove the writer is alive, so it must not be filtered into
+  // silence. Excluding it was the first cut, and it let the page print "every context reading
+  // is stale" directly above its own warning naming the reading that was not.
   //
-  // Not the same call as `accountLimits` below, which refuses a skewed reading so it cannot
-  // WIN on freshness. The question there is which reading is youngest; the question here is
-  // whether anything wrote at all, and for that an unreadable date is a reason to say nothing.
-  if (rows.some((r) => r.snapshotAgeMs !== null && r.snapshotAgeMs < 0)) return 0;
+  // Not the same call `accountLimits` below makes, which refuses a skewed reading so it cannot
+  // WIN on freshness. The question there is which reading is youngest; here it is whether
+  // anything wrote at all, and for that an unreadable date must not be allowed to accuse.
   const readings = rows.filter((r) => r.snapshotAgeMs !== null);
   // A fleet with no readings needs no clause of its own: nothing is what `every` is vacuously
   // true of, and nothing is also what the count below comes to.

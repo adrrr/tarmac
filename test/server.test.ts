@@ -334,6 +334,22 @@ test('puts the footnote under the fleet, where a scan ends rather than starts', 
   assert.ok(live.indexOf('<div class="note">') > live.indexOf('class="view view-map"'), 'and after the map');
 });
 
+// Moving the legend below every row is free for a reader who can glance down the page and a
+// regression for one who cannot: they meet `! 3h ago` on every row before anything says what
+// threshold put it there. Both views carry the reference, and the target is rendered whether
+// or not it holds anything, so it can never dangle.
+test('both views point at the footnote, and the footnote is always there to point at', () => {
+  for (const fleet of [
+    { rows: [row({ stale: true, snapshotAgeMs: 4 * 3600_000 })], health: health({ stale: 1 }) },
+    { rows: [row()], health: health() }, // nothing to say, and the target still exists
+  ]) {
+    const live = renderLive(fleet);
+    assert.match(live, /<table aria-describedby="fleet-notes">/, 'the table');
+    assert.match(live, /class="view view-map" aria-describedby="fleet-notes"/, 'and the map');
+    assert.match(live, /<div id="fleet-notes">/, 'and the thing they both point at');
+  }
+});
+
 // The banners that stay: a schema that has moved is hiding a column, and no per-node dating
 // says that. #53 demotes two, and only two.
 test('keeps the amber for a schema that moved under the page', () => {
