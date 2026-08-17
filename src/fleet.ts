@@ -193,6 +193,43 @@ export function buildFleet({
   };
 }
 
+/**
+ * How many sessions are working RIGHT NOW while looking at a reading that has gone cold, on a
+ * fleet where not one reading is fresh — and `0` whenever that whole picture does not hold.
+ *
+ * It exists because `health.stale` on its own is not news (#53). A statusline is written when
+ * a terminal draws a frame, so a session that idles overnight keeps yesterday's number and
+ * "N readings are stale" is what a resting fleet LOOKS like — the steady state, said again on
+ * every poll. The rows and the map nodes already date each reading one by one; a page-wide
+ * banner repeating it is wallpaper, and a warning nobody can ever act on trains the reader to
+ * skip the ones they can.
+ *
+ * What is not the steady state is this shape:
+ *
+ *   • not one reading anywhere is fresh — so nothing is writing, rather than some sessions
+ *     resting. A single fresh reading is proof the writer works, and ends the question.
+ *   • and at least one of those cold readings belongs to a session that is BUSY. A busy
+ *     session redraws its status line constantly, so its snapshot should be seconds old. Cold
+ *     is the wrapper gone, the snapshot directory unwritable, a disk full — the writer, not
+ *     the fleet.
+ *
+ * Both halves are needed. Busy-and-cold beside a fresh reading is one session's business (a
+ * background agent draws no frames at all, and is busy the whole time); everything cold with
+ * nobody busy is just the night.
+ *
+ * Readings only — a session with no snapshot has nothing that could have gone cold, and is the
+ * coverage warning's. Ages that are not ages are left out with them: a snapshot dated after
+ * the clock that read it is neither fresh nor stale, so it can neither clear the fleet nor
+ * accuse it, exactly as `accountLimits` above refuses to let it win on freshness.
+ */
+export function busyOnStaleFleet(rows: FleetRow[]): number {
+  const readings = rows.filter((r) => r.snapshotAgeMs !== null && r.snapshotAgeMs >= 0);
+  if (readings.length === 0 || !readings.every((r) => r.stale)) return 0;
+  // Strictly `true`: `null` is "tarmac cannot read this session's status", and a session that
+  // may or may not be working is not evidence that anything stopped.
+  return readings.filter((r) => r.busy === true).length;
+}
+
 export interface AccountReading {
   rateLimits: Record<string, any>;
   /**
