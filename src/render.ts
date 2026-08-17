@@ -368,7 +368,7 @@ export function renderLive(fleet: Fleet): string {
       </tr></thead>
       <tbody>${rows.map(renderRow).join('')}</tbody>
     </table></div></div>
-<div class="view view-map" aria-describedby="fleet-notes">${renderMap(fleet)}</div>`;
+<div class="view view-map" role="group" aria-label="fleet map" aria-describedby="fleet-notes">${renderMap(fleet)}</div>`;
 
   return `<div id="limits-src" hidden>${renderLimits(fleet)}</div>
 <div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>

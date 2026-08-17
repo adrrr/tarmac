@@ -314,10 +314,11 @@ written a second ago is not evidence that nothing was; that one gets its own war
 
 On a fleet of one session the two halves meet, and the banner is right to: a lone session
 working against an hours-old reading is the whole machine saying nothing has been written. The
-one moment it can mislead is a fleet waking from a quiet night — a session is busy on the
-session list before its first frame lands, so the banner can stand for a single poll until that
-frame arrives. There is no grace period under it on purpose: that would be a second threshold
-nobody chose, and for that one poll the newest reading on the machine really is hours old.
+one moment it can mislead is a fleet waking from a quiet stretch — a night or a lunch break, any
+gap longer than the threshold — because a session is busy on the session list before its first
+frame lands, so the banner can stand for a single poll until that frame arrives. There is no
+grace period under it on purpose: that would be a second threshold nobody chose, and for that
+one poll the newest reading on the machine really is older than the threshold you set.
 
 "How old is the file" and "is there a number in it" are a third pair that is never merged.
 A session that has taken no turn yet, and one whose payload drifted, both have a snapshot as

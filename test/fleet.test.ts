@@ -450,6 +450,12 @@ test('a lone busy session on a cold reading is enough', () => {
   assert.equal(busyOnStaleFleet([row({ busy: true, stale: true, snapshotAgeMs: 3 * 3600_000 })]), 1);
 });
 
+// An empty fleet accuses nobody. The explicit empty-fleet clause was removed for leaning on
+// every()'s vacuity; this pins the behaviour the removal leaned on.
+test('an empty fleet is not a dead writer', () => {
+  assert.equal(busyOnStaleFleet([]), 0);
+});
+
 // A snapshot dated AFTER the clock that read it has no age at all, and this verdict is an
 // accusation. Leaving it out of the denominator instead would let the page say "every reading
 // is stale" one box above the warning naming the reading that is not — and a file dated in the
