@@ -224,7 +224,9 @@ export function buildFleet({
  */
 export function busyOnStaleFleet(rows: FleetRow[]): number {
   const readings = rows.filter((r) => r.snapshotAgeMs !== null && r.snapshotAgeMs >= 0);
-  if (readings.length === 0 || !readings.every((r) => r.stale)) return 0;
+  // A fleet with no readings needs no clause of its own: nothing is what `every` is vacuously
+  // true of, and nothing is also what the count below comes to.
+  if (!readings.every((r) => r.stale)) return 0;
   // Strictly `true`: `null` is "tarmac cannot read this session's status", and a session that
   // may or may not be working is not evidence that anything stopped.
   return readings.filter((r) => r.busy === true).length;
