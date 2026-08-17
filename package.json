@@ -36,7 +36,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "npm run typecheck && node --test \"test/*.test.ts\"",
+    "test": "npm run typecheck && node --test --test-timeout=120000 --test-force-exit \"test/*.test.ts\"",
     "fixtures:capture": "node scripts/capture-fixtures.ts",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build && TARMAC_REQUIRE_DASH=1 npm test && node dist/cli.js --help > /dev/null"
