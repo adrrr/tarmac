@@ -36,6 +36,14 @@ test('a waiting session that gave no reason is still named waiting', () => {
   assert.match(renderTable(fleet([row({ busy: null, status: 'waiting', waitingFor: null })])), /alpha +waiting +26%/);
 });
 
+// "" is not a reason either. Both copies of the rule check truthiness, not null — an empty
+// string once printed the separator with nothing after it.
+test('a waiting session with an empty reason is named waiting alone', () => {
+  const out = renderTable(fleet([row({ busy: null, status: 'waiting', waitingFor: '' })]));
+  assert.doesNotMatch(out, /waiting ·/);
+  assert.match(out, /alpha +waiting +26%/);
+});
+
 test('renders a missing measurement as a dash and its reason, never as a zero', () => {
   const out = renderTable(fleet([row({ ctxState: 'absent', ctxPct: null, model: null, costUsd: null, snapshotAgeMs: null })], { covered: 0, costUsd: null }));
   assert.match(out, /— absent/);

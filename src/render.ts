@@ -238,7 +238,7 @@ export function renderTable({ rows, health }: Fleet): string {
 function stateCell(r: FleetRow): string {
   const state = stateOf(r);
   if (state === 'unknown') return `?${r.status ?? ''}`;
-  return state === 'waiting' && r.waitingFor !== null ? `waiting · ${r.waitingFor}` : state;
+  return state === 'waiting' && r.waitingFor ? `waiting · ${r.waitingFor}` : state;
 }
 
 /**
@@ -1322,7 +1322,7 @@ const stateWord = (state: NodeState, r: FleetRow): string =>
  * twice, once hidden and once out of the caption below it.
  */
 const stateLabel = (state: NodeState, r: FleetRow): string =>
-  state === 'waiting' && r.waitingFor !== null ? `${stateWord(state, r)} · ${r.waitingFor}` : stateWord(state, r);
+  state === 'waiting' && r.waitingFor ? `${stateWord(state, r)} · ${r.waitingFor}` : stateWord(state, r);
 
 /**
  * Which kind of missing a missing percentage is. One lookup for both surfaces: the table
@@ -1386,7 +1386,7 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
         ${pulse ? `<span class="sr">a reading just landed</span>` : ''}
       </div>
       <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span></div>
-      ${state === 'waiting' && r.waitingFor !== null ? `<div class="sub waiting-for">${esc(r.waitingFor)}</div>` : ''}
+      ${state === 'waiting' && r.waitingFor ? `<div class="sub waiting-for">${esc(r.waitingFor)}</div>` : ''}
       <div class="sub">${esc(r.name)}</div>
       ${r.kind === null || r.kind === INTERACTIVE ? '' : `<div class="sub">${esc(r.kind)}</div>`}
       <div class="sub">${esc(r.model)}${r.effort === null ? '' : ` · ${esc(r.effort)}`}</div>

@@ -140,6 +140,14 @@ test('a waiting node with no reason carries no caption at all', () => {
   assert.doesNotMatch(html, /waiting-for/);
 });
 
+// The empty string is the same absence wearing different clothes: the server copies of the
+// rule check truthiness, like the client one always has.
+test('an empty reason draws neither the caption nor the pill separator', () => {
+  const empty = fleet([row({ busy: null, status: 'waiting', waitingFor: '' })]);
+  assert.doesNotMatch(renderMap(empty), /waiting-for/);
+  assert.doesNotMatch(renderPage(empty, 'table'), /waiting · </);
+});
+
 test('a background agent is drawn as an agent, and names what it is', () => {
   const html = renderMap(
     fleet([

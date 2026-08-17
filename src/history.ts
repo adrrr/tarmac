@@ -14,6 +14,7 @@
 // nicer name.
 
 import { stateOf } from './map.ts';
+import { isWaiting } from './sessions.ts';
 import type { NodeState } from './map.ts';
 import { accountLimits } from './fleet.ts';
 import type { Fleet, RowCtxState } from './fleet.ts';
@@ -153,7 +154,7 @@ function sampleOf({ rows, health }: Fleet): HistorySample {
       project: r.project,
       kind: r.kind,
       state: stateOf(r),
-      waitingFor: r.waitingFor,
+      waitingFor: isWaiting(r) ? r.waitingFor : null,
       ctxState: r.ctxState,
       ctxPct: r.ctxPct,
       costUsd: r.costUsd,
