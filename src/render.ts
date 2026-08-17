@@ -548,7 +548,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      around it, because what it carries is true rather than urgent — the threshold that dated a
      reading, the payload shapes nobody has captured yet. It reads as chrome to someone
      scanning their sessions and as an answer to someone who came looking for it. */
-  .note { color:var(--dim); font-size:.75rem; line-height:1.5; margin:.9rem 0 0; max-width:70ch; }
+  .note { color:var(--dim); font-size:.75rem; line-height:1.5; margin:.9rem 0 0; max-width:95ch; }
   .stale { color:var(--warn); font-weight:600; }
   .wrap { overflow-x:auto; }
   table { border-collapse:collapse; width:100%; min-width:44rem; }
