@@ -14,6 +14,7 @@
 import path from 'node:path';
 import { DEFAULT_STALE_AFTER_MS } from './config.ts';
 import { guardVersions } from './schema.ts';
+import { isWaiting } from './sessions.ts';
 import { SID_NAME } from './wrapper.ts';
 import type { SchemaGuard } from './schema.ts';
 import type { DiscoveryHealth, Session } from './sessions.ts';
@@ -35,6 +36,8 @@ export interface FleetRow {
    */
   kind: string | null;
   status: string | null;
+  /** The reason a `waiting` session gives, carried for the two surfaces that caption it. */
+  waitingFor: string | null;
   busy: boolean | null;
   uptimeMs: number | null;
   ctxState: RowCtxState;
@@ -114,6 +117,7 @@ export function buildFleet({
       pid: s.pid,
       kind: s.kind,
       status: s.status,
+      waitingFor: s.waitingFor,
       busy: s.busy,
       uptimeMs: typeof s.startedAt === 'number' ? now - s.startedAt : null,
       ctxState: t ? t.ctxState : 'absent',
@@ -170,7 +174,10 @@ export function buildFleet({
       // Tested tolerance from the fleet: `fresh` never counts, or a recycled fleet would
       // raise this every single night.
       schemaBroken: covered > 0 && drift === covered,
-      unknownStatus: rows.filter((r) => r.busy === null).length,
+      // Recomputed from the rows rather than taken from `discovery`, which may be null — so
+      // the exemption the reader grants a waiting session has to be granted again here, or
+      // the banner accuses a session both surfaces are drawing as waiting.
+      unknownStatus: rows.filter((r) => r.busy === null && !isWaiting(r)).length,
       busy: rows.filter((r) => r.busy === true).length,
       // A sum over 3 of 7 sessions is not the fleet's cost. Same rule as `sumUsage` one
       // layer down: add only what is really a number, and count those — a payload with no

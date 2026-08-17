@@ -14,6 +14,7 @@ export const row = (over: Partial<FleetRow> = {}): FleetRow => ({
   pid: 42,
   kind: 'interactive',
   status: 'idle',
+  waitingFor: null,
   busy: false,
   uptimeMs: 3600_000,
   ctxState: 'ok',
