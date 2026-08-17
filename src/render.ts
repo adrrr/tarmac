@@ -14,7 +14,7 @@ import type { MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
 import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
 import type { Gauge, LimitWhy } from './limits.ts';
-import { accountLimits } from './fleet.ts';
+import { accountLimits, busyOnStaleFleet } from './fleet.ts';
 import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
 import type { Plan, UninstallMode, UninstallPlan } from './install.ts';
 
@@ -312,17 +312,37 @@ export function renderLive(fleet: Fleet): string {
   if (health.unknownStatus > 0) {
     warnings.push(`${health.unknownStatus} session(s) report a status tarmac does not know — treated as unknown, not idle.`);
   }
-  if (health.stale > 0) {
+  // NOT "N readings are stale", which used to live here and was on every hour of every day
+  // (#53): a statusline is written when a terminal draws a frame, so a fleet that idles keeps
+  // yesterday's numbers and says so on every poll. The rows and the nodes date each reading
+  // themselves — a page-wide box repeating it is wallpaper, and wallpaper is what teaches a
+  // reader to skip the boxes below. What is left here is the one stale-shaped thing that is
+  // an event: `busyOnStaleFleet` (see fleet.ts for why both halves of it are needed).
+  const stalled = busyOnStaleFleet(rows);
+  if (stalled > 0) {
     warnings.push(
-      `${health.stale} reading(s) are older than the ${formatDuration(health.staleAfterMs)} freshness threshold — a statusline is only written when its terminal draws a frame, so an idle session's number is "as of" its last one. Set another with --stale-after.`,
+      `Every context reading is stale, including ${stalled} session(s) busy right now — a busy session redraws its status line, so its reading should not be older than ${formatDuration(health.staleAfterMs)}. The statusline writer looks stopped rather than the fleet idle: check that the wrapper is still installed and that the snapshot directory is writable.`,
     );
   }
   const skewed = rows.filter(ahead).length;
   if (skewed > 0) {
     warnings.push(`${skewed} reading(s) are dated in the future — ${SKEW}. They are shown undated rather than as brand new.`);
   }
+
+  // Under the fleet, at a footnote's weight: two facts that are true, worth keeping, and worth
+  // nobody's alarm. The first is the legend for the marks the rows carry — a `!` whose
+  // threshold is invisible is a mark the reader cannot argue with, which is why demoting the
+  // banner above could not take the number with it. The second is a maintainer's line: it
+  // stands for every user of a released tarmac until the next release ships the fixture, so
+  // amber would mean amber forever. Both keep every word they had.
+  const notes: string[] = [];
+  if (health.stale > 0) {
+    notes.push(
+      `Readings past the ${formatDuration(health.staleAfterMs)} freshness threshold are dated where they sit — a statusline is only written when its terminal draws a frame, so an idle session's number is "as of" its last one. Set another with --stale-after.`,
+    );
+  }
   const schema = schemaNotice(health.schemaGuard);
-  if (schema) warnings.push(schema);
+  if (schema) notes.push(schema);
 
   // Both views, every time, out of the one reading the page just asked for. The tabs are
   // links and the shell decides which of the two is visible, so a fleet cannot be drawn as a
@@ -345,7 +365,8 @@ export function renderLive(fleet: Fleet): string {
   return `<div id="limits-src" hidden>${renderLimits(fleet)}</div>
 <div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>
 ${warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}
-${body}`;
+${body}
+${notes.map((n) => `<div class="note">${esc(n)}</div>`).join('')}`;
 }
 
 /**
@@ -523,6 +544,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .warn { background:var(--warnbg); color:var(--warn); border:1px solid currentColor; border-radius:6px;
           padding:.35rem .65rem; margin:.3rem 0; font-size:.8rem; line-height:1.45; }
   .warn:last-of-type { margin-bottom:.9rem; }
+  /* The footnote: same words, none of the weight. Dim, small, below the fleet and with no box
+     around it, because what it carries is true rather than urgent — the threshold that dated a
+     reading, the payload shapes nobody has captured yet. It reads as chrome to someone
+     scanning their sessions and as an answer to someone who came looking for it. */
+  .note { color:var(--dim); font-size:.75rem; line-height:1.5; margin:.9rem 0 0; max-width:70ch; }
   .stale { color:var(--warn); font-weight:600; }
   .wrap { overflow-x:auto; }
   table { border-collapse:collapse; width:100%; min-width:44rem; }
