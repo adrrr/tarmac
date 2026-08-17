@@ -14,6 +14,7 @@ const session = (over: Partial<Session> = {}): Session => ({
   kind: 'interactive',
   startedAt: NOW - 3600_000,
   status: 'idle',
+  waitingFor: null,
   busy: false,
   ...over,
 });
@@ -174,6 +175,28 @@ test('an unknown status counts as unknown, and is never reported as idle', () =>
   const { rows, health } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
   assert.equal(rows[0].busy, null);
   assert.equal(health.unknownStatus, 1);
+});
+
+// The reason travels with the row, because the row is what both surfaces draw from. The
+// reader already refuses to answer the boolean for a waiting session; this is the other half
+// of not answering it — the field that says what would answer it.
+test('a waiting session brings the reason it is waiting onto its row', () => {
+  const sessions = [session({ status: 'waiting', waitingFor: 'permission prompt', busy: null })];
+  const { rows } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  assert.equal(rows[0].status, 'waiting');
+  assert.equal(rows[0].waitingFor, 'permission prompt');
+});
+
+// This count is what raises "N session(s) report a status tarmac does not know" on both
+// surfaces, and it is recomputed here from the rows rather than taken from discovery — so a
+// waiting session excused one module down would be accused again one module up.
+test('a waiting session is not one of the statuses tarmac does not know', () => {
+  const sessions = [
+    session({ sessionId: 'a', status: 'waiting', waitingFor: 'input needed', busy: null }),
+    session({ sessionId: 'b', status: 'transmogrifying', busy: null }),
+  ];
+  const { health } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  assert.equal(health.unknownStatus, 1, 'the transmogrifying one, and only it');
 });
 
 // I1: the number is only ever "as of" the last TUI frame. A live session whose terminal

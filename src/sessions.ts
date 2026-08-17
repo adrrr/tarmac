@@ -22,6 +22,13 @@ export interface Session {
    * recognises reaches the reader as it came rather than as "unknown".
    */
   status: string | null;
+  /**
+   * Which human answer a `waiting` session is halted on — `permission prompt`, `input
+   * needed`, `sandbox request`, `worker request`, `dialog open`. A closed vocabulary the
+   * surface documents, carried as it came and never interpreted here: `null` is "the entry
+   * gave no reason", which a waiting session is entitled to do.
+   */
+  waitingFor: string | null;
   /** `null` means "unrecognised status", never "idle". */
   busy: boolean | null;
 }
@@ -60,6 +67,17 @@ const KNOWN_STATUS = new Map<string | null, boolean>([
   ['done', false],
 ]);
 
+/**
+ * The word for a session halted until a human answers, and the only one with a field saying
+ * which answer. It stays out of the map above — the boolean it would have to fill still has
+ * no honest value — but it is no longer counted as a word we failed to recognise: it has a
+ * state of its own on both surfaces, and a reason to print beside it.
+ */
+const WAITING = 'waiting';
+
+/** Whether this reading is halted on a human. The one status the renderers treat as a state. */
+export const isWaiting = (s: { status: string | null }): boolean => s.status === WAITING;
+
 /** @param text raw stdout of `claude agents --json` */
 export function parseAgents(text: string): ParsedAgents {
   let raw: unknown;
@@ -89,7 +107,11 @@ export function parseAgents(text: string): ParsedAgents {
     const status =
       typeof entry.status === 'string' ? entry.status : typeof entry.state === 'string' ? entry.state : null;
     const busy = KNOWN_STATUS.has(status) ? (KNOWN_STATUS.get(status) as boolean) : null;
-    if (busy === null) health.unknownStatus += 1;
+    // Two different questions, and only the second one is a blind spot: `busy` is null here
+    // for a word we cannot answer the boolean with, and `waiting` is one of those — while
+    // being a word this tool knows by name. Counting it would put "reports a status tarmac
+    // does not know" on the banner over a session tarmac is drawing, captioned, as waiting.
+    if (busy === null && status !== WAITING) health.unknownStatus += 1;
 
     sessions.push({
       sessionId,
@@ -99,6 +121,7 @@ export function parseAgents(text: string): ParsedAgents {
       kind: typeof entry.kind === 'string' ? entry.kind : null,
       startedAt: typeof entry.startedAt === 'number' ? entry.startedAt : null,
       status,
+      waitingFor: typeof entry.waitingFor === 'string' ? entry.waitingFor : null,
       busy,
     });
   }

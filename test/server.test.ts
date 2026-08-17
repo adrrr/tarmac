@@ -300,7 +300,8 @@ test('a row with nothing measured renders no zero and no empty cell', () => {
   const live = renderLive({
     rows: [
       {
-        sessionId: null, name: null, project: null, cwd: null, pid: null, kind: null, status: null, busy: null,
+        sessionId: null, name: null, project: null, cwd: null, pid: null, kind: null, status: null,
+        waitingFor: null, busy: null,
         uptimeMs: null, ctxState: 'absent', ctxPct: null, ctxTokens: null, ctxWindow: null, model: null,
         effort: null, costUsd: null, snapshotAgeMs: null, stale: false, rateLimits: null,
       },
