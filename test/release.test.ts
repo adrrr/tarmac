@@ -41,3 +41,13 @@ test('CI runs the built CLI on the oldest Node the package claims to support', (
   assert.match(ci, new RegExp(`node-version: '${oldest}'`), `no job pins Node ${oldest}`);
   assert.match(ci, /node dist\/cli\.js --help/);
 });
+
+// A test that never resolves is not a slow test. `node --test` has no deadline of its own, so
+// a spawned serve that does not exit, or a pipe that never closes, leaves a runner behind that
+// outlives the run rather than failing it — two were found 25 hours old, orphaned to PID 1
+// (#27). A deadline turns those into red tests. Generous is the point: the slowest test here
+// costs about three seconds, so the number below cannot be what fails a loaded runner.
+test('the suite runs under a deadline, so a hung test is red rather than immortal', () => {
+  const ms = Number((scripts()['test'] ?? '').match(/--test-timeout[= ](\d+)/)?.[1]);
+  assert.ok(ms > 0, 'no --test-timeout on the runner: a test that hangs, hangs forever');
+});
