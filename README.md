@@ -216,8 +216,8 @@ filable.
   the one thing this tool will not do. The signal is as good as the surface, and no better.
 - **No history on disk.** `tarmac list` is a snapshot in time. A running `serve` holds the
   last 24 hours of the readings it took itself, in memory, so the page can replay them — a
-  record that begins when that serve began and goes when it goes. Nothing is written down,
-  and nothing outlives the process that read it.
+  record that reaches no further back than the serve that took it, and goes when it goes.
+  None of it is written down.
 - **No Windows.** The generated wrapper is POSIX `sh`.
 - **No remote fleets.** It watches the machine it runs on.
 
