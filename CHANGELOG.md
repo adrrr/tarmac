@@ -17,10 +17,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   statusline frame with — a gauge that can never fill, captioned "not chained", the words of a
   fault someone could go and fix. The strip carries what the source really publishes about an
   agent: its state, its project, the kind it calls itself, and the prompt it was named after,
-  with the state in the same glyph and a three-pixel accent down its left edge. No context is
-  claimed at all where none can be measured — not a percentage, not a dash. A percentage the
-  source does publish for one is printed inline, and dated when it is stale. Replays draw them
-  the same way. (#58)
+  with the state in the same glyph and a three-pixel accent down its left edge. Nothing is
+  claimed where the source published nothing — not a percentage, not a dash. What it did
+  publish is printed inline and labelled, `ctx 41% · Fable 5 · max`, dated when the reading is
+  stale: the three come out of one snapshot, and a strip has neither a ring nor a column header
+  to say which quantity its number is. Replays draw them the same way. (#58)
 
 - **The two configuration tables agree about where the snapshots are read from.** The README's
   named the path frozen into the installed wrapper, the manual's named the XDG default; each is
