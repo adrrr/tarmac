@@ -1,8 +1,9 @@
 // The release path, asserted where it is written down.
 //
 // Two guarantees this package sells cannot be checked by running the suite on one Mac —
-// and, beside them, one piece of suite hygiene (what the runner is and is not allowed to
-// pass, #27 and #63). All are enforced by configuration rather than by code — which is
+// and, beside them, two pieces of suite hygiene (what the runner is and is not allowed to
+// pass, and the deadline every CI job carries — #27 and #63). All are enforced by
+// configuration rather than by code — which is
 // exactly the kind of thing that gets deleted in a tidy-up and is never noticed:
 //
 //   • dash. `test/portability.test.ts` SKIPS its POSIX assertion when dash is absent, and a
@@ -50,7 +51,8 @@ test('CI runs the built CLI on the oldest Node the package claims to support', (
 //
 // `--test-force-exit` shipped beside it and does NOT stay, which is what the second assertion
 // is for (#63). The runner passes it down to the per-file child it spawns, and that child's
-// stdout is a pipe back to the runner. A pipe is written asynchronously on macOS, so the
+// stdout is a pipe back to the runner. A pipe is written asynchronously (POSIX — the CI's
+// Ubuntu carries the same 64 KB pipe buffer as the Mac this was measured on), so the
 // `process.exit()` the flag performs throws away whatever is still queued — the tail of that
 // file's report. The runner tallies what reached it, finds no failure in what it never
 // received, and prints a smaller total under exit 0. Measured here with the runner held busy:
@@ -71,8 +73,8 @@ test('the suite runs under a deadline, and never under a force-exit', () => {
 // job that nobody fails waits out the runner's own six-hour ceiling.
 test('every CI job carries a deadline, so a hang fails instead of waiting', () => {
   const jobs = read('.github/workflows/ci.yml').split(/^jobs:$/m)[1] ?? '';
-  const names = jobs.match(/^ {2}[a-z][\w-]*:$/gm) ?? [];
-  const deadlines = jobs.match(/^ {4}timeout-minutes: \d+$/gm) ?? [];
-  assert.ok(names.length > 0, 'no CI jobs matched — the count that follows would pass on nothing');
-  assert.equal(deadlines.length, names.length, `${names.length} CI jobs, ${deadlines.length} with timeout-minutes: a job without one waits out a hang instead of failing it`);
+  const blocks = jobs.split(/^ {2}(?=[A-Za-z_])/m).slice(1);
+  assert.ok(blocks.length > 0, 'no CI jobs matched — the assertion that follows would pass on nothing');
+  const naked = blocks.filter((b) => !/^ {4}timeout-minutes:/m.test(b)).map((b) => b.slice(0, b.indexOf(':')));
+  assert.deepEqual(naked, [], `CI jobs carrying no timeout-minutes: ${naked.join(', ')} — a job without one waits out a hang instead of failing it`);
 });
