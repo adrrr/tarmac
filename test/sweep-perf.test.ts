@@ -132,7 +132,10 @@ function rig(): Rig {
   fs.mkdirSync(bin);
 
   // `-prune` appears only in the sweep's expression; the marker's `find` is handed one file and
-  // stays exactly as cheap as it is in production.
+  // stays exactly as cheap as it is in production. The pin also lets go when the log is gone:
+  // the sandbox has been torn down, nothing is counting any more, and a held sweep left behind
+  // by a FAILING run has no reason to outlive it by the deadline.
+  const realFind = realPath('find');
   shim(
     bin,
     'find',
@@ -142,16 +145,17 @@ for arg in "$@"; do
     printf 'pinned\\n' >> ${JSON.stringify(log)}
     ticks=0
     while [ ! -e ${JSON.stringify(release)} ]; do
+      [ -e ${JSON.stringify(log)} ] || exit 0
       ticks=$((ticks + 1))
       if [ "$ticks" -gt ${PIN_TICKS} ]; then printf 'ran-unreleased\\n' >> ${JSON.stringify(log)}; break; fi
       sleep ${PIN_TICK_S}
     done
     printf 'walk\\n' >> ${JSON.stringify(log)}
-    exec ${realPath('find')} "$@"
+    exec ${realFind} "$@"
   fi
 done
 printf 'marker\\n' >> ${JSON.stringify(log)}
-exec ${realPath('find')} "$@"
+exec ${realFind} "$@"
 `,
   );
 
