@@ -288,6 +288,18 @@ test('a strip never pulses', () => {
   assert.doesNotMatch(html, /just landed/);
 });
 
+// The escaping test above reaches the card, never this branch: a fleet of one background entry
+// is not anchored, so it renders as a session. The strip draws four strings off another
+// machine of its own — and the prompt is the one a person typed, which is the least trusted
+// string on the page.
+test('every value the machine supplies reaches a strip escaped', () => {
+  const nasty = '<script>alert(1)</script>';
+  for (const field of ['project', 'name', 'kind'] as const) {
+    assert.doesNotMatch(strip({ [field]: nasty }), /<script>/, field);
+  }
+  assert.doesNotMatch(strip({ busy: null, status: 'waiting', waitingFor: nasty }), /<script>/, 'waitingFor');
+});
+
 // An orphan is still a node. Its directory matches no session on this machine — the one it was
 // dispatched from has since been closed — and the map's promise is that it counts the same.
 test('an agent whose directory matches no session is a strip like any other', () => {

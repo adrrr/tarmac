@@ -670,7 +670,8 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   /* ── the map ─────────────────────────────────────────────────────────────────────────
      One node per session. The arc is the context, its weight is how much that reading may
      be believed, and the halo — the only thing on this page that moves — says a frame
-     landed moments ago. */
+     landed moments ago. None of the three exists for a background agent, which has no
+     terminal to draw a statusline frame with: it is a strip instead, further down. */
   /* Nodes of two heights in one grid: a row of cards may not stretch the strips beside it to
      the height of a dial they do not have. */
   .map { display:grid; gap:.9rem; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));
