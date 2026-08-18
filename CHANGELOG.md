@@ -10,6 +10,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.5.0] — 2026-08-18
+
 ### Changed
 
 - **The map groups its nodes by working directory.** One frame — a berth — per directory,
