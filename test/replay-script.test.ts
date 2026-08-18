@@ -305,6 +305,20 @@ test('a replayed agent is a strip, not a dial the record could not have filled',
   assert.doesNotMatch(agent, /not chained|no reading/, 'and claims no context it never had a surface for');
 });
 
+// And the number on it is labelled, as the live one's is. The record holds no model and no
+// effort — a sample is not a snapshot — but a bare percentage under a project reads as a
+// progress bar in the past exactly as it does in the present, and there is no ring here either.
+test('a replayed strip says which quantity its number is', async () => {
+  const page = mount(
+    record(1, () => [session({ sid: 'a' }), session({ sid: 'b', kind: 'background', project: 'alpha', ctxPct: 41 })]),
+  );
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  const html = page.el('replay-map').innerHTML;
+  const agent = html.slice(html.indexOf('data-role="agent"'));
+  assert.match(agent, /class="sub">ctx 41%</);
+});
+
 test('the replay counts the fleet of that minute, not of this one', async () => {
   const page = mount(
     record(1, () => [session({ sid: 'a', state: 'busy', costUsd: 2 }), session({ sid: 'b', state: 'idle', costUsd: 3 })]),

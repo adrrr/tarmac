@@ -670,8 +670,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   /* ── the map ─────────────────────────────────────────────────────────────────────────
      One node per session. The arc is the context, its weight is how much that reading may
      be believed, and the halo — the only thing on this page that moves — says a frame
-     landed moments ago. None of the three exists for a background agent, which has no
-     terminal to draw a statusline frame with: it is a strip instead, further down. */
+     landed moments ago. A background agent is drawn with none of the three — there is no
+     terminal behind it to draw a statusline frame with — and is a strip instead, further
+     down, printing as text whatever its snapshot did publish. */
   .map { display:grid; gap:.9rem; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
   .node { border:1px solid var(--line); border-radius:10px; padding:.8rem .85rem .7rem;
           display:flex; flex-direction:column; align-items:center; text-align:center; }
@@ -699,12 +700,14 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node[data-role="agent"] .who { margin-top:0; width:100%; }
   .node[data-role="agent"] .project { font-weight:600; font-size:.8rem; }
   /* What the node calls itself, set apart from the project it sits beside: an agent's own line
-     already reads as a sentence, and the kind is the word that says it is not a terminal. */
-  .kind { margin-left:auto; font-size:.6rem; font-weight:700; text-transform:uppercase;
+     already reads as a sentence, and the kind is the word that says it is not a terminal.
+     This one and the prompt below it are scoped to a node like every other rule here: both are
+     words a table cell could want the day it grows one, and unprefixed they would take it. */
+  .node .kind { margin-left:auto; font-size:.6rem; font-weight:700; text-transform:uppercase;
           letter-spacing:.08em; color:var(--dim); }
   /* The prompt a background session was named after. One line, clipped: it is a sentence
      somebody typed, and it is the only thing on the strip that has no length limit. */
-  .prompt { color:var(--dim); font-size:.76rem; margin-top:.15rem;
+  .node .prompt { color:var(--dim); font-size:.76rem; margin-top:.15rem;
           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* Said, not shown: the three glyphs differ in silhouette, so a reader who cannot separate
      two hues still has the state — but a screen reader is handed a bullet and nothing else. */
@@ -1137,7 +1140,10 @@ function pageScript(view: View): string {
     // would read as two kinds of thing — and the ring is the surface that can LEAST fill a
     // gauge, since it keeps a reading and never the terminal that produced it. No prompt line:
     // a background session is named after the prompt it was given, and the record stores no
-    // names. What it does hold for one is what it cost, which is printed like anywhere else.
+    // names. What it does hold for one is a percentage and what it cost — printed like
+    // anywhere else, the percentage labelled as the live strip labels it, since neither a ring
+    // nor a column header is here to say which quantity it is. No model and no effort: a
+    // sample is not a snapshot, and the record was never given either.
     if (role === 'agent') {
       return '<article class="node" data-role="agent" data-state="' + state + '" data-reading="undatable">'
         + '<div class="who"><span class="shape" aria-hidden="true">' + SHAPE[state] + '</span>'
@@ -1145,7 +1151,7 @@ function pageScript(view: View): string {
         + '<span class="project">' + esc(x.project) + '</span>'
         + '<span class="kind">' + esc(x.kind) + '</span></div>'
         + (state === 'waiting' && x.waitingFor ? '<div class="sub waiting-for">' + esc(x.waitingFor) + '</div>' : '')
-        + (pct === null ? '' : '<div class="sub">' + pct + '%</div>')
+        + (pct === null ? '' : '<div class="sub">ctx ' + pct + '%</div>')
         + (typeof x.costUsd === 'number' ? '<div class="sub">$' + x.costUsd.toFixed(2) + '</div>' : '')
         + '</article>';
     }
@@ -1446,8 +1452,9 @@ export function renderMap(fleet: Fleet): string {
  * printed directly under the name, not hidden in a title attribute nobody hovers on a phone.
  *
  * Two shapes, and the split is what a node HAS rather than what it is worth: a session has a
- * terminal, so four of those five facts exist for it. A background agent has none, and gets
- * the strip below — same data attributes, same glyph, same words to a screen reader.
+ * terminal, so the dial and its four facts are drawn for it. A background agent has no
+ * terminal to draw a frame with, and gets the strip below — same data attributes, same glyph,
+ * same words to a screen reader, and whatever its snapshot published, as text on one line.
  */
 function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode): string {
   // The model owns "is there a number"; this reads its verdict rather than asking the row a
@@ -1465,33 +1472,41 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
       : reading === 'undated'
         ? `<div class="asof stale">! undated</div>`
         : '';
-  // The strip. Everything the card's lower half carried — the percentage, the model, the
-  // effort — comes off a statusline snapshot, and a background session has no terminal to draw
-  // one: those fields are not late for an agent, they are structurally absent. The dial said so
-  // as "not chained", which is the vocabulary of a repairable fault ("run `tarmac install`")
-  // for a session no install can ever cover. So the strip claims no context at all — no gauge,
-  // no dash, no reason — and carries what the source really publishes about an agent: its
+  // The strip. What it dropped was the dial, never the reading: the ring on an agent could
+  // never fill — there is no terminal here to draw a statusline frame with — and the middle of
+  // it read "not chained", the vocabulary of a repairable fault ("run `tarmac install`") said
+  // about a session no install can ever cover. So no gauge, no dash, no reason where the
+  // source published nothing, and the four fields it does publish about an agent in text: its
   // state, its project, the kind it calls itself, and the prompt it was named after.
   //
-  // Nor a halo: the pulse is drawn inside the dial and announces a frame landing, which is the
-  // one event that cannot happen here. Nothing is lost with the shape that held it.
+  // Nor a halo: it is a ring drawn inside the dial, and this shape has neither. What it says —
+  // a reading landed seconds ago — is the one claim on this page nobody can look away from,
+  // and it is not the fact a strip exists to carry.
   //
-  // The one number that can still appear: should the source ever publish a percentage for a
-  // background session, the join has a sessionId to hang it on, and it is printed inline —
-  // beside its age when the reading is one nobody should take for current — rather than
-  // bringing back a ring that would be empty on every other agent on the page.
+  // An agent carries its own project, like every other node. Placement is not a promise —
+  // the grid wraps where the viewport says, and the fleet's sort can hand the same agent a
+  // different neighbour on the next poll — so nothing here points at the node beside it.
   if (role === 'agent') {
+    // The rule for the rest: the strip prints what that session's snapshot published, and
+    // nothing where nothing was published. The percentage, the model and the effort come out
+    // of one file — `buildFleet` reads all three off the same object — so an agent the join
+    // found a payload for shows all of them, on one line, beside the reading's age when it is
+    // one nobody should take for current. The number carries its own label: a card has a ring
+    // around it and the table a column header over it, and a bare `61%` under a line of prompt
+    // reads as how much of the prompt is done. Each part is dropped on its own field being
+    // null — a snapshot with no turn behind it has a model in it and no percentage.
+    const published = [pct === null ? null : `ctx ${pct}%`, r.model, r.effort]
+      .filter((v): v is string => v !== null && v !== '')
+      .map(esc)
+      .join(' · ');
     return `<article class="node" data-role="${role}" data-state="${state}" data-reading="${reading}">
       <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span><span class="kind">${esc(r.kind)}</span></div>
       <div class="prompt">${esc(r.name)}</div>
       ${state === 'waiting' && r.waitingFor ? `<div class="sub waiting-for">${esc(r.waitingFor)}</div>` : ''}
-      ${pct === null ? '' : `<div class="sub">${pct}%</div>`}
+      ${published === '' ? '' : `<div class="sub">${published}</div>`}
       ${asOf}
     </article>`;
   }
-  // An agent carries its own project, like every other node. Placement is not a promise —
-  // the grid wraps where the viewport says, and the fleet's sort can hand the same agent a
-  // different neighbour on the next poll — so nothing here points at the node beside it.
   return `<article class="node" data-role="${role}" data-state="${state}" data-reading="${reading}">
       <div class="dial">
         <svg viewBox="0 0 80 80" aria-hidden="true">${pulse ? `<circle class="halo" cx="40" cy="40" r="${DIAL_R}"/>` : ''}<circle class="track${measured ? '' : ' unmeasured'}" cx="40" cy="40" r="${DIAL_R}"/>${pct === null ? '' : arc(pct)}</svg>

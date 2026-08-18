@@ -192,9 +192,10 @@ test('an agent names its own directory, so its placement can be checked', () => 
 // ── the strip ────────────────────────────────────────────────────────────────────────────
 //
 // What an agent is drawn as. Anchored by a terminal, so the fleet-level guard cannot decide
-// these background entries are a renamed kind, and stripped of every statusline-derived
-// field: a background session has no terminal, so context, model, effort and cost are not
-// late for it — they are never coming.
+// these background entries are a renamed kind, and with no snapshot behind it — the common
+// agent, and the one the shape was designed for. The strip's rule about the rest is that it
+// prints what that session's snapshot published and nothing where nothing was published, so
+// the fleet's two cases are both here: this one, and `measured` below it.
 
 const strip = (a: Partial<FleetRow> = {}): string => {
   const html = renderMap(
@@ -241,18 +242,48 @@ test('a strip claims no context at all, rather than reporting one as missing', (
   assert.doesNotMatch(html, /&mdash;|—/, 'not even the dash that says a value was expected');
 });
 
-// If the source ever does publish a percentage for a background session, it is a reading like
-// any other and is printed — inline, where the two lines are, rather than growing the dial back.
-test('a percentage the source did publish for an agent is printed on its strip', () => {
-  const html = strip({ ctxPct: 41, ctxState: 'ok', snapshotAgeMs: 1200, stale: false });
-  assert.match(html, /41%/);
-  assert.doesNotMatch(html, /class="dial"/);
+/**
+ * The other case, and the one no fixture held: an agent the join DID find a payload for.
+ * Every strip above has a null snapshot behind it, which is why nothing on this page ever
+ * showed what a published one looks like — and the fleet builds all four fields off that one
+ * object, so a reading arrives with the model and the effort or the file does not exist.
+ */
+const measured = (a: Partial<FleetRow> = {}): string =>
+  strip({ ctxState: 'ok', ctxPct: 61, snapshotAgeMs: 1200, stale: false, model: 'Fable 5', effort: 'max', ...a });
+
+// The publication rule, in the direction that says what IS printed. A snapshot is one file:
+// dropping the model and the effort out of a line that prints the percentage from beside them
+// is the page choosing which published facts to pass on.
+test('a strip prints what the snapshot published: the reading, the model and the effort', () => {
+  const html = measured();
+  assert.match(html, /class="sub">ctx 61% · Fable 5 · max</);
+  assert.doesNotMatch(html, /class="dial"/, 'still inline, rather than growing the dial back');
+});
+
+// A card has a ring around its number and the table a column header over it. A strip has
+// neither, so a bare `61%` under a line of prompt is a progress bar to anyone reading quickly
+// — the one thing a context reading is not.
+test('the number on a strip says which quantity it is', () => {
+  assert.doesNotMatch(measured(), /class="sub">61%/);
+});
+
+// The same rule in the direction that says what is NOT printed: no line at all, rather than an
+// empty one or the dash that says a value was expected.
+test('an agent with no snapshot behind it prints none of the three', () => {
+  assert.doesNotMatch(strip(), /class="sub"/);
+});
+
+// And it is per FIELD, not per file. `fresh` and `drift` are snapshots as current as any with
+// no percentage in them, and the model in that same file is still a fact the source published.
+test('a field the snapshot left empty is the only one dropped', () => {
+  assert.match(measured({ ctxPct: null, ctxState: 'fresh' }), /class="sub">Fable 5 · max</);
+  assert.match(measured({ effort: null }), /class="sub">ctx 61% · Fable 5</);
 });
 
 // And it keeps the one thing that makes a number honest: a reading past the threshold may not
 // be read as current on a strip any more than in a ring.
 test('a reading printed on a strip carries its age when it is one nobody should trust', () => {
-  const html = strip({ ctxPct: 41, ctxState: 'ok', snapshotAgeMs: 3 * 3600_000, stale: true });
+  const html = measured({ snapshotAgeMs: 3 * 3600_000, stale: true });
   assert.match(html, /data-reading="stale"/);
   assert.match(html, /! 3h ago/);
   assert.doesNotMatch(html, /class="dial"/);
@@ -327,14 +358,66 @@ test('the halo says in words that a reading just landed', () => {
   assert.doesNotMatch(one({ ctxPct: null, ctxState: 'drift', snapshotAgeMs: 1200, stale: false }), /just landed/);
 });
 
+/**
+ * The stylesheet the map ships with, comments stripped — a selector captured as "everything
+ * since the last brace" is otherwise the prose above the rule as well, and every rule down
+ * there is explained by a paragraph naming it.
+ */
+const mapCss = (): string =>
+  /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet([row()]), 'map'))![1].replace(/\/\*[\s\S]*?\*\//g, '');
+
+/**
+ * One EXACT selector's value for a property. `paint` keys on a class and keeps whichever rule
+ * set the property last, which cannot tell `.node` from `.node[data-role="agent"]` — and those
+ * two disagree about alignment on purpose, which is the whole shape of a strip.
+ */
+const declared = (selector: string, prop: string): string => {
+  for (const [, raw, declarations] of mapCss().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    // A rule that follows a closing brace carries it into the capture — the `}` of an @media
+    // block, or of the rule above. The selector is what comes after the last one.
+    if (raw.slice(raw.lastIndexOf('}') + 1).trim() !== selector) continue;
+    const value = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`).exec(declarations)?.[1].trim();
+    if (value !== undefined) return value;
+  }
+  return '';
+};
+
+// The shape itself, which had no test at all: a strip is a line of text down the left edge of
+// its cell, inside a grid whose every other node is centred on a dial. Both declarations are
+// on the agent's own rule and both are reversed by the `.node` rule above it, so neither can
+// be checked by the class-wide scan.
+test('a strip is a left-aligned band, in a grid of centred cards', () => {
+  assert.equal(declared('.node[data-role="agent"]', 'align-items'), 'stretch');
+  assert.equal(declared('.node[data-role="agent"]', 'text-align'), 'left');
+  assert.equal(declared('.node', 'align-items'), 'center', 'and a card is still centred on its dial');
+  assert.equal(declared('.node', 'text-align'), 'center');
+});
+
+// The one line on a strip with no length limit is the prompt — a sentence somebody typed, and
+// the manual promises it is "ellipsised on a node to fit its column, which is a width, not a
+// redaction". Unclipped, a 400-character prompt is a node several lines tall in a row of
+// one-line strips, and it fails quietly: the page still renders, just wrong.
+test('the prompt is clipped to one line, with the ellipsis that says so', () => {
+  assert.equal(paint('prompt', 'text-overflow', 'idle'), 'ellipsis');
+  assert.equal(paint('prompt', 'overflow', 'idle'), 'hidden');
+  assert.equal(paint('prompt', 'white-space', 'idle'), 'nowrap');
+});
+
+// Every rule in this sheet is prefixed by the element it belongs to, and these two arrived
+// bare. `.kind` and `.prompt` are words a table cell could want the day it grows one, and a
+// selector with no `.node` in front of it would paint that cell in six-point uppercase.
+test("the strip's own classes are scoped to a node", () => {
+  for (const cls of ['kind', 'prompt']) {
+    assert.equal(declared(`.${cls}`, 'color'), '', `.${cls} is not a rule of its own`);
+    assert.notEqual(declared(`.node .${cls}`, 'color'), '', `.node .${cls} is`);
+  }
+});
+
 // The colour a node's halo ends up with, as the cascade resolves it: the `.node[data-state=…]`
 // rule if the stylesheet has one, and the bare `.halo` otherwise — the class selector on the
 // left of the descendant combinator can never outrank it.
 const paint = (cls: string, prop: string, state: string): string => {
-  const css = /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet([row()]), 'map'))![1]
-    // Comments first, or a selector captured as "everything since the last brace" is the prose
-    // above the rule as well — and every rule down here is explained by a paragraph naming it.
-    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = mapCss();
   let base = '';
   let override = '';
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
