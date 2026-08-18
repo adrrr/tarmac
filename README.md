@@ -59,7 +59,8 @@ Node ≥ 20. **Zero runtime dependencies** — no framework, no bundler, nothing
 `tarmac serve` puts the same fleet in the browser — every session a row, ages that keep
 climbing, and a banner the moment a refresh fails instead of a table quietly going stale. It
 binds to loopback and refuses any request whose `Host` is not loopback, or that a browser does
-not mark same-origin: your cwd paths and costs never leave the machine.
+not mark same-origin: your cwd paths and costs never leave the machine. The listening rules:
+[the manual](docs/MANUAL.md#what-serve-listens-on).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/map-dark.png">
@@ -70,13 +71,16 @@ not mark same-origin: your cwd paths and costs never leave the machine.
 The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
 its context, the shape by the name its state. It is the same reading in the same fragment, so
 the two views can never disagree. Above the fleet are the account's five-hour and seven-day
-gauges; under it a **scrubber over the day this serve has seen** — drag it and the dials render
+[gauges](docs/MANUAL.md#the-accounts-two-windows); under it a **scrubber over the day this
+serve has seen** — drag it and the dials render
 the fleet as it was at that minute, press play and the day walks past.
 
 The rules the table follows, the map follows: a reading past the freshness threshold is drawn
 thin, amber and dated, a percentage nobody measured is an empty dotted dial rather than a ring
 at zero, and a word `claude agents --json` printed that tarmac has no boolean for is shown as
-it came rather than quietly filed as `idle`. Details in
+it came rather than quietly filed as `idle` — and raises one warning above the fleet naming
+it. The page is JSON underneath: `GET /api/fleet` and `GET /api/history` serve exactly what
+the map draws. Details in
 [the manual](docs/MANUAL.md#the-map).
 
 ## Install
@@ -88,8 +92,9 @@ and waits for a **typed word** (`y` is not an answer; scripts pass `--yes`, deli
 A status line you already had is **wrapped, not replaced**: its display stays byte-identical,
 and `uninstall` names which of its four restore modes ran. Two files land under `~/.claude/` —
 the wrapper and the `backup.json` that undoes it — and neither changes at runtime: the
-snapshots go to `$XDG_STATE_HOME/tarmac/snapshots`, because `~/.claude` is a directory people
-commit. The plan, the restore modes and the upgrade from 0.1.x:
+snapshots go to `~/.local/state/tarmac/snapshots` (`$XDG_STATE_HOME` when set), because
+`~/.claude` is a directory people commit. The plan, the restore modes and the cleanup of the
+layout that kept snapshots inside `.claude`:
 [the manual](docs/MANUAL.md#installing-safely--the-full-contract).
 
 ## Why it does not break
@@ -156,8 +161,9 @@ node scripts/demo-fleet.ts     # the invented fleet the captures above are taken
 
 Every capture on this page is taken of a fleet that does not exist, because a screenshot of a
 real machine carries working directories, prompts and costs, and nothing real enters this
-repo. What CI covers, which Node version develops and which one ships, and how to capture the
-fixtures for a new Claude Code build: [the manual](docs/MANUAL.md#developing).
+repo. What CI covers, which Node version develops and which one ships:
+[the manual](docs/MANUAL.md#developing). Capturing the fixtures for a new Claude Code build:
+[the manual](docs/MANUAL.md#capturing-a-new-claude-code-version).
 
 ## License
 
