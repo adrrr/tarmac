@@ -288,6 +288,23 @@ test('an agent replays as a kind and its numbers', async () => {
   assert.match(html, /\$0\.42/);
 });
 
+// And it replays as the shape the live view gives it. The two copies of the map's rules are
+// allowed to hold different facts — the ring keeps a cost and no name — but not to disagree
+// about what an agent LOOKS like: a dial in the past and a strip in the present would read as
+// two kinds of thing, one of them wearing a gauge no background session can ever fill.
+test('a replayed agent is a strip, not a dial the record could not have filled', async () => {
+  const page = mount(
+    record(1, () => [session({ sid: 'a' }), session({ sid: 'b', kind: 'background', project: 'alpha', ctxPct: null })]),
+  );
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  const html = page.el('replay-map').innerHTML;
+  const agent = html.slice(html.indexOf('data-role="agent"'));
+  assert.match(agent, /class="kind">background</);
+  assert.doesNotMatch(agent, /class="dial"/);
+  assert.doesNotMatch(agent, /not chained|no reading/, 'and claims no context it never had a surface for');
+});
+
 test('the replay counts the fleet of that minute, not of this one', async () => {
   const page = mount(
     record(1, () => [session({ sid: 'a', state: 'busy', costUsd: 2 }), session({ sid: 'b', state: 'idle', costUsd: 3 })]),
