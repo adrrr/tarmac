@@ -1,9 +1,9 @@
 // The release path, asserted where it is written down.
 //
 // Two guarantees this package sells cannot be checked by running the suite on one Mac —
-// and, beside them, one piece of suite hygiene (the runner's deadline and force-exit, #27).
-// All are enforced by configuration rather than by code — which is exactly the kind of
-// thing that gets deleted in a tidy-up and is never noticed:
+// and, beside them, one piece of suite hygiene (what the runner is and is not allowed to
+// pass, #27 and #63). All are enforced by configuration rather than by code — which is
+// exactly the kind of thing that gets deleted in a tidy-up and is never noticed:
 //
 //   • dash. `test/portability.test.ts` SKIPS its POSIX assertion when dash is absent, and a
 //     skip exits 0. Without `TARMAC_REQUIRE_DASH=1` on the paths where the claim has to hold
@@ -44,16 +44,35 @@ test('CI runs the built CLI on the oldest Node the package claims to support', (
 });
 
 // A test that never resolves is not a slow test. `node --test` has no deadline of its own, so
-// a spawned serve that does not exit, or a pipe that never closes, leaves a runner behind that
-// outlives the run rather than failing it — two were found 25 hours old, orphaned to PID 1
-// (#27). Two flags, two halves: the deadline turns the hang into a red test, and the
-// force-exit turns the run into one that ends — a deadline alone does not buy a report
-// (test/bounded.ts:24), and on Node 24/26 the runner it leaves behind is the very orphan
-// above. Generous is the point: the slowest test here costs a few seconds, so the floor
-// below cannot be what fails a loaded runner.
-test('the suite runs under a deadline and a force-exit: a hung test is red, and the run ends', () => {
+// a test that hangs outlives the run instead of failing it — two runners were found 25 hours
+// old, orphaned to PID 1 (#27). The deadline stays, and generous is the point: the slowest
+// test here costs a few seconds, so the floor below cannot be what fails a loaded runner.
+//
+// `--test-force-exit` shipped beside it and does NOT stay, which is what the second assertion
+// is for (#63). The runner passes it down to the per-file child it spawns, and that child's
+// stdout is a pipe back to the runner. A pipe is written asynchronously on macOS, so the
+// `process.exit()` the flag performs throws away whatever is still queued — the tail of that
+// file's report. The runner tallies what reached it, finds no failure in what it never
+// received, and prints a smaller total under exit 0. Measured here with the runner held busy:
+// `test/fleet.test.ts` delivered 34 of its 45 tests and the run stayed green.
+//
+// That is the one failure a suite may not have, and it is strictly worse than the hang the
+// flag was bought to prevent, because a hang is loud. The deadline reddens the hangs it can
+// see; the CI job deadline asserted below fails the job for the ones it cannot.
+test('the suite runs under a deadline, and never under a force-exit', () => {
   const t = scripts()['test'] ?? '';
   const ms = Number(t.match(/--test-timeout[= ](\d+)/)?.[1]);
   assert.ok(ms >= 60_000, 'no generous --test-timeout on the runner: either a hang lives forever, or a floor so low it fails a loaded runner');
-  assert.match(t, /--test-force-exit/, 'no --test-force-exit: the deadline reddens a hang, but the runner it leaves behind still outlives the run (#27)');
+  assert.doesNotMatch(t, /--test-force-exit/, '--test-force-exit truncates a busy child\'s report: the run under-counts and still exits 0 (#63)');
+});
+
+// The other half of that trade. Without the force-exit a leaked handle hangs the run rather
+// than ending it, which is only "loud" where something is watching the clock — and a hung CI
+// job that nobody fails waits out the runner's own six-hour ceiling.
+test('every CI job carries a deadline, so a hang fails instead of waiting', () => {
+  const jobs = read('.github/workflows/ci.yml').split(/^jobs:$/m)[1] ?? '';
+  const names = jobs.match(/^ {2}[a-z][\w-]*:$/gm) ?? [];
+  const deadlines = jobs.match(/^ {4}timeout-minutes: \d+$/gm) ?? [];
+  assert.ok(names.length > 0, 'no CI jobs matched — the count that follows would pass on nothing');
+  assert.equal(deadlines.length, names.length, `${names.length} CI jobs, ${deadlines.length} with timeout-minutes: a job without one waits out a hang instead of failing it`);
 });
