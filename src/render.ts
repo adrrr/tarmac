@@ -671,21 +671,36 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      One node per session. The arc is the context, its weight is how much that reading may
      be believed, and the halo — the only thing on this page that moves — says a frame
      landed moments ago. */
-  .map { display:grid; gap:.9rem; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
+  /* Nodes of two heights in one grid: a row of cards may not stretch the strips beside it to
+     the height of a dial they do not have. */
+  .map { display:grid; gap:.9rem; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));
+         align-items:start; }
   .node { border:1px solid var(--line); border-radius:10px; padding:.8rem .85rem .7rem;
           display:flex; flex-direction:column; align-items:center; text-align:center; }
   .node[data-state="busy"] { border-color:color-mix(in srgb, var(--busy) 45%, var(--line)); }
   .node[data-state="waiting"] { border-color:color-mix(in srgb, var(--wait) 45%, var(--line)); }
-  /* An agent is a smaller body in the same system, next to the session it shares a directory
-     with — never inside it. Tinted rather than outlined, and hooked, so it reads as the
-     session's dependent without a line claiming a parentage the source never published. */
-  .node[data-role="agent"] { padding-top:.55rem; border-color:transparent;
-          background:color-mix(in srgb, var(--line) 22%, transparent); }
-  .node[data-role="agent"] .dial { width:3.6rem; height:3.6rem; }
-  .node[data-role="agent"] .pct { font-size:.95rem; }
-  .node[data-role="agent"] .why { font-size:.6rem; max-width:3.4rem; }
-  .node[data-role="agent"] .why b { font-size:1rem; }
-  .node[data-role="agent"] .project { font-weight:400; }
+  /* An agent is not a smaller session — it is a strip. It was a card at three quarters scale,
+     which put a dial on a session that has no terminal to draw a statusline frame with: a ring
+     that can never fill, captioned with the words of a fault someone could go and repair. The
+     honest form is the one the table already speaks in — text on a line, left-aligned, its
+     state in the same glyph and in a three-pixel accent down the left edge. */
+  .node[data-role="agent"] { align-items:stretch; text-align:left;
+          padding:.5rem .7rem .55rem; border-radius:8px;
+          background:color-mix(in srgb, var(--line) 18%, transparent);
+          border-left-width:3px; border-left-color:var(--dim); }
+  .node[data-role="agent"][data-state="busy"] { border-left-color:var(--busy); }
+  .node[data-role="agent"][data-state="waiting"] { border-left-color:var(--wait); }
+  .node[data-role="agent"][data-state="unknown"] { border-left-color:var(--warn); }
+  .node[data-role="agent"] .who { margin-top:0; width:100%; }
+  .node[data-role="agent"] .project { font-weight:600; font-size:.8rem; }
+  /* What the node calls itself, set apart from the project it sits beside: an agent's own line
+     already reads as a sentence, and the kind is the word that says it is not a terminal. */
+  .kind { margin-left:auto; font-size:.6rem; font-weight:700; text-transform:uppercase;
+          letter-spacing:.08em; color:var(--dim); }
+  /* The prompt a background session was named after. One line, clipped: it is a sentence
+     somebody typed, and it is the only thing on the strip that has no length limit. */
+  .prompt { color:var(--dim); font-size:.76rem; margin-top:.15rem;
+          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* Said, not shown: the three glyphs differ in silhouette, so a reader who cannot separate
      two hues still has the state — but a screen reader is handed a bullet and nothing else. */
   .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
@@ -765,6 +780,10 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     tr[data-state="busy"] { border-left-color:var(--busy); }
     tr[data-state="waiting"] { border-left-color:var(--wait); }
     tr[data-state="unknown"] { border-left-color:var(--warn); }
+    /* A strip sharing a phone's width with a card is an ellipsis where the prompt was — the
+       one line saying what this agent was told to do is the first thing a narrow column takes
+       away. It spans the row instead, like the cells below it. */
+    .node[data-role="agent"] { grid-column:1 / -1; }
     td, td:first-child { border:0; padding:.2rem 0; white-space:normal;
          display:flex; justify-content:space-between; align-items:baseline; gap:1rem; }
     td::before { content:attr(data-label); color:var(--dim); font-size:.72rem; font-weight:600;
@@ -1108,6 +1127,23 @@ function pageScript(view: View): string {
     // unescaped, and into the glyph slot as a function body.
     var state = own(SHAPE, x.state) ? x.state : 'unknown';
     var pct = typeof x.ctxPct === 'number' ? x.ctxPct : null;
+    // The live view's rule about agents, in the copy of it that ships to the browser: a strip,
+    // never a dial. A replay drawing agents as rings while the page one draws them as strips
+    // would read as two kinds of thing — and the ring is the surface that can LEAST fill a
+    // gauge, since it keeps a reading and never the terminal that produced it. No prompt line:
+    // a background session is named after the prompt it was given, and the record stores no
+    // names. What it does hold for one is what it cost, which is printed like anywhere else.
+    if (role === 'agent') {
+      return '<article class="node" data-role="agent" data-state="' + state + '" data-reading="undatable">'
+        + '<div class="who"><span class="shape" aria-hidden="true">' + SHAPE[state] + '</span>'
+        + '<span class="sr">' + state + '</span>'
+        + '<span class="project">' + esc(x.project) + '</span>'
+        + '<span class="kind">' + esc(x.kind) + '</span></div>'
+        + (state === 'waiting' && x.waitingFor ? '<div class="sub waiting-for">' + esc(x.waitingFor) + '</div>' : '')
+        + (pct === null ? '' : '<div class="sub">' + pct + '%</div>')
+        + (typeof x.costUsd === 'number' ? '<div class="sub">$' + x.costUsd.toFixed(2) + '</div>' : '')
+        + '</article>';
+    }
     // The ring keeps each reading and never how old that reading was, so the arc weight that
     // says how much a reading may be believed cannot be earned here. It is not the live
     // default either: this third value is de-weighted in the stylesheet, and never the warning
@@ -1403,6 +1439,10 @@ export function renderMap(fleet: Fleet): string {
  * One state brings a caption with it. A waiting session is the only one where the shape
  * leaves a question the source can answer — which human answer it is halted on — and it is
  * printed directly under the name, not hidden in a title attribute nobody hovers on a phone.
+ *
+ * Two shapes, and the split is what a node HAS rather than what it is worth: a session has a
+ * terminal, so four of those five facts exist for it. A background agent has none, and gets
+ * the strip below — same data attributes, same glyph, same words to a screen reader.
  */
 function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode): string {
   // The model owns "is there a number"; this reads its verdict rather than asking the row a
@@ -1420,6 +1460,30 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
       : reading === 'undated'
         ? `<div class="asof stale">! undated</div>`
         : '';
+  // The strip. Everything the card's lower half carried — the percentage, the model, the
+  // effort — comes off a statusline snapshot, and a background session has no terminal to draw
+  // one: those fields are not late for an agent, they are structurally absent. The dial said so
+  // as "not chained", which is the vocabulary of a repairable fault ("run `tarmac install`")
+  // for a session no install can ever cover. So the strip claims no context at all — no gauge,
+  // no dash, no reason — and carries what the source really publishes about an agent: its
+  // state, its project, the kind it calls itself, and the prompt it was named after.
+  //
+  // Nor a halo: the pulse is drawn inside the dial and announces a frame landing, which is the
+  // one event that cannot happen here. Nothing is lost with the shape that held it.
+  //
+  // The one number that can still appear: should the source ever publish a percentage for a
+  // background session, the join has a sessionId to hang it on, and it is printed inline —
+  // beside its age when the reading is one nobody should take for current — rather than
+  // bringing back a ring that would be empty on every other agent on the page.
+  if (role === 'agent') {
+    return `<article class="node" data-role="${role}" data-state="${state}" data-reading="${reading}">
+      <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span><span class="kind">${esc(r.kind)}</span></div>
+      <div class="prompt">${esc(r.name)}</div>
+      ${state === 'waiting' && r.waitingFor ? `<div class="sub waiting-for">${esc(r.waitingFor)}</div>` : ''}
+      ${pct === null ? '' : `<div class="sub">${pct}%</div>`}
+      ${asOf}
+    </article>`;
+  }
   // An agent carries its own project, like every other node. Placement is not a promise —
   // the grid wraps where the viewport says, and the fleet's sort can hand the same agent a
   // different neighbour on the next poll — so nothing here points at the node beside it.
