@@ -73,6 +73,20 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   (`scripts/demo-fleet.ts`) served through the real collector and the real renderer, because
   a screenshot of a real machine carries working directories, prompts and costs. (#52)
 
+- **The README is the tour again, and the manual holds the depth.** #52 put the captures, the
+  order and the anchors in place and cut nothing, so the sections were as long as they had
+  always been: a page that had to be read to the end to be trusted, and was not being read to
+  the end. The depth has moved rather than gone — the dashboard's front door, the install
+  contract past the first confirmation, the command and option table, the map's per-node rules,
+  the scrubber, the rate-limit gauges, the CI matrix and the Node versions are all in
+  `docs/MANUAL.md`, each under a section that already existed or, for the three the manual did
+  not have (`serve`'s listener, the commands, developing), under one that now does. What stays
+  on the README is what a reader decides on: the pitch, the quickstart, the two surfaces tarmac
+  reads and how each one degrades, the map with its two captures, the install ritual, the three
+  settings, and "what it deliberately does not do" untouched. Every link points at the section
+  that took the prose. 1714 words of README prose down to 997, no fact dropped on the way.
+  (#59)
+
 - **The README stops promising no history at all.** The ring (#35) and the scrubber (#36)
   shipped, and a running `serve` has held the day it has seen ever since. The bullet under
   "What it deliberately does not do" was half true — `tarmac list` is still a snapshot — and
