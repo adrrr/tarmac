@@ -60,11 +60,10 @@ npx @adrrr/tarmac@0.1.0 list        # against the machine's own fleet
 ```
 
 Then check the README's install block against what the registry actually serves — the
-package name is the one thing no local test can verify. Look at the **images** on that page
-too, for the same reason: the README ships, `docs/media/` does not, so the four captures it
-shows resolve only if npm rewrites relative paths inside the `<picture>` markup. Nothing in
-this repo can establish whether it does. If they come out broken, the fix is absolute
-`raw.githubusercontent.com` URLs in the README, at the cost of pinning them to a branch.
+package name is the one thing no local test can verify. The **images** are settled: npm
+does rewrite relative paths inside `<picture>` markup — verified on the live page at 0.4.1
+(both captures render, light variant served). If a future README changes how the media is
+referenced, look again; until then this check is done.
 
 ## One-time chore on machines that ran a pre-signature wrapper
 
