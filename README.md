@@ -58,8 +58,9 @@ Node ≥ 20. **Zero runtime dependencies** — no framework, no bundler, nothing
 
 `tarmac serve` puts the same fleet in the browser — every session a row, ages that keep
 climbing, and a banner the moment a refresh fails instead of a table quietly going stale. It
-binds to loopback and refuses any request whose `Host` is not loopback, or that a browser does
-not mark same-origin: your cwd paths and costs never leave the machine. The listening rules:
+binds to loopback and refuses any request whose `Host` is not loopback, or that a browser marks
+as coming from another origin — a client that sends no such mark, curl or a script, is left
+alone: your cwd paths and costs never leave the machine. The listening rules:
 [the manual](docs/MANUAL.md#what-serve-listens-on).
 
 <picture>
@@ -128,7 +129,7 @@ deliberately not configurable, and all of it works with no configuration at all.
 |---|---|---|
 | freshness threshold | `--stale-after 90s` \| `15m` \| `2h` | `10m` |
 | port | `--port 8080` | `4477` |
-| snapshots dir (read side) | `--snapshots-dir DIR` | the path frozen into the installed wrapper, so the reader follows the writer |
+| snapshots dir (read side) | `--snapshots-dir DIR` | the path frozen into the installed wrapper, so the reader follows the writer; the XDG state directory with no install to ask |
 
 Each also has an environment variable and a key in `<home>/.claude/tarmac/config.json`.
 **Flag beats environment beats config file beats default**, settled per setting; `serve`
