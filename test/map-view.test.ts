@@ -262,6 +262,18 @@ test('the cards of a berth come before its strips, in the markup as on the scree
   assert.doesNotMatch(mapCss(), /flex-direction:\s*\w+-reverse/);
 });
 
+// A frame's name is an attribute, and this page answers an absent value with an ELEMENT — a
+// dash in a span. A label that ever came out empty put that span inside `aria-label="…"`,
+// where its own quotes end the attribute: markup in a slot that takes a string. The label the
+// model hands over is never empty, and this is the assertion that says so from out here.
+test('a frame is named with a string, never with the markup of a missing one', () => {
+  for (const r of [{ cwd: '/', project: '' }, { cwd: null, project: null }, { project: 'apollo' }]) {
+    const label = /aria-label="([^"]*)"/.exec(renderMap(fleet([row(r)])))?.[1];
+    assert.ok(label, `no aria-label at all for ${JSON.stringify(r)}`);
+    assert.doesNotMatch(label, /[<>]/, `${JSON.stringify(r)} named the frame with markup`);
+  }
+});
+
 // A label off someone else's filesystem, in an attribute and in text.
 test('a berth label is escaped in both places it is printed', () => {
   const html = renderMap(fleet([row({ project: '"><script>alert(1)</script>' })]));

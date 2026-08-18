@@ -321,6 +321,15 @@ test('a berth whose directory nobody could read says so', () => {
   assert.deepEqual(labels(map), ['no directory']);
 });
 
+// The one directory that HAS been published and still has no project name: the root, whose
+// basename is the empty string. It is not the case above — something was read — and an empty
+// label is not a label at all: the renderer answers an absent value with a dash element, which
+// in the frame's `aria-label` is markup where a name should be.
+test('a session at the root is labelled with the directory, not with an empty frame', () => {
+  const map = buildMap(fleet([row({ cwd: '/', project: '' })]));
+  assert.deepEqual(labels(map), ['/']);
+});
+
 test('the fleet decides the order of the sessions, and the map keeps it', () => {
   const map = buildMap(fleet([row({ sessionId: 'a', name: 'first' }), row({ sessionId: 'b', name: 'second' })]));
   assert.deepEqual(names(map), ['first', 'second']);

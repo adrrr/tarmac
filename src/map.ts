@@ -59,6 +59,10 @@ export interface Berth {
    * and the first one can be asked. Not unique: two checkouts of `atlas` are two berths with
    * one label, which is the truth about a machine that has two of them. The full path is not
    * printed here any more than anywhere else on this page.
+   *
+   * Never empty, and that is load-bearing rather than tidy: the renderer answers an absent
+   * value with a dash ELEMENT, and a frame is named through an `aria-label`, where a span
+   * carrying quotes of its own is markup in a slot that takes a string.
    */
   label: string;
   /** Drawn as cards, side by side. */
@@ -143,7 +147,11 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
     // key: it opens a berth of its own every time, which is the one honest frame around it.
     let berth = r.cwd === null ? undefined : byCwd.get(r.cwd);
     if (berth === undefined) {
-      berth = { label: r.project ?? NO_DIRECTORY, sessions: [], agents: [] };
+      // The project, the directory itself, then the words — and the middle one is not a page
+      // that prints paths. `path.basename` answers the empty string for exactly one directory,
+      // the root, so a fleet with a session in `/` had a project of `''`: not the absent cwd
+      // above, and no name either. The fallback names it `/`, which is what was read.
+      berth = { label: r.project || r.cwd || NO_DIRECTORY, sessions: [], agents: [] };
       berths.push(berth);
       if (r.cwd !== null) byCwd.set(r.cwd, berth);
     }
