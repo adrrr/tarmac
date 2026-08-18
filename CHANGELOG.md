@@ -73,6 +73,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   (`scripts/demo-fleet.ts`) served through the real collector and the real renderer, because
   a screenshot of a real machine carries working directories, prompts and costs. (#52)
 
+- **The README stops promising no history at all.** The ring (#35) and the scrubber (#36)
+  shipped, and a running `serve` has held the day it has seen ever since. The bullet under
+  "What it deliberately does not do" was half true — `tarmac list` is still a snapshot — and
+  it now names the boundary that is actually kept: nothing on disk, and nothing outliving the
+  serve that read it. (#48)
+
 ## [0.4.0] — 2026-08-17
 
 ### Added
