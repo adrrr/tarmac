@@ -14,6 +14,7 @@ import type { SpawnSyncReturns } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CHECKED_VERSIONS, guardVersions, schemaNotice } from '../src/schema.ts';
 import { extractTelemetry } from '../src/snapshots.ts';
+import { parseAgents } from '../src/sessions.ts';
 import { tempDir } from './sandbox.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -76,17 +77,77 @@ test('a tagged agents fixture is a second capture of one build, never a version 
 // Across the family, not per file: the 2.1.226 capture caught no background session (which
 // says nothing about the field's existence there), and a fixture is a capture of one build,
 // not a checklist to be filled in.
+const SESSIONS_TS = fs.readFileSync(path.join(repo, 'src', 'sessions.ts'), 'utf8');
+
+const agentsFixtures = (): string[] => fs.readdirSync(fixturesDir).filter((f) => /^agents-/.test(f) && f.endsWith('.json'));
+
+/**
+ * The reader's source with its prose taken out. A comment is where a field name appears
+ * without being read — `// deliberately NOT read: entry.waitingFor` is a line this file
+ * invites — and read as code it demands a fixture carrying a field nothing looks at.
+ *
+ * Not a lexer: a `//` inside a string literal takes the rest of its line with it. That
+ * direction is the safe one here (it hides reads rather than inventing them) and what
+ * remains is held to a floor below.
+ */
+const code = (source: string): string => source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ');
+
+/** Every key the reader takes off an entry, by the only shape it takes them in. */
+const entryKeys = (source: string): Set<string> => new Set([...code(source).matchAll(/\bentry\.(\w+)/g)].map((m) => m[1]!));
+
+/**
+ * `const { state } = entry` reads a field while hiding it from the regex above — same
+ * behaviour, typecheck green, and the freeze stops watching that key. The `read.size > 0`
+ * floor only catches the version of that where EVERY read went the same way, so the shape
+ * itself is refused: the reads stay `entry.x`, and this says so at the point it matters.
+ */
+const destructuresEntry = (source: string): boolean => /(?:const|let|var)\s*\{[^}]*\}\s*=\s*entry\b/.test(code(source));
+
+// Both readings above are regexes over source, and each has a quiet way of watching nothing.
+test('the reader is read for what it does, not for what it says about itself', () => {
+  assert.deepEqual([...entryKeys('const pid = entry.pid; // not read: entry.waitingFor')], ['pid']);
+  assert.deepEqual([...entryKeys('/* entry.cwd, in prose */ take(entry.name);')], ['name']);
+  assert.equal(destructuresEntry('const { state } = entry;'), true);
+  assert.equal(destructuresEntry('const state = entry.state;'), false);
+});
+
 test('every key the agents reader takes off an entry is carried by some fixture', () => {
-  const read = new Set([...fs.readFileSync(path.join(repo, 'src', 'sessions.ts'), 'utf8').matchAll(/\bentry\.(\w+)/g)].map((m) => m[1]!));
+  assert.equal(destructuresEntry(SESSIONS_TS), false, 'a destructured entry is a read this test cannot see — keep them as `entry.x`');
+  const read = entryKeys(SESSIONS_TS);
   assert.ok(read.size > 0, 'no `entry.` reads found — this test has stopped watching anything');
 
   const carried = new Set<string>();
-  for (const f of fs.readdirSync(fixturesDir).filter((f) => /^agents-/.test(f) && f.endsWith('.json'))) {
+  for (const f of agentsFixtures()) {
     for (const e of JSON.parse(fs.readFileSync(path.join(fixturesDir, f), 'utf8')) as Record<string, unknown>[]) {
       for (const k of Object.keys(e)) carried.add(k);
     }
   }
   assert.deepEqual([...read].filter((k) => !carried.has(k)), [], 'read off a shape no capture ever showed');
+});
+
+// The freeze above compares NAMES, and a name is half of what was observed. `pid` as a
+// string, `startedAt` as a date, a `state` of `42` — each carries the key, passes the freeze,
+// and reaches the reader as `null`: a field frozen as seen that has never once been read off
+// that capture. The types come off the reader's own source for the same reason the keys do.
+const READ_AS = new Map([...code(SESSIONS_TS).matchAll(/\btypeof entry\.(\w+) === '(\w+)'/g)].map((m) => [m[1]!, m[2]!]));
+
+test('every value the agents fixtures show is one the reader can actually read', () => {
+  assert.deepEqual(
+    [...entryKeys(SESSIONS_TS)].sort(),
+    [...READ_AS.keys()].sort(),
+    'a key read in some shape other than `typeof entry.x === …` — this test cannot judge its values',
+  );
+
+  for (const f of agentsFixtures()) {
+    const text = fs.readFileSync(path.join(fixturesDir, f), 'utf8');
+    const entries = JSON.parse(text) as Record<string, unknown>[];
+    for (const [i, e] of entries.entries()) {
+      for (const [k, v] of Object.entries(e)) {
+        if (READ_AS.has(k)) assert.equal(typeof v, READ_AS.get(k), `${f}: entry ${i} carries \`${k}\` as a ${typeof v}, which the reader reads as null`);
+      }
+    }
+    assert.equal(parseAgents(text).sessions.length, entries.length, `${f}: an entry the reader could make no session of`);
+  }
 });
 
 // The statusline twin of the test above, and the half that was missing: adding a version to
