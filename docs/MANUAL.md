@@ -60,6 +60,8 @@ tarmac install — your home
   ↳ which calls    ~/bin/my-line.sh   (your display is unchanged)
   snapshots        /Users/you/.local/state/tarmac/snapshots
   undo             tarmac uninstall
+
+Type "install" to proceed, anything else to abort:
 ```
 
 Upgrading from a version that kept the snapshots inside `.claude` adds two more lines — the
@@ -211,9 +213,10 @@ tarmac serving http://127.0.0.1:4477
 ```
 
 It binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
-does not mark same-origin — your cwd paths and costs never leave the machine. A busy
-**default** port walks up to the next free one and says so; a port you chose yourself — flag,
-environment or config file — refuses instead, because you chose it
+marks as coming from another origin — `Sec-Fetch-Site` anything but `same-origin` or `none` —
+your cwd paths and costs never leave the machine. A client that sends no such header, curl or a
+script, is left alone. A busy **default** port walks up to the next free one and says so; a
+port you chose yourself — flag, environment or config file — refuses instead, because you chose it
 (see [configuration](#configuration)).
 
 ## Staying open
@@ -517,7 +520,7 @@ else is configurable, and every one of them keeps working with no configuration 
 |---|---|---|
 | freshness threshold | how old a reading may be before it is marked `!` | `10m` |
 | port | where `serve` listens | `4477` |
-| snapshots directory | where `list` and `serve` **read** payloads from | `$XDG_STATE_HOME/tarmac/snapshots`, else `<home>/.local/state/tarmac/snapshots` |
+| snapshots directory | where `list` and `serve` **read** payloads from | the path frozen into the installed wrapper, so the reader follows the writer; with no install to ask, `$XDG_STATE_HOME/tarmac/snapshots`, else `<home>/.local/state/tarmac/snapshots` |
 
 **Flag beats environment beats config file beats default**, settled per setting — a port
 pinned in the file and a threshold tightened for one run is the normal case.
