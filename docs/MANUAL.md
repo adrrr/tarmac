@@ -213,9 +213,9 @@ tarmac serving http://127.0.0.1:4477
 ```
 
 It binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
-marks as coming from another origin — `Sec-Fetch-Site` anything but `same-origin` or `none`.
-A client that sends no such header, curl or a script, is left alone; your cwd paths and costs
-never leave the machine. A busy **default** port walks up to the next free one and says so; a
+marks as coming from another origin — `Sec-Fetch-Site` anything but `same-origin` or `none` —
+your cwd paths and costs never leave the machine. A client that sends no such header, curl or a
+script, is left alone. A busy **default** port walks up to the next free one and says so; a
 port you chose yourself — flag, environment or config file — refuses instead, because you chose it
 (see [configuration](#configuration)).
 

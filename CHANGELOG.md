@@ -10,7 +10,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
+### Changed
 
 - **The two configuration tables agree about where the snapshots are read from.** The README's
   named the path frozen into the installed wrapper, the manual's named the XDG default; each is
