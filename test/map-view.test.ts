@@ -289,9 +289,7 @@ test('the cards of a berth come before its strips, in the markup as on the scree
 // source publishes nothing that could make it true. It reads as a tidy-up, it passes every
 // other assertion here, and it says in a border what the whole feature says it will not say.
 test('the strips are not indented under the cards — a rail there would draw a parentage', () => {
-  for (const prop of ['margin-left', 'border-left', 'padding-left']) {
-    assert.equal(declared('.berth-strips', prop), '', `.berth-strips carries ${prop}`);
-  }
+  assert.deepEqual(leftInsetsOnStrips(), []);
 });
 
 // A frame's name is an attribute, and this page answers an absent value with an ELEMENT — a
@@ -511,6 +509,87 @@ const declared = (selector: string, prop: string): string => {
   return '';
 };
 
+/**
+ * Every value the sheet gives one property on one EXACT selector, in source order, `@media`
+ * blocks included. `declared` answers with the first it finds and cannot tell a top-level rule
+ * from a scoped one, which is enough to read a value and wrong to assert a guarantee: a later
+ * rule taking the property back, or the declaration moved inside a media query so it holds on
+ * one viewport and nowhere else, both leave `declared` answering with the value the page wanted
+ * and no longer has. Both mutations pass against `declared`; neither passes against this.
+ */
+const declaredEverywhere = (selector: string, prop: string, css: string = mapCss()): string[] => {
+  const found: string[] = [];
+  for (const [, raw, declarations] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (raw.slice(raw.lastIndexOf('}') + 1).trim() !== selector) continue;
+    const value = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`).exec(declarations)?.[1].trim();
+    if (value !== undefined) found.push(value);
+  }
+  return found;
+};
+
+/**
+ * The sheet with every `@media` block cut out, so a rule scoped to one viewport cannot answer
+ * for the page. Needed because the flat scans above read a selector as whatever follows the
+ * last `}`, which is true of a nested rule too: without this, moving a declaration from the
+ * top level into the phone block satisfies both of them while the page loses it everywhere a
+ * phone is not.
+ */
+const cssOutsideMedia = (): string => {
+  const css = mapCss();
+  let out = '';
+  for (let i = 0; i < css.length; i++) {
+    if (!css.startsWith('@media', i)) {
+      out += css[i];
+      continue;
+    }
+    let depth = 0;
+    let j = css.indexOf('{', i);
+    assert.notEqual(j, -1, 'an @media with no block');
+    for (; j < css.length; j++) {
+      if (css[j] === '{') depth++;
+      else if (css[j] === '}' && --depth === 0) break;
+    }
+    i = j;
+  }
+  return out;
+};
+
+/**
+ * Every declaration in the sheet that would inset a `.berth-strips` box from the left, whatever
+ * spelling it arrives in — reported as text so a failure names the rule it found.
+ *
+ * Written as a sweep rather than as three assertions on three longhands because the longhands
+ * are the spelling nobody would reach for. The rule already carries `margin-top`, so collapsing
+ * it into a `margin:` shorthand is the tidy-up an editor makes without thinking, and it draws
+ * the rail with every other assertion here green. Same for the logical properties, for a border
+ * on a descendant, and for a `translateX`, which moves the box without declaring an inset at
+ * all. Any border is refused outright: nothing about this container wants one, and a border on
+ * its left edge is the rail itself.
+ */
+const leftInsetsOnStrips = (): string[] => {
+  // The left of a `margin`/`padding` shorthand: four values name it fourth, two or three name
+  // it second, one names it alone.
+  const left = (shorthand: string): string => {
+    const parts = shorthand.trim().split(/\s+/);
+    return parts[3] ?? parts[1] ?? parts[0];
+  };
+  const isZero = (v: string): boolean => /^0[a-z%]*$/.test(v.trim());
+  const found: string[] = [];
+  for (const [, raw, declarations] of mapCss().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = raw.slice(raw.lastIndexOf('}') + 1).trim();
+    if (!/\.berth-strips\b/.test(selector)) continue;
+    for (const [, prop, value] of declarations.matchAll(/(?:^|;)\s*([\w-]+)\s*:\s*([^;]+)/g)) {
+      const offends =
+        (/^(margin|padding)$/.test(prop) && !isZero(left(value)))
+        || (/^(margin|padding)-(left|inline-start)$/.test(prop) && !isZero(value))
+        || /^border/.test(prop)
+        || prop === 'transform';
+      if (offends) found.push(`${selector} { ${prop}: ${value.trim()} }`);
+    }
+  }
+  return found;
+};
+
 // The shape itself, which had no test at all: a strip is a line of text down the left edge of
 // its cell, inside a grid whose every other node is centred on a dial. Both declarations are
 // on the agent's own rule and both are reversed by the `.node` rule above it, so neither can
@@ -549,8 +628,32 @@ test('the prompt is clipped to one line, with the ellipsis that says so', () => 
 // longest prompt it holds: the three declarations above still resolve, against a column that
 // is never narrower than its text, so nothing is ever clipped and the page scrolls sideways
 // instead. The flat grid supplied that width by being a grid; the frame has to declare it.
+// Asserted with `declaredEverywhere` and not `declared`: this is a guarantee, not a value. A
+// second rule taking it back, or the declaration moved inside a media query so it holds on a
+// phone and nowhere else, both leave `declared` answering `0` over a page that overflows.
 test('a berth may be narrower than the prompts inside it, or nothing is ever clipped', () => {
-  assert.equal(declared('.berth', 'min-width'), '0');
+  assert.deepEqual(declaredEverywhere('.berth', 'min-width'), ['0'], 'declared once, and never taken back');
+  assert.deepEqual(
+    declaredEverywhere('.berth', 'min-width', cssOutsideMedia()),
+    ['0'],
+    'and declared by the page, not by one viewport of it',
+  );
+});
+
+// The same mechanism, one rule below, on the surface where it matters most. On a phone the
+// cards stop being a fixed column — `.berth-cards .node { flex:1 1 8.5rem; width:auto }` — and
+// `width` is the specified size suggestion that was capping their automatic minimum. Without
+// it, a card is as wide as the name on it: `.who .name` is one `nowrap` line, and a background
+// session's name is its PROMPT, which has no length limit. It is not the exotic case — when
+// nothing in the fleet calls itself `interactive`, `roleOf` draws every row as a card, so the
+// prompts land in `.name` on cards rather than on strips.
+//
+// The manual's promise is a privacy promise: a long name "is ellipsised on a node to fit its
+// column, which is a width, not a redaction", said so a reader knows what a screenshot of a
+// real fleet gives away. A phone is where a screenshot gets taken.
+test('a card on a phone may be narrower than the name printed on it', () => {
+  assert.match(atMedia('(max-width: 46rem)'), /\.berth-cards\s+\.node\s*\{[^}]*min-width:\s*0/);
+  assert.deepEqual(declaredEverywhere('.berth-cards .node', 'min-width'), ['0'], 'and never taken back');
 });
 
 // Every rule in this sheet is prefixed by the element it belongs to, and these two arrived

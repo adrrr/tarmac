@@ -87,18 +87,27 @@ test('the record is fetched once at load, and the range says what it really cove
   assert.match(page.el('covers').textContent, /10 reading/);
 });
 
-// The moment the handle moves, the frames the live map draws are gone and the nodes are a flat
-// grid. That is the honest drawing of what the ring holds, and the argument for it was written
-// in the README, the manual, the changelog and a stylesheet comment — every place except the
-// one the reader is looking at while it happens. A reader who is shown less and told nothing
-// reads it as a rendering that broke.
-test('a reader who drags the handle is told on the page why the frames went', async () => {
+// Move the handle and the grouping the live map draws is gone: the nodes come back ungrouped,
+// which is the honest drawing of what the ring holds. The argument for that was written in the
+// README, the manual, the changelog and a stylesheet comment, and nowhere the reader can see it
+// — so it is on the line under the handle now, beside the sentence that already explains the
+// other thing the ring does not keep.
+//
+// Asserted before the drag as well as after, because that is what the line does. `#covers` sits
+// in the scrubber's own block, outside `#live` and outside `#replay-view`, so it is on the page
+// from the moment the record lands — which is why the sentence has to read as a standing
+// property of the record ("it keeps a project name") and not as something that just happened.
+// Worded as an event it would be a page announcing the grouping was gone with the grouping on
+// screen, and this test would be the thing that let it through.
+test('the line under the handle says the past is drawn ungrouped, and why', async () => {
   const page = mount(record(10));
   await page.advance(0);
-  page.el('scrub').drag(3);
-  assert.equal(page.el('replaying').hidden, false, 'the past is up');
-  assert.match(page.el('covers').textContent, /frames are gone/, 'and the line under the handle says so');
+  assert.equal(page.el('replaying').hidden, true, 'the live map is up, and the line is already there');
+  assert.match(page.el('covers').textContent, /drawn ungrouped/);
   assert.match(page.el('covers').textContent, /never the directory/, 'naming what the record actually keeps');
+  page.el('scrub').drag(3);
+  assert.equal(page.el('replaying').hidden, false, 'and it is still there once the past is up');
+  assert.match(page.el('covers').textContent, /drawn ungrouped/);
 });
 
 // A gap that says it is a gap is not a gap — but a scrubber whose positions are readings and

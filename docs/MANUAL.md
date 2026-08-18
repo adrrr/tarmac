@@ -465,9 +465,8 @@ A replay is never allowed to pass for the present:
   into one, claiming the very thing a berth exists to be trusted about. So a replayed fleet is
   drawn flat, in the order the sample carries — with no directory to group on, there is no
   grouping to put a node anywhere else. The alternative was to widen the record until a frame
-  could be earned; it already
-  shows less than the live view does, on purpose, and one more field in every one of 1440
-  samples buys one border
+  could be earned; it already shows less than the live view does, on purpose, and one more
+  field in every one of 1440 samples buys one border
 - the poll goes on underneath, so returning to now is instant and a page left on replay does
   not rot
 - the banner carries `role="status"` and the minute travels with the handle as its

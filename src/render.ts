@@ -839,7 +839,13 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        spending a claim on — and dropping the frame here would drop the claim with it. */
     .berth { width:100%; padding:.5rem .55rem .6rem; }
     .berth-cards { gap:.5rem; }
-    .berth-cards .node { flex:1 1 8.5rem; width:auto; }
+    /* min-width:0 for the reason the berth carries it, and here it is the width that was doing
+       the capping: a card's automatic minimum is its min-content width unless a specified size
+       suggests otherwise, and dropping the fixed column to auto drops that suggestion. A card
+       is then as wide as the name on it, and .who .name is one nowrap line — with a
+       background session named after its prompt, a name with no length limit. Not the exotic
+       case: when nothing in the fleet calls itself interactive, every row is drawn as a card. */
+    .berth-cards .node { flex:1 1 8.5rem; width:auto; min-width:0; }
     /* A strip sharing a phone's width with a card is an ellipsis where the prompt was — the
        one line saying what this agent was told to do is the first thing a narrow column takes
        away. It spans the row instead, like the cells below it. The berth docks its own strips
@@ -1127,11 +1133,17 @@ function pageScript(view: View): string {
       // through minutes, and a record with holes in it is not a smooth walk.
       + (record.missed ? ', ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '')
       + '. The record keeps each reading, not how old that reading was, so nothing replayed here is dated.'
-      // The other thing the ring does not hold, said where the reader meets it. The frames go
-      // the moment the handle moves, and the argument for that was written in the README, the
-      // manual, the changelog and a comment in this sheet — every place except the page it
-      // happens on. Shown less and told nothing, a reader reads it as a rendering that broke.
-      + ' The frames are gone with it: the record keeps a project name, never the directory a node was read in.';
+      // The other thing the ring does not hold, said where the reader meets it: the argument
+      // for an ungrouped replay was written in the README, the manual, the changelog and a
+      // comment in this sheet, and nowhere the reader can see it. Shown less and told nothing,
+      // a reader reads it as a rendering that broke.
+      //
+      // A standing property of the record, never an event. This line sits in the scrubber's own
+      // block, outside the live fragment and outside the replay one, so it is on the page from
+      // the moment the record lands — and a sentence saying the grouping had gone would be
+      // printed under a live map with the grouping on it.
+      + ' It keeps a project name and never the directory a node was read in, so the past is'
+      + ' drawn ungrouped, in the order the sample carries.';
   }
 
   function ready() {

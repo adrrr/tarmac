@@ -29,8 +29,8 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   above it. The grouping is keyed on the directory and never on the label, because two
   checkouts of `atlas` answer to one word — which is also why replays stay flat: the record
   keeps a project name and never the directory it was read in, and it is not being widened
-  until a frame could be earned. The line under the scrubber says that, where a reader who has
-  just watched the frames go is standing. (#58)
+  until a frame could be earned. The line under the scrubber says so, where a reader reaching
+  for the handle is looking. (#58)
 
 - **A background agent is drawn as a strip on the map, not as a small dial.** It was a card at
   three quarters scale, which meant a context ring on a session that has no terminal to draw a
