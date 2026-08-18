@@ -675,9 +675,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      under the cards of its berth, printing as text whatever its snapshot did publish.
 
      Two layouts, each named, because the two surfaces know different things. The live map
-     groups by working directory — the berths below; the replay behind the scrubber has none to group
-     by — the ring keeps a reading and never the directory it was read in — so it stays the
-     flat grid this view was before, which is also the honest drawing of what it holds. */
+     groups by working directory (the berths below); the replay behind the scrubber has none
+     to group by — the ring keeps a reading and never the directory it was read in — so it
+     stays the flat grid this view was before, which is the honest drawing of what it holds. */
   .map { gap:.9rem; }
   .map.berths { display:flex; flex-wrap:wrap; align-items:flex-start; }
   .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }

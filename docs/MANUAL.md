@@ -405,9 +405,9 @@ its line — and the kind it calls itself at the end of it. Not the project: the
 says the directory once, for every node in it. A waiting agent captions itself with what it
 waits for, like any other node. What it has no room for and no source for is the dial: the
 arc, its weight and the halo are all drawn from a statusline frame, and there is no terminal
-here to draw one. A
-ring on an agent could never fill, and the middle of it said `not chained` — the words of a
-fault someone could go and repair (`tarmac install`), about a session no install can cover.
+here to draw one. A ring on an agent could never fill, and the middle of it said `not chained`
+— the words of a fault someone could go and repair (`tarmac install`), about a session no
+install can cover.
 
 The number is not refused, though. **A strip prints what that session's snapshot published,
 and nothing where nothing was published.** The percentage, the model and the effort come out
