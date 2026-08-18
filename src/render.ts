@@ -1126,7 +1126,12 @@ function pageScript(view: View): string {
       // A gap that says it is a gap is not a gap. The handle steps through readings, not
       // through minutes, and a record with holes in it is not a smooth walk.
       + (record.missed ? ', ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '')
-      + '. The record keeps each reading, not how old that reading was, so nothing replayed here is dated.';
+      + '. The record keeps each reading, not how old that reading was, so nothing replayed here is dated.'
+      // The other thing the ring does not hold, said where the reader meets it. The frames go
+      // the moment the handle moves, and the argument for that was written in the README, the
+      // manual, the changelog and a comment in this sheet — every place except the page it
+      // happens on. Shown less and told nothing, a reader reads it as a rendering that broke.
+      + ' The frames are gone with it: the record keeps a project name, never the directory a node was read in.';
   }
 
   function ready() {

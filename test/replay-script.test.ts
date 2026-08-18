@@ -87,6 +87,20 @@ test('the record is fetched once at load, and the range says what it really cove
   assert.match(page.el('covers').textContent, /10 reading/);
 });
 
+// The moment the handle moves, the frames the live map draws are gone and the nodes are a flat
+// grid. That is the honest drawing of what the ring holds, and the argument for it was written
+// in the README, the manual, the changelog and a stylesheet comment — every place except the
+// one the reader is looking at while it happens. A reader who is shown less and told nothing
+// reads it as a rendering that broke.
+test('a reader who drags the handle is told on the page why the frames went', async () => {
+  const page = mount(record(10));
+  await page.advance(0);
+  page.el('scrub').drag(3);
+  assert.equal(page.el('replaying').hidden, false, 'the past is up');
+  assert.match(page.el('covers').textContent, /frames are gone/, 'and the line under the handle says so');
+  assert.match(page.el('covers').textContent, /never the directory/, 'naming what the record actually keeps');
+});
+
 // A gap that says it is a gap is not a gap — but a scrubber whose positions are readings and
 // not minutes owes the reader that difference, or the walk it offers is not the walk it makes.
 test('minutes the record missed are named, not smoothed over', async () => {
