@@ -10,7 +10,23 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **The two configuration tables agree about where the snapshots are read from.** The README's
+  named the path frozen into the installed wrapper, the manual's named the XDG default; each is
+  true in one case, and read side by side they contradict each other. Both cells now carry the
+  split the resolver actually makes — the wrapper's own path when there is an install to ask
+  it, the XDG state directory when there is not. (#69)
+
+- **The listening sentence says what `serve` turns away.** "Any request a browser does not mark
+  same-origin" was a notch wider than the check: a request marked `none`, and one carrying no
+  `Sec-Fetch-Site` header at all, are both served — which is what makes a local `curl` work.
+  The README and the manual now name what is refused, a request a browser marks as coming from
+  another origin, and the manual names the header and the carve-out. (#70)
+
+- **The manual's install walkthrough shows the line you answer.** The block ended at
+  `undo tarmac uninstall` and stopped one line short of the prompt that follows it, which is
+  the step the whole section is about. (#71)
 
 ## [0.4.1] — 2026-08-18
 
