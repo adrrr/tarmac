@@ -13,7 +13,7 @@ documented surfaces only, never an internal format.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/replay-dark.gif">
   <img src="docs/media/replay-light.gif" width="1100"
-       alt="The tarmac map with the scrubber dragged across the record: five sessions drawn as dials, each arc a context window, the account's five-hour and seven-day gauges above them. As the handle moves, sessions appear and disappear, the arcs fill and reset, the five-hour window fills and rolls over, and a banner names the minute being replayed until Back to live is pressed.">
+       alt="The tarmac map, live and then replayed. It opens on the live fleet, whose nodes are grouped into a frame per working directory, each labelled with its project. As the scrubber is dragged the frames give way to the flat record — sessions drawn as dials, each arc a context window, background agents as strips of text — with the account's five-hour and seven-day gauges above them. Sessions appear and disappear, the arcs fill and reset, the five-hour window fills and rolls over, and a banner names the minute being replayed until Back to live is pressed and the frames come back.">
 </picture>
 
 [Quickstart](#quickstart) · [The map](#the-map) · [Install](#install) ·
