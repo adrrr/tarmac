@@ -1,6 +1,6 @@
 {
   "name": "@adrrr/tarmac",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Fleet observability for Claude Code — reads documented surfaces only, never an internal format",
   "keywords": [
     "claude",
