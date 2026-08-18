@@ -685,8 +685,15 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   /* The berth: a frame around the nodes read in one directory, and the label is the whole of
      what it claims. Quiet on purpose — a hairline and a caption in the grey the rest of the
      page uses for a heading, because the loud thing on this view is a session's state, and a
-     frame that competed with it would be a box drawn around a fact nobody asked about. */
-  .berth { border:1px solid var(--line); border-radius:12px; padding:.6rem .7rem .7rem; }
+     frame that competed with it would be a box drawn around a fact nobody asked about.
+
+     min-width:0 because a berth is a flex ITEM, and a flex item's automatic minimum size is
+     its min-content width — here the widest strip docked in it, whose prompt is one nowrap
+     line with no length limit. At auto the frame simply grows to fit the prompt: the
+     ellipsis on the strip still resolves, against a column that is never narrower than its own
+     text, so nothing is ever clipped and the page scrolls sideways instead. The flat grid gave
+     the strip a column to be cut to by being a grid; the frame has to say so. */
+  .berth { min-width:0; border:1px solid var(--line); border-radius:12px; padding:.6rem .7rem .7rem; }
   .berth-label { margin:0 0 .5rem; font-size:.72rem; font-weight:600; text-transform:uppercase;
           letter-spacing:.06em; color:var(--dim); }
   /* The cards side by side at their own width, wrapping inside the frame when the directory

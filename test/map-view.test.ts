@@ -531,6 +531,17 @@ test('the prompt is clipped to one line, with the ellipsis that says so', () => 
   assert.equal(paint('prompt', 'white-space', 'idle'), 'nowrap');
 });
 
+// And the ellipsis above needs a width to clip against, which the berths took away. A frame is
+// a flex ITEM of `.map.berths`, so its automatic minimum size is its min-content width — and
+// the min-content of a frame is dictated by the strips docked in it, whose prompt is one
+// `nowrap` line with no length limit. Left at `auto`, a berth is therefore as wide as the
+// longest prompt it holds: the three declarations above still resolve, against a column that
+// is never narrower than its text, so nothing is ever clipped and the page scrolls sideways
+// instead. The flat grid supplied that width by being a grid; the frame has to declare it.
+test('a berth may be narrower than the prompts inside it, or nothing is ever clipped', () => {
+  assert.equal(declared('.berth', 'min-width'), '0');
+});
+
 // Every rule in this sheet is prefixed by the element it belongs to, and these two arrived
 // bare. `.kind` and `.prompt` are words a table cell could want the day it grows one, and a
 // selector with no `.node` in front of it would paint that cell in six-point uppercase.
