@@ -145,7 +145,11 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
     const n = node(r);
     // Two directories nobody could read are not the same directory, so an absent cwd joins no
     // key: it opens a berth of its own every time, which is the one honest frame around it.
-    let berth = r.cwd === null ? undefined : byCwd.get(r.cwd);
+    // Absent in both its shapes — `readSessions` carries a `cwd` of `''` through verbatim, and
+    // one module down that empty string is already read as no directory at all (`project` comes
+    // out null). Keyed on it, every such node shared a frame captioned "no directory": the one
+    // claim this shape refuses, made by the nodes that can least support it.
+    let berth = !r.cwd ? undefined : byCwd.get(r.cwd);
     if (berth === undefined) {
       // The project, the directory itself, then the words — and the middle one is not a page
       // that prints paths. `path.basename` answers the empty string for exactly one directory,
@@ -153,7 +157,7 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
       // above, and no name either. The fallback names it `/`, which is what was read.
       berth = { label: r.project || r.cwd || NO_DIRECTORY, sessions: [], agents: [] };
       berths.push(berth);
-      if (r.cwd !== null) byCwd.set(r.cwd, berth);
+      if (r.cwd) byCwd.set(r.cwd, berth);
     }
     (n.role === 'session' ? berth.sessions : berth.agents).push(n);
   }

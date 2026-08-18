@@ -26,8 +26,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   not the same directory. The berths come in the fleet's own order, each taken at its first
   node, so a session halted on a human still lifts itself — and now its frame — to the front.
   Inside a berth a card is headed by its session name, the project having moved to the label
-  above it. Replays stay flat: the record keeps each reading and never the directory it was
-  read in, and it is not being widened to draw a border. (#58)
+  above it. The grouping is keyed on the directory and never on the label, because two
+  checkouts of `atlas` answer to one word — which is also why replays stay flat: the record
+  keeps a project name and never the directory it was read in, and it is not being widened
+  until a frame could be earned. (#58)
 
 - **A background agent is drawn as a strip on the map, not as a small dial.** It was a card at
   three quarters scale, which meant a context ring on a session that has no terminal to draw a

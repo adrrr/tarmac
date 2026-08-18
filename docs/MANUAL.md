@@ -382,7 +382,7 @@ stays as a faint ring: the movement goes, the fact it carries does not. It is al
 beside the dial, so the claim is in the markup and not only in the drawing.
 
 **Berths: the nodes are grouped by working directory.** A frame per directory, labelled with
-its project in small capitals, the sessions of that directory as cards inside it and the
+its project in small uppercase type, the sessions of that directory as cards inside it and the
 agents docked underneath as strips, across the frame. The working directory is the only field
 every kind of node carries, so it is the only thing the page can group by — and the label is
 the entire claim. **A berth says "read in the same directory". It never says who dispatched
@@ -392,11 +392,13 @@ no line inside a frame means "parent of". The day that relation is published, it
 between nodes already sitting side by side, without a frame moving.
 
 Two directories that end in the same folder name are two berths wearing one label — the label
-is the basename, and the full path is not printed on this page any more than anywhere else. A
-node whose working directory the source did not publish is a berth of its own, labelled
-`no directory`: two directories nobody could read are not the same directory. So is an agent
-whose directory matches no session — the terminal it was dispatched from has been closed since
-— because a frame is a claim about a directory, and that agent's is nobody else's.
+is the basename, and the full path is not printed on this page any more than anywhere else.
+Which is also why the grouping is keyed on the directory and never on the label: two checkouts
+of `atlas` answer to one word, and a frame drawn on that word would claim a directory they do
+not share. A node whose working directory the source did not publish is a berth of its own,
+labelled `no directory`: two directories nobody could read are not the same directory. So is an
+agent whose directory matches no session, because a frame is a claim about a directory, and
+that agent's is nobody else's.
 
 **Background agents.** An agent is a strip: a band of text, left-aligned, half the height of a
 card, docked under the cards of its berth. The state in the same glyph a node uses and again in
@@ -458,10 +460,12 @@ A replay is never allowed to pass for the present:
 - an agent replays as its kind and its numbers. The ring holds no names, so neither does this
   — and a replayed card is headed by its project where a live one, framed by a berth that
   already says the directory, is headed by its session name
-- **no berths.** The ring keeps each reading and never the working directory it was read in,
-  so a replayed fleet has nothing to group by and is drawn flat. The alternative was to widen
-  the record so a frame could be drawn around the past; the record already shows less than the
-  live view does, on purpose, and one more field in every sample of 1440 buys one border
+- **no berths.** The ring keeps a project name and never the working directory it was read in,
+  and a basename is not a directory: a frame drawn on it would group two checkouts of `atlas`
+  into one, claiming the very thing a berth exists to be trusted about. So a replayed fleet is
+  drawn flat. The alternative was to widen the record until a frame could be earned; it already
+  shows less than the live view does, on purpose, and one more field in every one of 1440
+  samples buys one border
 - the poll goes on underneath, so returning to now is instant and a page left on replay does
   not rot
 - the banner carries `role="status"` and the minute travels with the handle as its

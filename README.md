@@ -66,7 +66,7 @@ sends no such mark — curl, a script — is left alone. The listening rules:
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/map-dark.png">
   <img src="docs/media/map-light.png" width="1100"
-       alt="The tarmac map, live. Four framed groups, one per working directory and labelled with its project: beacon, holding a session halted on a permission prompt; harbor, holding a session busy with its context arc at 90% and a background agent docked under it as a strip named after its prompt; quay, reporting a status tarmac does not know; and atlas, idle at 36%. A frame says only that its nodes were read in the same directory — nothing inside one claims that any node dispatched another. The account's five-hour and seven-day gauges sit above them, and one warning above the fleet names the unrecognised status rather than filing it as idle.">
+       alt="The tarmac map, live. Four framed groups, one per working directory and labelled with its project: beacon, holding a session halted on a permission prompt; harbor, holding a session busy with its context arc at 90% and a background agent docked under the cards of that frame as a strip named after its prompt; quay, reporting a status tarmac does not know; and atlas, idle at 36%. A frame says only that its nodes were read in the same directory — nothing inside one claims that any node dispatched another. The account's five-hour and seven-day gauges sit above them, and one warning above the fleet names the unrecognised status rather than filing it as idle.">
 </picture>
 
 The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
@@ -85,8 +85,9 @@ Above the fleet are the account's five-hour and seven-day
 [gauges](docs/MANUAL.md#the-accounts-two-windows); under it a **scrubber over the day this
 serve has seen** — drag it and the nodes render
 the fleet as it was at that minute, press play and the day walks past. Replayed, they are
-drawn flat and unframed: the record keeps each reading and never the directory it was read in,
-so there is nothing to group a past fleet by, and inventing one is not on the table.
+drawn flat and unframed: the record keeps a project name and never the directory it was read
+in, and a basename is not a directory — two checkouts of `atlas` answer to the same word, so a
+frame drawn on it would claim a shared directory nobody can check.
 
 The rules the table follows, the map follows: a reading past the freshness threshold is drawn
 thin, amber and dated, a percentage nobody measured is an empty dotted dial rather than a ring

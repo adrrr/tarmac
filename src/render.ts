@@ -675,9 +675,10 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      under the cards of its berth, printing as text whatever its snapshot did publish.
 
      Two layouts, each named, because the two surfaces know different things. The live map
-     groups by working directory (the berths below); the replay behind the scrubber has none
-     to group by — the ring keeps a reading and never the directory it was read in — so it
-     stays the flat grid this view was before, which is the honest drawing of what it holds. */
+     groups by working directory (the berths below); the replay behind the scrubber keeps a
+     project name and never the directory it was read in, and a basename is not a directory —
+     a frame drawn on it would group two checkouts of one repository into one. So it stays the
+     flat grid this view was before, which is the honest drawing of what it holds. */
   .map { gap:.9rem; }
   .map.berths { display:flex; flex-wrap:wrap; align-items:flex-start; }
   .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
@@ -725,6 +726,12 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node[data-role="agent"][data-state="waiting"] { border-left-color:var(--wait); }
   .node[data-role="agent"][data-state="unknown"] { border-left-color:var(--warn); }
   .node[data-role="agent"] .who { margin-top:0; width:100%; }
+  /* A strip's project, which since the berths is the REPLAY's business alone: a live strip
+     prints none — the frame around it says the directory — and behind the scrubber there is no
+     frame, and the project is the only name the ring kept. The rule stayed when the markup
+     that used to need it went, or that name would sit at the body's own size, a size and a
+     half larger than the line it is on, on the one surface this suite renders no markup for. */
+  .node[data-role="agent"] .project { font-weight:600; font-size:.8rem; }
   /* What the node calls itself, at the end of its line: an agent's line already reads as a
      sentence, and the kind is the word that says it is not a terminal. This one and the prompt
      below it are scoped to a node like every other rule here: both are words a table cell could
@@ -1492,9 +1499,16 @@ export function renderMap(fleet: Fleet): string {
  * for its name, and the heading says the same word for one navigating by headings. Each half
  * is drawn only if it has something in it, so an orphan agent's berth is a frame with a strip
  * in it rather than a frame with an empty row above one.
+ *
+ * `role="group"` explicitly, which is what a named `<section>` would NOT be: that is a region,
+ * a landmark, and one per working directory turns a busy machine into a page of landmarks all
+ * named after a basename — several of them possibly the same basename, since two checkouts of
+ * `atlas` are two berths with one label. The name is what this frame is worth to a screen
+ * reader; a place in the landmark index is not, and `group` is the idiom the page already uses
+ * for every other named box on it.
  */
 function renderBerth({ label, sessions, agents }: Berth): string {
-  return `<section class="berth" aria-label="${esc(label)}"><h2 class="berth-label">${esc(label)}</h2>${
+  return `<section class="berth" role="group" aria-label="${esc(label)}"><h2 class="berth-label">${esc(label)}</h2>${
     sessions.length === 0 ? '' : `<div class="berth-cards">${sessions.map(renderNode).join('')}</div>`
   }${agents.length === 0 ? '' : `<div class="berth-strips">${agents.map(renderNode).join('')}</div>`}</section>`;
 }

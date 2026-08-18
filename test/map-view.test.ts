@@ -242,10 +242,28 @@ test('two directories are two frames, in the order the fleet handed them over', 
   assert.ok(html.indexOf('sweep-01') < html.indexOf('orion-11'), 'the agent stays in the frame it belongs to');
 });
 
-// The frame is a landmark, named by the one thing it asserts. Nothing else about the nodes
-// changes: they keep the attributes and the words they carry outside a berth.
-test('a frame is named for a reader who is handed no border at all', () => {
-  assert.match(one({ project: 'apollo' }), /<section class="berth" aria-label="apollo">/);
+// The frame is named for a reader who is handed no border at all — and named as a GROUP, the
+// idiom this page already uses three times over. A `<section>` with an accessible name is a
+// region, which is a landmark: one per working directory turns a busy machine into a page of
+// landmarks, all of them called after a basename, several of them possibly called the same
+// thing. The name is what a frame is worth to a screen reader; a place in the landmark index
+// is not.
+test('a frame is named as a group, not as one landmark per directory', () => {
+  const html = one({ project: 'apollo' });
+  assert.match(html, /<section class="berth" role="group" aria-label="apollo">/);
+});
+
+// And the label is a heading, which is the other way through a page: a reader who navigates by
+// headings meets the directories in order. Dropping to a `<div>` looks identical and takes
+// that away.
+test('the label of a frame is a heading, not a line of styled text', () => {
+  assert.match(one({ project: 'apollo' }), /<h2 class="berth-label">apollo<\/h2>/);
+});
+
+// The frame is a frame. Nothing else on this view draws a box around a claim, and a berth
+// whose border went missing is a label floating over a group nobody can see the edges of.
+test('a berth is bordered — the frame is the claim', () => {
+  assert.match(declared('.berth', 'border'), /1px solid/);
 });
 
 // DOM order is the visual order, so a reader going through the markup meets the cards and the
@@ -260,6 +278,9 @@ test('the cards of a berth come before its strips, in the markup as on the scree
   assert.ok(html.indexOf('harbor-3f') < html.indexOf('sweep-01'), 'the card first, whatever order they arrived in');
   assert.doesNotMatch(mapCss(), /(?:^|;|\{)\s*order\s*:/, 'and nothing in the sheet moves one past the other');
   assert.doesNotMatch(mapCss(), /flex-direction:\s*\w+-reverse/);
+  // `wrap-reverse` reverses the ROWS: the berths keep their order along each line and the
+  // lines stack upwards, so the fleet's first frame ends up at the bottom of the page.
+  assert.doesNotMatch(mapCss(), /flex-wrap:\s*\w+-reverse/);
 });
 
 // A frame's name is an attribute, and this page answers an absent value with an ELEMENT — a
@@ -490,6 +511,16 @@ test('a strip is a left-aligned band, in a grid of centred cards', () => {
   assert.equal(declared('.node', 'text-align'), 'center');
 });
 
+// The rule that now belongs to the OTHER surface. A live strip prints no project — the berth
+// around it says the directory — so the only `.project` left inside an agent is the one the
+// browser copy draws behind the scrubber, where there is no berth and the project is all the
+// ring kept. Deleting the rule with the markup that used to need it left that name a size and
+// a half too big, in the one place this suite renders no HTML of its own.
+test("a replayed strip keeps the project's own size, now that no live strip prints one", () => {
+  assert.equal(declared('.node[data-role="agent"] .project', 'font-size'), '.8rem');
+  assert.doesNotMatch(renderMap(fleet([row({ kind: 'background', cwd: '/w' })])), /class="project"/);
+});
+
 // The one line on a strip with no length limit is the prompt — a sentence somebody typed, and
 // the manual promises it is "ellipsised on a node to fit its column, which is a width, not a
 // redaction". Unclipped, a 400-character prompt is a node several lines tall in a row of
@@ -615,6 +646,16 @@ test('the live map is a row of frames, and the replay is still the flat grid', (
   assert.equal(declared('.map.berths', 'display'), 'flex');
   assert.equal(declared('.map.flat', 'display'), 'grid');
   assert.match(declared('.map.flat', 'grid-template-columns'), /auto-fill/);
+});
+
+// Both rules key on a second class, so the whole split rides on two attribute values. The
+// live one is asserted wherever a berth is; this is the other, and without it the container
+// the replay renders into can lose the word `flat` and take the grid with it — every node
+// stacked full width, in a change that renders, passes and looks deliberate.
+test('the two containers wear the class their layout is written for', () => {
+  const html = renderPage(fleet([row()]), 'map');
+  assert.match(html, /<div class="map flat" id="replay-map">/);
+  assert.match(html, /<div class="map berths">/);
 });
 
 // The strips are docked under the cards of their own berth, full width of it, one under the

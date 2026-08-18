@@ -314,6 +314,41 @@ test('an unknown working directory is never a directory two nodes share', () => 
   assert.deepEqual(names(map), ['a', 'nowhere-01']);
 });
 
+// The other shape of the same absence, and the one a null check walks straight past.
+// `readSessions` carries a `cwd` of `''` through verbatim, and `buildFleet` reads it as no
+// directory at all — `project` comes out null. Keyed on the string, every such node landed in
+// one berth: a frame captioned "no directory" asserting a directory they share.
+test('an empty working directory is an absence too, not a directory two nodes share', () => {
+  const map = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: '', project: null, name: 'a' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '', project: null, name: 'b' }),
+    ]),
+  );
+  assert.equal(map.berths.length, 2, 'one frame each, and neither claims the other');
+  assert.deepEqual(labels(map), ['no directory', 'no directory']);
+});
+
+// The invariant the label cannot carry, and the reason the grouping is keyed on the DIRECTORY
+// and never on the project: the project is the basename, so two checkouts of one repository
+// answer to the same word. Grouped by that word, three nodes read in two directories came out
+// under one frame — which is the single claim this shape exists to refuse, made in the one
+// case a reader cannot see through, because the page never prints the path.
+test('two checkouts of one project are two berths, however alike their labels', () => {
+  const map = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/Users/jane/work/atlas', project: 'atlas', name: 'atlas-7a' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/Users/jane/fork/atlas', project: 'atlas', name: 'atlas-9k' }),
+      row({ sessionId: 'c', kind: 'background', cwd: '/Users/jane/fork/atlas', project: 'atlas', name: 'sweep-01' }),
+    ]),
+  );
+  assert.equal(map.berths.length, 2, 'one frame per directory, not one per name');
+  assert.deepEqual(labels(map), ['atlas', 'atlas']);
+  assert.deepEqual(map.berths[0].sessions.map((n) => n.row.name), ['atlas-7a']);
+  assert.deepEqual(map.berths[1].sessions.map((n) => n.row.name), ['atlas-9k']);
+  assert.deepEqual(map.berths[1].agents.map((n) => n.row.name), ['sweep-01'], 'the agent is in its own checkout');
+});
+
 // And it says which kind of nothing it is, in words — the vocabulary the dials use for a
 // reading they do not have. An empty frame label is a frame that looks like a bug.
 test('a berth whose directory nobody could read says so', () => {
