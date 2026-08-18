@@ -283,6 +283,17 @@ test('the cards of a berth come before its strips, in the markup as on the scree
   assert.doesNotMatch(mapCss(), /flex-wrap:\s*\w+-reverse/);
 });
 
+// The same red line, drawn where the markup cannot refuse it: geometry. Indenting the strips
+// under the cards and running a rail down their left edge is the diagram of a tree — "these
+// strips hang off those cards" — which is the one thing a berth is not allowed to say, and the
+// source publishes nothing that could make it true. It reads as a tidy-up, it passes every
+// other assertion here, and it says in a border what the whole feature says it will not say.
+test('the strips are not indented under the cards — a rail there would draw a parentage', () => {
+  for (const prop of ['margin-left', 'border-left', 'padding-left']) {
+    assert.equal(declared('.berth-strips', prop), '', `.berth-strips carries ${prop}`);
+  }
+});
+
 // A frame's name is an attribute, and this page answers an absent value with an ELEMENT — a
 // dash in a span. A label that ever came out empty put that span inside `aria-label="…"`,
 // where its own quotes end the attribute: markup in a slot that takes a string. The label the
