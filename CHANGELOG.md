@@ -10,6 +10,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.1] — 2026-08-18
+
 ### Added
 
 - **The statusline payload of Claude Code 2.1.232 is captured**, so the shape-check footnote
