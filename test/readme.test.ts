@@ -79,6 +79,63 @@ test('the media the repo page loads stays small enough to be worth loading', () 
   assert.ok(total <= 2_500_000, `${MEDIA} is ${(total / 1e6).toFixed(2)} MB in total`);
 });
 
+/**
+ * Every frame delay a GIF declares, in centiseconds, read off the Graphic Control Extension
+ * that precedes each image. Enough of the format to walk the block chain and no more: the
+ * header, an optional global colour table, then extensions and image descriptors until the
+ * trailer. The pixels are never decoded — the delay is the only thing being read.
+ */
+function delays(file: string): number[] {
+  const b = fs.readFileSync(file);
+  // Bounded, because past the end `b[p]` is `undefined`, `undefined !== 0` is true and `p`
+  // becomes `NaN` — which is not an infinite walk off the end of the file but an infinite loop
+  // on one index. A GIF two bytes short would hang the run to the test timeout instead of
+  // failing with a message, and a timeout says nothing about which file was wrong.
+  const endOfSubBlocks = (p: number): number => {
+    while (p < b.length && b[p] !== 0) p += b[p] + 1;
+    if (p >= b.length) throw new Error(`${file}: sub-blocks run past the end of the file`);
+    return p + 1;
+  };
+  let i = 13 + ((b[10] & 0x80) === 0 ? 0 : 3 * 2 ** ((b[10] & 7) + 1));
+  const found: number[] = [];
+  while (i < b.length && b[i] !== 0x3b) {
+    if (b[i] === 0x21) {
+      if (b[i + 1] === 0xf9) found.push(b.readUInt16LE(i + 4));
+      i = endOfSubBlocks(i + 2);
+    } else if (b[i] === 0x2c) {
+      i += 10 + ((b[i + 9] & 0x80) === 0 ? 0 : 3 * 2 ** ((b[i + 9] & 7) + 1));
+      i = endOfSubBlocks(i + 1);
+    } else throw new Error(`${file}: not a GIF block at byte ${i}`);
+  }
+  return found;
+}
+
+// A frame that declares no real delay does not play slowly, it plays at a speed nobody chose:
+// browsers clamp anything under 2cs to a floor of their own, so one file runs at three cadences
+// in three browsers and at none of the one the capture was composed at. It is invisible at
+// review — the frames are right and the diff reads as "recaptured" — and it was invisible here
+// too, in a file that weighed the GIF and never timed it.
+//
+// The threshold is the clamp, not zero. Zero is only how the defect showed up the once; a
+// capture at 100fps emits `1` in every frame and is the same file, played at the same
+// browser-decided speed.
+const CLAMP_CS = 2;
+
+test('every frame of a GIF declares a delay a browser will honour', () => {
+  const gifs = captures().filter((name) => name.endsWith('.gif'));
+  assert.ok(gifs.length > 0, 'no GIF under docs/media — this test has stopped watching anything');
+  for (const name of gifs) {
+    const found = delays(path.join(repo, MEDIA, name));
+    assert.ok(found.length > 0, `${MEDIA}/${name} carries no frame delay at all`);
+    const clamped = found.filter((cs) => cs < CLAMP_CS).length;
+    assert.equal(
+      clamped,
+      0,
+      `${MEDIA}/${name}: ${clamped} of ${found.length} frames declare under ${CLAMP_CS}cs, which every browser replaces with a floor of its own`,
+    );
+  }
+});
+
 // Captures are replaced, not appended: an image nothing points at is weight in the clone and
 // in every fetch of the repo, and it is the kind of thing a rename leaves behind.
 test('nothing sits in docs/media that the README does not show', () => {

@@ -40,9 +40,47 @@ export interface MapNode {
   pulse: boolean;
 }
 
-export interface FleetMap {
-  nodes: MapNode[];
+/**
+ * The nodes read in one working directory, and the exact extent of what that grouping claims.
+ *
+ * `claude agents --json` prints interactive sessions and background ones in one array and
+ * publishes NOTHING that ties an agent to whoever dispatched it. The working directory is the
+ * only field every kind of node carries, so it is the only thing a frame is allowed to be
+ * drawn around — and the label says the directory, never a parentage. A berth holding two
+ * sessions and two agents makes no claim about which of the four asked for which: no order,
+ * no position and no line inside it means "dispatched by".
+ *
+ * The day the source does publish that relation, it is drawn INSIDE a berth — between nodes
+ * that are already side by side — without moving a frame or redrawing the page.
+ */
+export interface Berth {
+  /**
+   * The project, which is the directory's basename — so every node of one berth agrees on it
+   * and the first one can be asked. Not unique: two checkouts of `atlas` are two berths with
+   * one label, which is the truth about a machine that has two of them. The full path is not
+   * printed here any more than anywhere else on this page.
+   *
+   * Never empty, and that is load-bearing rather than tidy: the renderer answers an absent
+   * value with a dash ELEMENT, and a frame is named through an `aria-label`, where a span
+   * carrying quotes of its own is markup in a slot that takes a string.
+   */
+  label: string;
+  /** Drawn as cards, side by side. */
+  sessions: MapNode[];
+  /** Drawn as strips, docked under the cards of the same berth. */
+  agents: MapNode[];
 }
+
+export interface FleetMap {
+  berths: Berth[];
+}
+
+/**
+ * What a berth is labelled when the source published no working directory for it. In the
+ * vocabulary the dials already use for a reading they do not have (`not chained`, `no turn
+ * yet`): a kind of nothing, named, rather than an empty frame that reads as a bug.
+ */
+const NO_DIRECTORY = 'no directory';
 
 /**
  * How recently a snapshot must have landed for its node to pulse. Two of the page's poll
@@ -55,18 +93,20 @@ export interface FleetMap {
 export const PULSE_WITHIN_MS = 10_000;
 
 /**
- * Where an agent is placed, and why it is a placement rather than a link.
+ * Where a node goes, and why that is a grouping rather than a link.
  *
  * `claude agents --json` prints interactive and background sessions in one array, and
  * publishes nothing that ties an agent to whoever dispatched it. The working directory is
- * the only field both carry, so it is what an agent is placed BY — it lands next to the
- * session sharing its directory, and nothing is ever nested inside anything. Nesting would
- * assert a parentage the source does not contain, and it would let this page show a smaller
- * fleet than the table beside it.
+ * the only field both carry, so it is the only thing nodes are grouped BY — they share a
+ * berth, and nothing is ever nested inside anything. Nesting would assert a parentage the
+ * source does not contain, and it would let this page show a smaller fleet than the table
+ * beside it.
  *
- * The agents are gathered separately because the fleet sorts busy sessions first, so one can
- * arrive before the session it belongs beside. An agent whose directory matches no session
- * keeps a node of its own, at the end.
+ * One pass, in the fleet's own order, and each berth takes its place at its FIRST node: the
+ * rank that lifts a session halted on a human above everything else lifts the frame around it
+ * too, whether the node that earned it is a session or an agent. An agent whose directory
+ * matches no session is a berth of its own, ordered like any other — being last was the flat
+ * grid's arrangement of it, never the data's.
  */
 export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = {}): FleetMap {
   // Whether this fleet still speaks the kind we know. If NOTHING calls itself `interactive`,
@@ -99,26 +139,29 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
     };
   };
 
-  const agents = rows.filter((r) => roleOf(r) === 'agent');
-  const placed = new Set<FleetRow>();
-  const seen = new Set<string>();
-  const nodes: MapNode[] = [];
+  const berths: Berth[] = [];
+  const byCwd = new Map<string, Berth>();
   for (const r of rows) {
-    if (roleOf(r) !== 'session') continue;
-    nodes.push(node(r));
-    // Only the first session of a directory collects them, or two sessions in one checkout
-    // would each grow a copy of the same agents.
-    if (r.cwd === null || seen.has(r.cwd)) continue;
-    seen.add(r.cwd);
-    for (const a of agents) {
-      // Two directories nobody could read are not the same directory.
-      if (a.cwd === null || a.cwd !== r.cwd) continue;
-      nodes.push(node(a));
-      placed.add(a);
+    const n = node(r);
+    // Two directories nobody could read are not the same directory, so an absent cwd joins no
+    // key: it opens a berth of its own every time, which is the one honest frame around it.
+    // Absent in both its shapes — `readSessions` carries a `cwd` of `''` through verbatim, and
+    // one module down that empty string is already read as no directory at all (`project` comes
+    // out null). Keyed on it, every such node shared a frame captioned "no directory": the one
+    // claim this shape refuses, made by the nodes that can least support it.
+    let berth = !r.cwd ? undefined : byCwd.get(r.cwd);
+    if (berth === undefined) {
+      // The project, the directory itself, then the words — and the middle one is not a page
+      // that prints paths. `path.basename` answers the empty string for exactly one directory,
+      // the root, so a fleet with a session in `/` had a project of `''`: not the absent cwd
+      // above, and no name either. The fallback names it `/`, which is what was read.
+      berth = { label: r.project || r.cwd || NO_DIRECTORY, sessions: [], agents: [] };
+      berths.push(berth);
+      if (r.cwd) byCwd.set(r.cwd, berth);
     }
+    (n.role === 'session' ? berth.sessions : berth.agents).push(n);
   }
-  for (const a of agents) if (!placed.has(a)) nodes.push(node(a));
-  return { nodes };
+  return { berths };
 }
 
 /**
