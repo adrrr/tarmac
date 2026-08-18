@@ -66,17 +66,27 @@ sends no such mark — curl, a script — is left alone. The listening rules:
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/map-dark.png">
   <img src="docs/media/map-light.png" width="1100"
-       alt="The tarmac map, live. Five nodes: beacon halted on a permission prompt, harbor busy with its context arc at 90%, a background agent named after its prompt beside it, quay reporting a status tarmac does not know, and atlas idle at 36%. The account's five-hour and seven-day gauges sit above them, and one warning above the fleet names the unrecognised status rather than filing it as idle.">
+       alt="The tarmac map, live. Four framed groups, one per working directory and labelled with its project: beacon, holding a session halted on a permission prompt; harbor, holding a session busy with its context arc at 90% and a background agent docked under it as a strip named after its prompt; quay, reporting a status tarmac does not know; and atlas, idle at 36%. A frame says only that its nodes were read in the same directory — nothing inside one claims that any node dispatched another. The account's five-hour and seven-day gauges sit above them, and one warning above the fleet names the unrecognised status rather than filing it as idle.">
 </picture>
 
 The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
 its context, the shape by the name its state. A background agent has no terminal behind it to
 draw a frame with, so it is a strip of text rather than a dial that could never fill. It is
-the same reading in the same fragment, so the two views can never disagree. Above the fleet
-are the account's five-hour and seven-day
+the same reading in the same fragment, so the two views can never disagree.
+
+The nodes are grouped by **working directory**: a frame per directory, labelled with its
+project, the sessions inside it as cards and the agents docked underneath as strips. That is
+the whole of what the frame claims — these were read in the same directory. It is not a
+parentage: `claude agents --json` publishes nothing that ties an agent to whoever dispatched
+it, so no label, no position and no line inside a frame says one node asked for another. An
+agent whose directory matches no session gets a frame of its own rather than somebody else's.
+
+Above the fleet are the account's five-hour and seven-day
 [gauges](docs/MANUAL.md#the-accounts-two-windows); under it a **scrubber over the day this
 serve has seen** — drag it and the nodes render
-the fleet as it was at that minute, press play and the day walks past.
+the fleet as it was at that minute, press play and the day walks past. Replayed, they are
+drawn flat and unframed: the record keeps each reading and never the directory it was read in,
+so there is nothing to group a past fleet by, and inventing one is not on the table.
 
 The rules the table follows, the map follows: a reading past the freshness threshold is drawn
 thin, amber and dated, a percentage nobody measured is an empty dotted dial rather than a ring
