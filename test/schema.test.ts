@@ -96,23 +96,26 @@ const code = (source: string): string => source.replace(/\/\*[\s\S]*?\*\//g, ' '
 const entryKeys = (source: string): Set<string> => new Set([...code(source).matchAll(/\bentry\.(\w+)/g)].map((m) => m[1]!));
 
 /**
- * `const { state } = entry` reads a field while hiding it from the regex above — same
- * behaviour, typecheck green, and the freeze stops watching that key. The `read.size > 0`
- * floor only catches the version of that where EVERY read went the same way, so the shape
- * itself is refused: the reads stay `entry.x`, and this says so at the point it matters.
+ * `const { state } = entry`, `const e = entry`, `entry['state']` — each reads a field
+ * while hiding it from the regex above: same behaviour, typecheck green, and the freeze
+ * stops watching that key. The `read.size > 0` floor only catches the version where
+ * EVERY read went the same way, so every escape from the `entry.x` shape is refused,
+ * and this says so at the point it matters.
  */
-const destructuresEntry = (source: string): boolean => /(?:const|let|var)\s*\{[^}]*\}\s*=\s*entry\b/.test(code(source));
+const escapesEntry = (source: string): boolean => /=\s*entry\b(?!\.)|entry\s*\[/.test(code(source));
 
 // Both readings above are regexes over source, and each has a quiet way of watching nothing.
 test('the reader is read for what it does, not for what it says about itself', () => {
   assert.deepEqual([...entryKeys('const pid = entry.pid; // not read: entry.waitingFor')], ['pid']);
   assert.deepEqual([...entryKeys('/* entry.cwd, in prose */ take(entry.name);')], ['name']);
-  assert.equal(destructuresEntry('const { state } = entry;'), true);
-  assert.equal(destructuresEntry('const state = entry.state;'), false);
+  assert.equal(escapesEntry('const { state } = entry;'), true);
+  assert.equal(escapesEntry('const e = entry;'), true);
+  assert.equal(escapesEntry("entry['state']"), true);
+  assert.equal(escapesEntry('const state = entry.state;'), false);
 });
 
 test('every key the agents reader takes off an entry is carried by some fixture', () => {
-  assert.equal(destructuresEntry(SESSIONS_TS), false, 'a destructured entry is a read this test cannot see — keep them as `entry.x`');
+  assert.equal(escapesEntry(SESSIONS_TS), false, 'a read this test cannot see — keep them as `entry.x`');
   const read = entryKeys(SESSIONS_TS);
   assert.ok(read.size > 0, 'no `entry.` reads found — this test has stopped watching anything');
 
