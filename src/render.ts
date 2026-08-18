@@ -672,10 +672,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      be believed, and the halo — the only thing on this page that moves — says a frame
      landed moments ago. None of the three exists for a background agent, which has no
      terminal to draw a statusline frame with: it is a strip instead, further down. */
-  /* Nodes of two heights in one grid: a row of cards may not stretch the strips beside it to
-     the height of a dial they do not have. */
-  .map { display:grid; gap:.9rem; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));
-         align-items:start; }
+  .map { display:grid; gap:.9rem; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
   .node { border:1px solid var(--line); border-radius:10px; padding:.8rem .85rem .7rem;
           display:flex; flex-direction:column; align-items:center; text-align:center; }
   .node[data-state="busy"] { border-color:color-mix(in srgb, var(--busy) 45%, var(--line)); }
@@ -685,7 +682,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      that can never fill, captioned with the words of a fault someone could go and repair. The
      honest form is the one the table already speaks in — text on a line, left-aligned, its
      state in the same glyph and in a three-pixel accent down the left edge. */
-  .node[data-role="agent"] { align-items:stretch; text-align:left;
+  /* align-self, never the grid's own align-items: a strip is half the height of the card
+     beside it and must not be stretched to match, but the CARDS in a row still share one
+     height — telling the grid to stop stretching would have changed every session on the page
+     to make room for this one. */
+  .node[data-role="agent"] { align-self:start; align-items:stretch; text-align:left;
           padding:.5rem .7rem .55rem; border-radius:8px;
           background:color-mix(in srgb, var(--line) 18%, transparent);
           /* The box goes back to the neutral line the tinted rule above gave it: the accent is

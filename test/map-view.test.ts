@@ -380,6 +380,16 @@ test("a strip's left accent is the node's own hue, the one its glyph already car
   }
 });
 
+// A strip is half the height of the card beside it and may not be stretched to match — but
+// that is the strip's business alone. The grid still stretches the CARDS in a row to one
+// height, which is what keeps a row of dials from stepping up and down; a strip that opted out
+// of it by telling the grid to stop stretching anything would have changed every session on
+// the page to make room for itself.
+test('a strip sits at the top of its row, and the cards beside it keep their shared height', () => {
+  assert.equal(paint('node', 'align-self', 'idle'), 'start');
+  assert.equal(paint('map', 'align-items', 'idle'), '', 'the grid itself is left alone');
+});
+
 /** One `@media` rule's declarations, braces balanced — which the flat scan above cannot do. */
 function atMedia(query: string): string {
   const css = /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet([row()]), 'map'))![1];
