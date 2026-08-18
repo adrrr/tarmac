@@ -189,6 +189,163 @@ test('an agent names its own directory, so its placement can be checked', () => 
   assert.doesNotMatch(html, /&#8627;/, 'and points at nobody');
 });
 
+// ── the strip ────────────────────────────────────────────────────────────────────────────
+//
+// What an agent is drawn as. Anchored by a terminal, so the fleet-level guard cannot decide
+// these background entries are a renamed kind, and with no snapshot behind it — the common
+// agent, and the one the shape was designed for. The strip's rule about the rest is that it
+// prints what that session's snapshot published and nothing where nothing was published, so
+// the fleet's two cases are both here: this one, and `measured` below it.
+
+const strip = (a: Partial<FleetRow> = {}): string => {
+  const html = renderMap(
+    fleet([
+      row({ sessionId: 'i', kind: 'interactive', cwd: '/w', project: 'harbor', name: 'harbor-3f' }),
+      row({
+        sessionId: 'b',
+        kind: 'background',
+        cwd: '/w',
+        project: 'harbor',
+        name: 'sweep the flaky specs',
+        pid: null,
+        ctxState: 'absent',
+        ctxPct: null,
+        ctxTokens: null,
+        snapshotAgeMs: null,
+        model: null,
+        effort: null,
+        costUsd: null,
+        ...a,
+      }),
+    ]),
+  );
+  return html.slice(html.indexOf('data-role="agent"'));
+};
+
+test('an agent is a strip: its project, what it is, and the prompt it was given', () => {
+  const html = strip();
+  assert.doesNotMatch(html, /class="dial"/, 'no dial');
+  assert.doesNotMatch(html, /class="track/, 'and nothing left of one');
+  assert.match(html, /class="project">harbor</);
+  assert.match(html, /class="kind">background</);
+  assert.match(html, /class="prompt">sweep the flaky specs</);
+});
+
+// The correction this whole shape is for. A dial captioned "not chained" is the vocabulary of
+// a fault someone could go and repair — `tarmac install` and the session is covered — said
+// about a session that has no terminal for a statusline to be chained into. The absence of a
+// SURFACE is not a missing measurement, and a strip says nothing rather than saying that.
+test('a strip claims no context at all, rather than reporting one as missing', () => {
+  const html = strip();
+  assert.doesNotMatch(html, /not chained/);
+  assert.doesNotMatch(html, /no reading/);
+  assert.doesNotMatch(html, /&mdash;|—/, 'not even the dash that says a value was expected');
+});
+
+/**
+ * The other case, and the one no fixture held: an agent the join DID find a payload for.
+ * Every strip above has a null snapshot behind it, which is why nothing on this page ever
+ * showed what a published one looks like — and the fleet builds all four fields off that one
+ * object, so a reading arrives with the model and the effort or the file does not exist.
+ */
+const measured = (a: Partial<FleetRow> = {}): string =>
+  strip({ ctxState: 'ok', ctxPct: 61, snapshotAgeMs: 1200, stale: false, model: 'Fable 5', effort: 'max', ...a });
+
+// The publication rule, in the direction that says what IS printed. A snapshot is one file:
+// dropping the model and the effort out of a line that prints the percentage from beside them
+// is the page choosing which published facts to pass on.
+test('a strip prints what the snapshot published: the reading, the model and the effort', () => {
+  const html = measured();
+  assert.match(html, /class="sub">ctx 61% · Fable 5 · max</);
+  assert.doesNotMatch(html, /class="dial"/, 'still inline, rather than growing the dial back');
+});
+
+// A card has a ring around its number and the table a column header over it. A strip has
+// neither, so a bare `61%` under a line of prompt is a progress bar to anyone reading quickly
+// — the one thing a context reading is not.
+test('the number on a strip says which quantity it is', () => {
+  assert.doesNotMatch(measured(), /class="sub">61%/);
+});
+
+// The same rule in the direction that says what is NOT printed: no line at all, rather than an
+// empty one or the dash that says a value was expected.
+test('an agent with no snapshot behind it prints none of the three', () => {
+  assert.doesNotMatch(strip(), /class="sub"/);
+});
+
+// And it is per FIELD, not per file. `fresh` and `drift` are snapshots as current as any with
+// no percentage in them, and the model in that same file is still a fact the source published.
+test('a field the snapshot left empty is the only one dropped', () => {
+  assert.match(measured({ ctxPct: null, ctxState: 'fresh' }), /class="sub">Fable 5 · max</);
+  assert.match(measured({ effort: null }), /class="sub">ctx 61% · Fable 5</);
+});
+
+// And it keeps the one thing that makes a number honest: a reading past the threshold may not
+// be read as current on a strip any more than in a ring.
+test('a reading printed on a strip carries its age when it is one nobody should trust', () => {
+  const html = measured({ snapshotAgeMs: 3 * 3600_000, stale: true });
+  assert.match(html, /data-reading="stale"/);
+  assert.match(html, /! 3h ago/);
+  assert.doesNotMatch(html, /class="dial"/);
+});
+
+// The state a reader can act on, on the node the old shape was worst at: a background agent
+// halted on a human answered with a dial full of nothing and a word in six-point type.
+test('a background agent halted on a human is drawn waiting, and says what it waits for', () => {
+  const html = strip({ busy: null, status: 'waiting', waitingFor: 'permission prompt' });
+  assert.match(html, /data-state="waiting"/);
+  assert.match(html, /<span class="sr">waiting<\/span>/);
+  assert.match(html, /class="sub waiting-for">permission prompt</);
+  assert.doesNotMatch(html, /class="dial"/);
+});
+
+// Same two channels as a card — the glyph for a reader who cannot separate two hues, the word
+// for one who is handed no glyph at all. A shape that changed with the layout would be a state
+// that reads differently depending on which node it landed on.
+test('a strip names its state in words and in a glyph, exactly as a card does', () => {
+  assert.match(strip({ busy: true }), /<span class="shape" aria-hidden="true">●<\/span><span class="sr">busy<\/span>/);
+  assert.match(strip({ busy: false }), /<span class="sr">idle<\/span>/);
+  assert.match(strip({ busy: null, status: 'compacting' }), /data-state="unknown"/);
+  assert.match(strip({ busy: null, status: 'compacting' }), /<span class="sr">compacting<\/span>/);
+  assert.doesNotMatch(strip({ busy: true }), /class="dial"/);
+});
+
+// Nothing is lost by this: the halo lives inside the dial, and the reading it announces comes
+// off a statusline frame no background session can produce. A strip that pulsed would be
+// announcing the arrival of the one thing this shape exists to stop claiming.
+test('a strip never pulses', () => {
+  const html = strip({ ctxPct: 40, ctxState: 'ok', snapshotAgeMs: 1000, stale: false });
+  assert.doesNotMatch(html, /class="halo"/);
+  assert.doesNotMatch(html, /just landed/);
+});
+
+// The escaping test above reaches the card, never this branch: a fleet of one background entry
+// is not anchored, so it renders as a session. The strip draws four strings off another
+// machine of its own — and the prompt is the one a person typed, which is the least trusted
+// string on the page.
+test('every value the machine supplies reaches a strip escaped', () => {
+  const nasty = '<script>alert(1)</script>';
+  for (const field of ['project', 'name', 'kind'] as const) {
+    assert.doesNotMatch(strip({ [field]: nasty }), /<script>/, field);
+  }
+  assert.doesNotMatch(strip({ busy: null, status: 'waiting', waitingFor: nasty }), /<script>/, 'waitingFor');
+});
+
+// An orphan is still a node. Its directory matches no session on this machine — the one it was
+// dispatched from has since been closed — and the map's promise is that it counts the same.
+test('an agent whose directory matches no session is a strip like any other', () => {
+  const html = renderMap(
+    fleet([
+      row({ sessionId: 'i', kind: 'interactive', cwd: '/w', project: 'harbor', name: 'harbor-3f' }),
+      row({ sessionId: 'o', kind: 'background', cwd: '/gone', project: 'quarry', name: 'rebuild the docs index' }),
+    ]),
+  );
+  const orphan = html.slice(html.indexOf('data-role="agent"'));
+  assert.match(orphan, /class="project">quarry</);
+  assert.match(orphan, /class="prompt">rebuild the docs index</);
+  assert.doesNotMatch(orphan, /class="dial"/);
+});
+
 // The halo lives inside an `aria-hidden` <svg>, so the one thing on this page that moves was
 // also the one fact on it a reader who is not looking got nothing of. Said, not shown — the
 // same rule as the shape beside it, which already carries its word.
@@ -201,14 +358,66 @@ test('the halo says in words that a reading just landed', () => {
   assert.doesNotMatch(one({ ctxPct: null, ctxState: 'drift', snapshotAgeMs: 1200, stale: false }), /just landed/);
 });
 
+/**
+ * The stylesheet the map ships with, comments stripped — a selector captured as "everything
+ * since the last brace" is otherwise the prose above the rule as well, and every rule down
+ * there is explained by a paragraph naming it.
+ */
+const mapCss = (): string =>
+  /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet([row()]), 'map'))![1].replace(/\/\*[\s\S]*?\*\//g, '');
+
+/**
+ * One EXACT selector's value for a property. `paint` keys on a class and keeps whichever rule
+ * set the property last, which cannot tell `.node` from `.node[data-role="agent"]` — and those
+ * two disagree about alignment on purpose, which is the whole shape of a strip.
+ */
+const declared = (selector: string, prop: string): string => {
+  for (const [, raw, declarations] of mapCss().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    // A rule that follows a closing brace carries it into the capture — the `}` of an @media
+    // block, or of the rule above. The selector is what comes after the last one.
+    if (raw.slice(raw.lastIndexOf('}') + 1).trim() !== selector) continue;
+    const value = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`).exec(declarations)?.[1].trim();
+    if (value !== undefined) return value;
+  }
+  return '';
+};
+
+// The shape itself, which had no test at all: a strip is a line of text down the left edge of
+// its cell, inside a grid whose every other node is centred on a dial. Both declarations are
+// on the agent's own rule and both are reversed by the `.node` rule above it, so neither can
+// be checked by the class-wide scan.
+test('a strip is a left-aligned band, in a grid of centred cards', () => {
+  assert.equal(declared('.node[data-role="agent"]', 'align-items'), 'stretch');
+  assert.equal(declared('.node[data-role="agent"]', 'text-align'), 'left');
+  assert.equal(declared('.node', 'align-items'), 'center', 'and a card is still centred on its dial');
+  assert.equal(declared('.node', 'text-align'), 'center');
+});
+
+// The one line on a strip with no length limit is the prompt — a sentence somebody typed, and
+// the manual promises it is "ellipsised on a node to fit its column, which is a width, not a
+// redaction". Unclipped, a 400-character prompt is a node several lines tall in a row of
+// one-line strips, and it fails quietly: the page still renders, just wrong.
+test('the prompt is clipped to one line, with the ellipsis that says so', () => {
+  assert.equal(paint('prompt', 'text-overflow', 'idle'), 'ellipsis');
+  assert.equal(paint('prompt', 'overflow', 'idle'), 'hidden');
+  assert.equal(paint('prompt', 'white-space', 'idle'), 'nowrap');
+});
+
+// Every rule in this sheet is prefixed by the element it belongs to, and these two arrived
+// bare. `.kind` and `.prompt` are words a table cell could want the day it grows one, and a
+// selector with no `.node` in front of it would paint that cell in six-point uppercase.
+test("the strip's own classes are scoped to a node", () => {
+  for (const cls of ['kind', 'prompt']) {
+    assert.equal(declared(`.${cls}`, 'color'), '', `.${cls} is not a rule of its own`);
+    assert.notEqual(declared(`.node .${cls}`, 'color'), '', `.node .${cls} is`);
+  }
+});
+
 // The colour a node's halo ends up with, as the cascade resolves it: the `.node[data-state=…]`
 // rule if the stylesheet has one, and the bare `.halo` otherwise — the class selector on the
 // left of the descendant combinator can never outrank it.
 const paint = (cls: string, prop: string, state: string): string => {
-  const css = /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet([row()]), 'map'))![1]
-    // Comments first, or a selector captured as "everything since the last brace" is the prose
-    // above the rule as well — and every rule down here is explained by a paragraph naming it.
-    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = mapCss();
   let base = '';
   let override = '';
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -242,6 +451,46 @@ test('the halo and the glyph beside it agree on what every state looks like', ()
   for (const state of ['busy', 'waiting', 'unknown', 'idle']) {
     assert.equal(paint('halo', 'stroke', state), paint('shape', 'color', state), state);
   }
+});
+
+// The strip has no ring to carry its state, so the state is carried by the accent down its
+// left edge — the same three-pixel border, in the same hues, the table's rows wear on a phone.
+// Written as a comparison for the reason the one above it is: the day a state changes colour,
+// the accent and the glyph move together or this goes red.
+test("a strip's left accent is the node's own hue, the one its glyph already carries", () => {
+  for (const state of ['busy', 'waiting', 'unknown', 'idle']) {
+    assert.equal(paint('node', 'border-left-color', state), paint('shape', 'color', state), state);
+  }
+});
+
+// A strip is half the height of the card beside it and may not be stretched to match — but
+// that is the strip's business alone. The grid still stretches the CARDS in a row to one
+// height, which is what keeps a row of dials from stepping up and down; a strip that opted out
+// of it by telling the grid to stop stretching anything would have changed every session on
+// the page to make room for itself.
+test('a strip sits at the top of its row, and the cards beside it keep their shared height', () => {
+  assert.equal(paint('node', 'align-self', 'idle'), 'start');
+  assert.equal(paint('map', 'align-items', 'idle'), '', 'the grid itself is left alone');
+});
+
+/** One `@media` rule's declarations, braces balanced — which the flat scan above cannot do. */
+function atMedia(query: string): string {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet([row()]), 'map'))![1];
+  const start = css.indexOf(`@media ${query}`);
+  assert.notEqual(start, -1, `no @media ${query} in the stylesheet`);
+  let depth = 0;
+  for (let i = css.indexOf('{', start); i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    else if (css[i] === '}' && --depth === 0) return css.slice(start, i);
+  }
+  throw new Error(`@media ${query} is never closed`);
+}
+
+// A strip in half a phone's width is an ellipsis where the prompt was: the one line that says
+// what this agent was told to do is the first thing a narrow column takes away. It spans the
+// row instead, which is what the table's own cells do at the same breakpoint.
+test('a strip spans the width of a phone rather than sharing it with a card', () => {
+  assert.match(atMedia('(max-width: 46rem)'), /\.node\[data-role="agent"\][^{]*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
 });
 
 // Both views are in the fragment, and one of them is behind `display:none` — so a sentence

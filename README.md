@@ -70,19 +70,22 @@ sends no such mark — curl, a script — is left alone. The listening rules:
 </picture>
 
 The tab in the header swaps the table for the same fleet as nodes — one per session, the arc
-its context, the shape by the name its state. It is the same reading in the same fragment, so
-the two views can never disagree. Above the fleet are the account's five-hour and seven-day
+its context, the shape by the name its state. A background agent has no terminal behind it to
+draw a frame with, so it is a strip of text rather than a dial that could never fill. It is
+the same reading in the same fragment, so the two views can never disagree. Above the fleet
+are the account's five-hour and seven-day
 [gauges](docs/MANUAL.md#the-accounts-two-windows); under it a **scrubber over the day this
-serve has seen** — drag it and the dials render
+serve has seen** — drag it and the nodes render
 the fleet as it was at that minute, press play and the day walks past.
 
 The rules the table follows, the map follows: a reading past the freshness threshold is drawn
 thin, amber and dated, a percentage nobody measured is an empty dotted dial rather than a ring
-at zero, and a word `claude agents --json` printed that tarmac has no boolean for is shown as
-it came rather than quietly filed as `idle` — and raises one warning above the fleet naming
-it. The page is JSON underneath: `GET /api/fleet` and `GET /api/history` serve exactly what
-the map draws. Details in
-[the manual](docs/MANUAL.md#the-map).
+at zero, and where nothing was published at all — the strip of an agent the join found no
+snapshot for — nothing is drawn in its place, neither a dial nor a dash. A word
+`claude agents --json` printed that tarmac has no boolean for is shown as it came rather than
+quietly filed as `idle` — and raises one warning above the fleet naming it. The page is JSON
+underneath: `GET /api/fleet` and `GET /api/history` serve exactly what the map draws. Details
+in [the manual](docs/MANUAL.md#the-map).
 
 ## Install
 

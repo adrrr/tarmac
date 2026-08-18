@@ -313,8 +313,8 @@ tabs are links rather than script, so the view survives a reload and a bookmark 
 views are rendered into the same fragment, out of the same reading, which is why the two can
 never disagree about a session on the same screen.
 
-One node per session, and the count matches the table's rows exactly. A node says five things
-at once — six on a session that is waiting — in channels that never rely on colour alone:
+One node per session, and the count matches the table's rows exactly. A session's node says
+five things at once — six when it is waiting — in channels that never rely on colour alone:
 
 | What | Where it is | What it means |
 |---|---|---|
@@ -324,6 +324,10 @@ at once — six on a session that is waiting — in channels that never rely on 
 | the session's state | the shape by the name | `●` busy or an agent working, `○` idle or an agent finished, `◐` halted until a human answers, `▲` a word tarmac does not flatten into any of those — printed as it came |
 | what a waiting session waits for | a caption under the name | `permission prompt`, `input needed`, `sandbox request`, `worker request`, `dialog open` — the vocabulary the source publishes |
 | a reading just landed | one halo, once | a measured reading for that session is under 10s old |
+
+Four of those six are the dial and what it wears, and a background agent has no terminal
+behind it to draw one. It is not a smaller node of the same kind: it is a **strip**, and it
+says fewer things (below).
 
 The sort puts `waiting` first, then busy, then unknown, with idle last — the row that has
 stopped until someone answers it is the one that must not be under the fold, and a fleet holds
@@ -378,12 +382,30 @@ beside the dial, so the claim is in the markup and not only in the drawing.
 
 **Background agents.** `claude agents --json` prints interactive and background sessions in
 one array, and publishes nothing that ties an agent to whoever dispatched it. So the map does
-not draw one: an agent is a smaller, tinted node placed *next to* the session sharing its
-working directory — the only field both carry — and it keeps a node of its own, with its own
-project on it, even when no session matches. An edge would claim a parentage the source does
-not contain; nesting would let this page show a smaller fleet than the table beside it; and
-nothing points at the neighbouring node either, because the grid wraps where the viewport says
-and the fleet's sort can hand the same agent a different neighbour on the next poll.
+not draw one: an agent is a strip placed *next to* the session sharing its working directory —
+the only field both carry — and it keeps a node of its own, with its own project on it, even
+when no session matches. An edge would claim a parentage the source does not contain; nesting
+would let this page show a smaller fleet than the table beside it; and nothing points at the
+neighbouring node either, because the grid wraps where the viewport says and the fleet's sort
+can hand the same agent a different neighbour on the next poll.
+
+A strip is a band of text, left-aligned, half the height of the card beside it: the state in
+the same glyph a node uses and again in a three-pixel accent down its left edge, then the
+project, the kind it calls itself, and the prompt it was named after on the line below —
+ellipsised to that line. A waiting agent captions itself with what it waits for, like any
+other node. What it has no room for and no source for is the dial: the arc, its weight and
+the halo are all drawn from a statusline frame, and there is no terminal here to draw one. A
+ring on an agent could never fill, and the middle of it said `not chained` — the words of a
+fault someone could go and repair (`tarmac install`), about a session no install can cover.
+
+The number is not refused, though. **A strip prints what that session's snapshot published,
+and nothing where nothing was published.** The percentage, the model and the effort come out
+of one file, so an agent the join found one for carries all three on a line —
+`ctx 41% · Fable 5 · max` — dated `! 3h ago` when the reading is past the freshness threshold,
+exactly as a card is. The percentage is labelled because a strip has neither a ring around it
+nor a column header over it, and a bare `41%` under a line of prompt reads as how much of the
+prompt is done. An agent with no snapshot behind it prints none of the three, and no dash
+where they would have been.
 
 Which entries those are is decided by `kind`. `interactive` is what a terminal calls itself,
 and `background` is the one other value seen so far, on entries that carry no `pid` and report
