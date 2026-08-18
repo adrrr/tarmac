@@ -79,6 +79,48 @@ test('the media the repo page loads stays small enough to be worth loading', () 
   assert.ok(total <= 2_500_000, `${MEDIA} is ${(total / 1e6).toFixed(2)} MB in total`);
 });
 
+/**
+ * Every frame delay a GIF declares, in centiseconds, read off the Graphic Control Extension
+ * that precedes each image. Enough of the format to walk the block chain and no more: the
+ * header, an optional global colour table, then extensions and image descriptors until the
+ * trailer. The pixels are never decoded — the delay is the only thing being read.
+ */
+function delays(file: string): number[] {
+  const b = fs.readFileSync(file);
+  const endOfSubBlocks = (p: number): number => {
+    while (b[p] !== 0) p += b[p] + 1;
+    return p + 1;
+  };
+  let i = 13 + ((b[10] & 0x80) === 0 ? 0 : 3 * 2 ** ((b[10] & 7) + 1));
+  const found: number[] = [];
+  while (i < b.length && b[i] !== 0x3b) {
+    if (b[i] === 0x21) {
+      if (b[i + 1] === 0xf9) found.push(b.readUInt16LE(i + 4));
+      i = endOfSubBlocks(i + 2);
+    } else if (b[i] === 0x2c) {
+      i += 10 + ((b[i + 9] & 0x80) === 0 ? 0 : 3 * 2 ** ((b[i + 9] & 7) + 1));
+      i = endOfSubBlocks(i + 1);
+    } else throw new Error(`${file}: not a GIF block at byte ${i}`);
+  }
+  return found;
+}
+
+// A frame with no delay does not play slowly, it plays at a speed nobody chose: every browser
+// clamps a zero to a floor of its own, so one file runs at three cadences in three browsers and
+// at none of the one the capture was composed at. It is invisible at review — the frames are
+// right and the diff reads as "recaptured" — and it was invisible here too, in a file that
+// weighed the GIF and never timed it.
+test('every frame of a GIF says how long it is on screen', () => {
+  const gifs = captures().filter((name) => name.endsWith('.gif'));
+  assert.ok(gifs.length > 0, 'no GIF under docs/media — this test has stopped watching anything');
+  for (const name of gifs) {
+    const found = delays(path.join(repo, MEDIA, name));
+    assert.ok(found.length > 0, `${MEDIA}/${name} carries no frame delay at all`);
+    const zeros = found.filter((cs) => cs === 0).length;
+    assert.equal(zeros, 0, `${MEDIA}/${name}: ${zeros} of ${found.length} frames have no delay`);
+  }
+});
+
 // Captures are replaced, not appended: an image nothing points at is weight in the clone and
 // in every fetch of the repo, and it is the kind of thing a rename leaves behind.
 test('nothing sits in docs/media that the README does not show', () => {
