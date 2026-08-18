@@ -463,7 +463,9 @@ A replay is never allowed to pass for the present:
 - **no berths.** The ring keeps a project name and never the working directory it was read in,
   and a basename is not a directory: a frame drawn on it would group two checkouts of `atlas`
   into one, claiming the very thing a berth exists to be trusted about. So a replayed fleet is
-  drawn flat. The alternative was to widen the record until a frame could be earned; it already
+  drawn flat, in the order the sample carries — with no directory to group on, there is no
+  grouping to put a node anywhere else. The alternative was to widen the record until a frame
+  could be earned; it already
   shows less than the live view does, on purpose, and one more field in every one of 1440
   samples buys one border
 - the poll goes on underneath, so returning to now is instant and a page left on replay does
@@ -476,13 +478,11 @@ whose every reading failed says *that* rather than reading like a serve which ha
 The handle steps through readings, not minutes, so the line under it also names how many
 minutes have none.
 
-Two things it deliberately does not do. **It does not date the readings it draws**: the ring
+One thing it deliberately does not do. **It does not date the readings it draws**: the ring
 keeps each reading, never how old that reading was, so a replayed arc can be neither the solid
 one of a fresh reading nor the thin amber one of a stale reading. It gets a third weight of its
 own — full colour, a shade lighter, `data-reading="undatable"` in the markup — and the line
-under the scrubber says why. And it does not place an agent beside the session it shares a
-directory with, because the ring holds no working directory: the past is drawn in the order the
-sample carries.
+under the scrubber says why.
 
 A record that is refreshed under a reader who has taken hold of it is not swapped: the answer
 re-asks whether anyone is scrubbing at the moment it lands, and a refresh that fails leaves the

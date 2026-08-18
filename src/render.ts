@@ -1317,9 +1317,11 @@ function pageScript(view: View): string {
   function nodesOf(s) {
     var anchored = false, html = '', i;
     for (i = 0; i < s.sessions.length; i++) if (s.sessions[i].kind === INTERACTIVE) anchored = true;
-    // In the order the sample carries. The live map places an agent beside the session it
-    // shares a directory with; the ring holds no directory, so the past is drawn in the order
-    // the fleet was sorted in rather than in a grouping this page would have to invent.
+    // In the order the sample carries, flat. The live map frames its nodes by working
+    // directory; the ring holds a project name and never the directory it was read in, and a
+    // basename is not a directory — a frame drawn on it would put two checkouts of one
+    // repository behind one label. So the past keeps the order the fleet was sorted in, rather
+    // than a grouping this page would have to invent a key for.
     for (i = 0; i < s.sessions.length; i++) html += nodeOf(s.sessions[i], anchored);
     return html;
   }
