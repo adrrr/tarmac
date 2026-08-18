@@ -10,7 +10,7 @@
 import { formatDuration } from './config.ts';
 import type { Config, Source } from './config.ts';
 import { buildMap, INTERACTIVE, stateOf } from './map.ts';
-import type { MapNode, NodeState } from './map.ts';
+import type { Berth, MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
 import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
 import type { Gauge, LimitWhy } from './limits.ts';
@@ -671,9 +671,33 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      One node per session. The arc is the context, its weight is how much that reading may
      be believed, and the halo — the only thing on this page that moves — says a frame
      landed moments ago. A background agent is drawn with none of the three — there is no
-     terminal behind it to draw a statusline frame with — and is a strip instead, further
-     down, printing as text whatever its snapshot did publish. */
-  .map { display:grid; gap:.9rem; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
+     terminal behind it to draw a statusline frame with — and is a strip instead, docked
+     under the cards of its berth, printing as text whatever its snapshot did publish.
+
+     Two layouts, each named, because the two surfaces know different things. The live map
+     groups by working directory — the berths below; the replay behind the scrubber has none to group
+     by — the ring keeps a reading and never the directory it was read in — so it stays the
+     flat grid this view was before, which is also the honest drawing of what it holds. */
+  .map { gap:.9rem; }
+  .map.berths { display:flex; flex-wrap:wrap; align-items:flex-start; }
+  .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
+  /* The berth: a frame around the nodes read in one directory, and the label is the whole of
+     what it claims. Quiet on purpose — a hairline and a caption in the grey the rest of the
+     page uses for a heading, because the loud thing on this view is a session's state, and a
+     frame that competed with it would be a box drawn around a fact nobody asked about. */
+  .berth { border:1px solid var(--line); border-radius:12px; padding:.6rem .7rem .7rem; }
+  .berth-label { margin:0 0 .5rem; font-size:.72rem; font-weight:600; text-transform:uppercase;
+          letter-spacing:.06em; color:var(--dim); }
+  /* The cards side by side at their own width, wrapping inside the frame when the directory
+     holds more of them than the row can take. */
+  .berth-cards { display:flex; flex-wrap:wrap; gap:.6rem; align-items:stretch; }
+  .berth-cards .node { width:10.5rem; }
+  /* And the strips docked underneath, full width of the frame, one under the other: a strip is
+     a line of text, and a line of text in a column half a card wide is an ellipsis where the
+     prompt was. Below the cards rather than among them because that is what it is — the
+     directory's background work, under the terminals someone is sitting at — and NOT because
+     one of those terminals dispatched it, which nothing here knows. */
+  .berth-strips { display:flex; flex-direction:column; gap:.4rem; margin-top:.6rem; }
   .node { border:1px solid var(--line); border-radius:10px; padding:.8rem .85rem .7rem;
           display:flex; flex-direction:column; align-items:center; text-align:center; }
   .node[data-state="busy"] { border-color:color-mix(in srgb, var(--busy) 45%, var(--line)); }
@@ -686,8 +710,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   /* align-self, never the grid's own align-items: a strip is half the height of the card
      beside it and must not be stretched to match, but the CARDS in a row still share one
      height — telling the grid to stop stretching would have changed every session on the page
-     to make room for this one. */
-  .node[data-role="agent"] { align-self:start; align-items:stretch; text-align:left;
+     to make room for this one. Scoped to the flat grid, which is the only place a strip has a
+     card beside it: docked in a berth it is a full-width band, and "start" in that column
+     would shrink it to the width of its own prompt. */
+  .map.flat .node[data-role="agent"] { align-self:start; }
+  .node[data-role="agent"] { align-items:stretch; text-align:left;
           padding:.5rem .7rem .55rem; border-radius:8px;
           background:color-mix(in srgb, var(--line) 18%, transparent);
           /* The box goes back to the neutral line the tinted rule above gave it: the accent is
@@ -698,16 +725,16 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node[data-role="agent"][data-state="waiting"] { border-left-color:var(--wait); }
   .node[data-role="agent"][data-state="unknown"] { border-left-color:var(--warn); }
   .node[data-role="agent"] .who { margin-top:0; width:100%; }
-  .node[data-role="agent"] .project { font-weight:600; font-size:.8rem; }
-  /* What the node calls itself, set apart from the project it sits beside: an agent's own line
-     already reads as a sentence, and the kind is the word that says it is not a terminal.
-     This one and the prompt below it are scoped to a node like every other rule here: both are
-     words a table cell could want the day it grows one, and unprefixed they would take it. */
+  /* What the node calls itself, at the end of its line: an agent's line already reads as a
+     sentence, and the kind is the word that says it is not a terminal. This one and the prompt
+     below it are scoped to a node like every other rule here: both are words a table cell could
+     want the day it grows one, and unprefixed they would take it. */
   .node .kind { margin-left:auto; font-size:.6rem; font-weight:700; text-transform:uppercase;
           letter-spacing:.08em; color:var(--dim); }
-  /* The prompt a background session was named after. One line, clipped: it is a sentence
-     somebody typed, and it is the only thing on the strip that has no length limit. */
-  .node .prompt { color:var(--dim); font-size:.76rem; margin-top:.15rem;
+  /* The prompt a background session was named after — the strip's own line, now that the berth
+     around it carries the directory. One line, clipped: it is a sentence somebody typed, and
+     it is the only thing on the strip that has no length limit. */
+  .node .prompt { flex:1; min-width:0; color:var(--dim); font-size:.76rem;
           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* Said, not shown: the three glyphs differ in silhouette, so a reader who cannot separate
      two hues still has the state — but a screen reader is handed a bullet and nothing else. */
@@ -760,8 +787,12 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .why { font-size:.68rem; color:var(--dim); line-height:1.2; max-width:4.4rem; }
   .why b { display:block; font-size:1.25rem; font-weight:400; }
   .who { margin-top:.5rem; display:flex; align-items:baseline; gap:.3rem; max-width:100%; }
-  .who .project { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .node[data-state="busy"] .who .project { font-weight:700; }
+  /* Two fields in one slot, and they are not the same fact. A live card names the SESSION —
+     the berth above it says the directory, and two sessions in one checkout are told apart by
+     nothing else. A replayed card has only the project: the ring never kept a name, for any
+     kind of session, so there is no berth behind the scrubber and no name to put in front. */
+  .who .name, .who .project { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .node[data-state="busy"] .who .name, .node[data-state="busy"] .who .project { font-weight:700; }
   .shape { font-size:.7rem; color:var(--dim); }
   .node[data-state="busy"] .shape { color:var(--busy); }
   .node[data-state="waiting"] .shape { color:var(--wait); }
@@ -772,7 +803,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .sub.waiting-for { color:var(--wait); font-weight:600; }
   .asof { font-size:.72rem; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:.15rem; }
   .asof.stale { color:var(--warn); font-weight:600; }
-  @media (max-width: 30rem) { .map { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); gap:.6rem; } }
+  @media (max-width: 30rem) { .map.flat { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); } .map { gap:.6rem; } }
 
   /* Below this the table stops being a table: one card per session, every value keeping the
      name of the column it came from. Nothing is dropped — a phone that hides the context
@@ -788,9 +819,17 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     tr[data-state="busy"] { border-left-color:var(--busy); }
     tr[data-state="waiting"] { border-left-color:var(--wait); }
     tr[data-state="unknown"] { border-left-color:var(--warn); }
+    /* The frames stop sharing a row, and the cards inside one stop being a fixed column so two
+       of them still fit across a phone. The berth keeps its hairline: a border around a card
+       inside a border around a directory is two hairlines, which is not the weight worth
+       spending a claim on — and dropping the frame here would drop the claim with it. */
+    .berth { width:100%; padding:.5rem .55rem .6rem; }
+    .berth-cards { gap:.5rem; }
+    .berth-cards .node { flex:1 1 8.5rem; width:auto; }
     /* A strip sharing a phone's width with a card is an ellipsis where the prompt was — the
        one line saying what this agent was told to do is the first thing a narrow column takes
-       away. It spans the row instead, like the cells below it. */
+       away. It spans the row instead, like the cells below it. The berth docks its own strips
+       full width at every size, so what this rule is left covering is the REPLAY's flat grid. */
     .node[data-role="agent"] { grid-column:1 / -1; }
     td, td:first-child { border:0; padding:.2rem 0; white-space:normal;
          display:flex; justify-content:space-between; align-items:baseline; gap:1rem; }
@@ -849,7 +888,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        would be a claim about nothing. -->
   <div class="limits" id="replay-limits" role="group" aria-label="account rate limits, at the minute being replayed" hidden></div>
   <div class="meta" id="replay-meta"></div>
-  <div class="map" id="replay-map"></div>
+  <div class="map flat" id="replay-map"></div>
 </div>
 <!-- A dead handle is worse than no handle: this is revealed once the record is in hand, and
      what it says it covers is whatever the record answered with. -->
@@ -1423,21 +1462,41 @@ const stateLabel = (state: NodeState, r: FleetRow): string =>
 const CTX_WHY: Record<string, string> = { fresh: 'no turn yet', drift: 'schema drift', absent: 'not chained' };
 
 /**
- * The map: one node per session, laid out as a grid rather than a graph. An empty fleet is not
- * its business — `renderLive` says that once, above both views, rather than letting each of
- * them render the same sentence and hide one of the two.
+ * The map: one node per session, grouped into berths rather than laid out as a graph. An empty
+ * fleet is not its business — `renderLive` says that once, above both views, rather than
+ * letting each of them render the same sentence and hide one of the two.
  *
  * There are no edges because the sources publish no relationship between two sessions — the
- * one thing they do carry is the working directory, and that is expressed by putting an
- * agent NEXT to the session it shares a directory with, never by drawing a line that would
- * claim more than the data says.
+ * one thing they do carry is the working directory, and that is what a berth is drawn around.
+ * A frame is the cheapest way to say "these were read in one place" and the hardest to
+ * misread as a line between two of them.
  *
  * Everything a reader interprets is decided in `map.ts` and rendered here, on the server,
  * for the same reason the table is: the rules that keep a reading honest are tested, and a
  * copy of them re-derived in browser JavaScript would sit where this suite cannot reach.
  */
 export function renderMap(fleet: Fleet): string {
-  return `<div class="map">${buildMap(fleet).nodes.map(renderNode).join('')}</div>`;
+  return `<div class="map berths">${buildMap(fleet).berths.map(renderBerth).join('')}</div>`;
+}
+
+/**
+ * One berth: a frame, a label, the cards of the directory, and the strips docked under them.
+ *
+ * The label is the WHOLE of what the frame claims — these nodes were read in this directory.
+ * Nothing in here says which node dispatched which, because `claude agents --json` publishes
+ * no such field: no order, no position and no line inside the frame means "parent of". The day
+ * that relation is published it is drawn between nodes already sitting side by side, and this
+ * function is where it would go — inside a berth, without moving one.
+ *
+ * Named for the reader who is handed no border at all: the frame is a group with the project
+ * for its name, and the heading says the same word for one navigating by headings. Each half
+ * is drawn only if it has something in it, so an orphan agent's berth is a frame with a strip
+ * in it rather than a frame with an empty row above one.
+ */
+function renderBerth({ label, sessions, agents }: Berth): string {
+  return `<section class="berth" aria-label="${esc(label)}"><h2 class="berth-label">${esc(label)}</h2>${
+    sessions.length === 0 ? '' : `<div class="berth-cards">${sessions.map(renderNode).join('')}</div>`
+  }${agents.length === 0 ? '' : `<div class="berth-strips">${agents.map(renderNode).join('')}</div>`}</section>`;
 }
 
 /**
@@ -1476,16 +1535,18 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
   // never fill — there is no terminal here to draw a statusline frame with — and the middle of
   // it read "not chained", the vocabulary of a repairable fault ("run `tarmac install`") said
   // about a session no install can ever cover. So no gauge, no dash, no reason where the
-  // source published nothing, and the four fields it does publish about an agent in text: its
-  // state, its project, the kind it calls itself, and the prompt it was named after.
+  // source published nothing, and the three fields it does publish about an agent in text: its
+  // state, the kind it calls itself, and the prompt it was named after.
   //
   // Nor a halo: it is a ring drawn inside the dial, and this shape has neither. What it says —
   // a reading landed seconds ago — is the one claim on this page nobody can look away from,
   // and it is not the fact a strip exists to carry.
   //
-  // An agent carries its own project, like every other node. Placement is not a promise —
-  // the grid wraps where the viewport says, and the fleet's sort can hand the same agent a
-  // different neighbour on the next poll — so nothing here points at the node beside it.
+  // Nor the project: the berth around this strip says the directory once, for every node in
+  // it, and a strip that repeated it would print `harbor` four times inside one frame. What
+  // the line spends itself on instead is what tells two agents in one berth apart — the prompt
+  // it was named after, and the kind it calls itself. Nothing here points at a node beside it:
+  // sharing a frame is sharing a directory, and that is all it has ever been.
   if (role === 'agent') {
     // The rule for the rest: the strip prints what that session's snapshot published, and
     // nothing where nothing was published. The percentage, the model and the effort come out
@@ -1500,8 +1561,7 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
       .map(esc)
       .join(' · ');
     return `<article class="node" data-role="${role}" data-state="${state}" data-reading="${reading}">
-      <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span><span class="kind">${esc(r.kind)}</span></div>
-      <div class="prompt">${esc(r.name)}</div>
+      <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="prompt">${esc(r.name)}</span><span class="kind">${esc(r.kind)}</span></div>
       ${state === 'waiting' && r.waitingFor ? `<div class="sub waiting-for">${esc(r.waitingFor)}</div>` : ''}
       ${published === '' ? '' : `<div class="sub">${published}</div>`}
       ${asOf}
@@ -1513,9 +1573,8 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
         <div class="val">${value}</div>
         ${pulse ? `<span class="sr">a reading just landed</span>` : ''}
       </div>
-      <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="project">${esc(r.project)}</span></div>
+      <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="name">${esc(r.name)}</span></div>
       ${state === 'waiting' && r.waitingFor ? `<div class="sub waiting-for">${esc(r.waitingFor)}</div>` : ''}
-      <div class="sub">${esc(r.name)}</div>
       ${r.kind === null || r.kind === INTERACTIVE ? '' : `<div class="sub">${esc(r.kind)}</div>`}
       <div class="sub">${esc(r.model)}${r.effort === null ? '' : ` · ${esc(r.effort)}`}</div>
       ${asOf}

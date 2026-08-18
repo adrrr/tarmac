@@ -13,11 +13,26 @@ import type { Fleet, FleetHealth, FleetRow } from '../src/fleet.ts';
 const fleet = (rows: FleetRow[], h: Partial<FleetHealth> = {}): Fleet => ({ rows, health: health(h) });
 const one = (r: Partial<FleetRow> = {}): string => renderMap(fleet([row(r)]));
 
-test('a node carries its project, its session name and its context', () => {
+/** How deep the `<article>` nesting goes: 1 on a page where no node is drawn inside another. */
+function deepestArticle(html: string): number {
+  let depth = 0;
+  let deepest = 0;
+  for (const m of html.matchAll(/<(\/?)article\b/g)) {
+    depth += m[1] === '' ? 1 : -1;
+    deepest = Math.max(deepest, depth);
+  }
+  return deepest;
+}
+
+// The pair, and the split between them: the frame says where the node was read, the card says
+// which node it is. Inside a berth the project is on the frame, so a card that printed it too
+// would say `apollo` four times around one directory.
+test('a node carries its session name and its context, and its berth the project', () => {
   const html = one({ project: 'apollo', name: 'alpha-7a', ctxPct: 62 });
-  assert.match(html, /apollo/);
-  assert.match(html, /alpha-7a/);
+  assert.match(html, /class="berth-label">apollo</);
+  assert.match(html, /class="name">alpha-7a</);
   assert.match(html, /62/);
+  assert.equal((html.match(/apollo/g) ?? []).length, 2, 'once in the label, once in the frame it names');
 });
 
 // The arc is the percentage, as a fraction of the circle's real circumference.
@@ -173,20 +188,85 @@ test('the kind we know is not printed on every node as noise', () => {
   assert.doesNotMatch(one({ kind: 'interactive' }), /interactive/);
 });
 
-// An agent is PLACED next to its session, and placement is not a promise: the grid wraps, so
-// the node above an agent can be a session from another directory entirely, and the fleet's
-// own sort can hand the same agent a different neighbour on the next poll. So the agent says
-// which directory it belongs to itself, rather than pointing at whoever is beside it.
-test('an agent names its own directory, so its placement can be checked', () => {
+// ── the berth ────────────────────────────────────────────────────────────────────────────
+//
+// One frame per working directory. What it claims is exactly that — the nodes inside it were
+// read in one directory — and the red line of the whole shape is what it must never claim:
+// which of them dispatched which. The source publishes no such field.
+
+test('the nodes of one directory are drawn inside one frame, labelled with the project', () => {
   const html = renderMap(
     fleet([
       row({ sessionId: 'a', kind: 'interactive', cwd: '/w', project: 'apollo', name: 'apollo-7a' }),
       row({ sessionId: 'b', kind: 'background', cwd: '/w', project: 'apollo', name: 'sweep-01' }),
     ]),
   );
-  const agent = html.slice(html.indexOf('data-role="agent"'));
-  assert.match(agent, /apollo/, 'the agent carries its project');
-  assert.doesNotMatch(html, /&#8627;/, 'and points at nobody');
+  assert.equal((html.match(/<section class="berth"/g) ?? []).length, 1);
+  assert.match(html, /class="berth-label">apollo</);
+  assert.match(html, /class="berth-cards">[\s\S]*apollo-7a/);
+  assert.match(html, /class="berth-strips">[\s\S]*sweep-01/);
+});
+
+// The claim the frame is NOT allowed to make. Two sessions and two agents in one directory:
+// no node is inside another, nothing points at anything, and no word on the page says one of
+// them asked for another — because `claude agents --json` publishes nobody's parent.
+test('a berth of four says they share a directory, and nothing about who dispatched whom', () => {
+  const html = renderMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/w', project: 'harbor', name: 'harbor-3f' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/w', project: 'harbor', name: 'harbor-9k' }),
+      row({ sessionId: 'c', kind: 'background', cwd: '/w', project: 'harbor', name: 'sweep-01' }),
+      row({ sessionId: 'd', kind: 'background', cwd: '/w', project: 'harbor', name: 'draft the notes' }),
+    ]),
+  );
+  assert.equal((html.match(/<section class="berth"/g) ?? []).length, 1);
+  assert.equal((html.match(/<article class="node"/g) ?? []).length, 4);
+  // The structural half: a node inside another node is the parentage drawn, whatever the
+  // labels say. Counted rather than pattern-matched — four siblings satisfy any regex for
+  // "an <article> and then another one".
+  assert.equal(deepestArticle(html), 1, 'no node is inside another');
+  assert.doesNotMatch(html, /&#8627;/, 'and nothing points at anything');
+  for (const word of [/parent/i, /child/i, /dispatch/i, /spawned/i]) assert.doesNotMatch(html, word);
+});
+
+// Two frames, two labels, and each holds only what was read in its own directory.
+test('two directories are two frames, in the order the fleet handed them over', () => {
+  const html = renderMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/w/apollo', project: 'apollo', name: 'apollo-7a' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/w/orion', project: 'orion', name: 'orion-11' }),
+      row({ sessionId: 'c', kind: 'background', cwd: '/w/apollo', project: 'apollo', name: 'sweep-01' }),
+    ]),
+  );
+  assert.deepEqual([...html.matchAll(/class="berth-label">(\w+)</g)].map((m) => m[1]), ['apollo', 'orion']);
+  assert.ok(html.indexOf('sweep-01') < html.indexOf('orion-11'), 'the agent stays in the frame it belongs to');
+});
+
+// The frame is a landmark, named by the one thing it asserts. Nothing else about the nodes
+// changes: they keep the attributes and the words they carry outside a berth.
+test('a frame is named for a reader who is handed no border at all', () => {
+  assert.match(one({ project: 'apollo' }), /<section class="berth" aria-label="apollo">/);
+});
+
+// DOM order is the visual order, so a reader going through the markup meets the cards and the
+// strips of a berth in the order they are drawn — and nothing in the sheet reorders them.
+test('the cards of a berth come before its strips, in the markup as on the screen', () => {
+  const html = renderMap(
+    fleet([
+      row({ sessionId: 'b', kind: 'background', cwd: '/w', project: 'harbor', name: 'sweep-01' }),
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/w', project: 'harbor', name: 'harbor-3f' }),
+    ]),
+  );
+  assert.ok(html.indexOf('harbor-3f') < html.indexOf('sweep-01'), 'the card first, whatever order they arrived in');
+  assert.doesNotMatch(mapCss(), /(?:^|;|\{)\s*order\s*:/, 'and nothing in the sheet moves one past the other');
+  assert.doesNotMatch(mapCss(), /flex-direction:\s*\w+-reverse/);
+});
+
+// A label off someone else's filesystem, in an attribute and in text.
+test('a berth label is escaped in both places it is printed', () => {
+  const html = renderMap(fleet([row({ project: '"><script>alert(1)</script>' })]));
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /aria-label="&quot;&gt;&lt;script&gt;/);
 });
 
 // ── the strip ────────────────────────────────────────────────────────────────────────────
@@ -222,13 +302,15 @@ const strip = (a: Partial<FleetRow> = {}): string => {
   return html.slice(html.indexOf('data-role="agent"'));
 };
 
-test('an agent is a strip: its project, what it is, and the prompt it was given', () => {
+// The strip spends its one line on what tells two agents in one berth apart: the prompt it was
+// named after and the kind it calls itself. The directory is the frame around it, said once.
+test('an agent is a strip: what it is, and the prompt it was given', () => {
   const html = strip();
   assert.doesNotMatch(html, /class="dial"/, 'no dial');
   assert.doesNotMatch(html, /class="track/, 'and nothing left of one');
-  assert.match(html, /class="project">harbor</);
   assert.match(html, /class="kind">background</);
   assert.match(html, /class="prompt">sweep the flaky specs</);
+  assert.doesNotMatch(html, /harbor/, 'the frame around it says the directory; the strip does not repeat it');
 });
 
 // The correction this whole shape is for. A dial captioned "not chained" is the vocabulary of
@@ -325,25 +407,28 @@ test('a strip never pulses', () => {
 // string on the page.
 test('every value the machine supplies reaches a strip escaped', () => {
   const nasty = '<script>alert(1)</script>';
-  for (const field of ['project', 'name', 'kind'] as const) {
+  for (const field of ['name', 'kind'] as const) {
     assert.doesNotMatch(strip({ [field]: nasty }), /<script>/, field);
   }
   assert.doesNotMatch(strip({ busy: null, status: 'waiting', waitingFor: nasty }), /<script>/, 'waitingFor');
 });
 
 // An orphan is still a node. Its directory matches no session on this machine — the one it was
-// dispatched from has since been closed — and the map's promise is that it counts the same.
-test('an agent whose directory matches no session is a strip like any other', () => {
+// dispatched from has since been closed — and the map's promise is that it counts the same. It
+// gets a berth of its own rather than being tucked into somebody else's: a frame is a claim
+// about a directory, and this agent's is not theirs.
+test('an agent whose directory matches no session is a berth of its own', () => {
   const html = renderMap(
     fleet([
       row({ sessionId: 'i', kind: 'interactive', cwd: '/w', project: 'harbor', name: 'harbor-3f' }),
       row({ sessionId: 'o', kind: 'background', cwd: '/gone', project: 'quarry', name: 'rebuild the docs index' }),
     ]),
   );
-  const orphan = html.slice(html.indexOf('data-role="agent"'));
-  assert.match(orphan, /class="project">quarry</);
+  assert.deepEqual([...html.matchAll(/class="berth-label">(\w+)</g)].map((m) => m[1]), ['harbor', 'quarry']);
+  const orphan = html.slice(html.indexOf('aria-label="quarry"'));
   assert.match(orphan, /class="prompt">rebuild the docs index</);
-  assert.doesNotMatch(orphan, /class="dial"/);
+  assert.doesNotMatch(orphan, /class="dial"/, 'still a strip, with no card in the frame beside it');
+  assert.doesNotMatch(orphan, /class="berth-cards"/);
 });
 
 // The halo lives inside an `aria-hidden` <svg>, so the one thing on this page that moves was
@@ -464,13 +549,27 @@ test("a strip's left accent is the node's own hue, the one its glyph already car
 });
 
 // A strip is half the height of the card beside it and may not be stretched to match — but
-// that is the strip's business alone. The grid still stretches the CARDS in a row to one
-// height, which is what keeps a row of dials from stepping up and down; a strip that opted out
-// of it by telling the grid to stop stretching anything would have changed every session on
-// the page to make room for itself.
-test('a strip sits at the top of its row, and the cards beside it keep their shared height', () => {
-  assert.equal(paint('node', 'align-self', 'idle'), 'start');
-  assert.equal(paint('map', 'align-items', 'idle'), '', 'the grid itself is left alone');
+// that is the strip's business alone, and only where it HAS a card beside it, which since the
+// berths is the replay's flat grid. The cards of a berth still share one height, which is what
+// keeps a row of dials from stepping up and down; telling their row to stop stretching would
+// have changed every session on the page to make room for one strip.
+test('a strip in the flat grid sits at its top, and cards in a berth keep their shared height', () => {
+  assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), 'start');
+  assert.equal(declared('.berth-cards', 'align-items'), 'stretch');
+  assert.equal(declared('.berth-cards', 'align-self'), '', 'and nothing tells a card to opt out of it');
+});
+
+// Docked, so it is the width of the frame and not the width of its own prompt — which is what
+// "start" would mean in a column, and it is the declaration the grid rule above carries.
+test('a strip docked in a berth is not shrunk to its own text', () => {
+  assert.equal(declared('.berth-strips .node', 'align-self'), '', 'nothing overrides the column stretch');
+  assert.equal(declared('.node[data-role="agent"]', 'align-self'), '', 'the grid keeps its own rule to itself');
+});
+
+// The frames themselves are top-aligned: a directory with one card in it is a short frame, and
+// stretching it to the height of the busiest berth on the row is a box drawn around air.
+test('the frames sit at the top of their row rather than stretching to the tallest', () => {
+  assert.equal(declared('.map.berths', 'align-items'), 'flex-start');
 });
 
 /** One `@media` rule's declarations, braces balanced — which the flat scan above cannot do. */
@@ -488,9 +587,39 @@ function atMedia(query: string): string {
 
 // A strip in half a phone's width is an ellipsis where the prompt was: the one line that says
 // what this agent was told to do is the first thing a narrow column takes away. It spans the
-// row instead, which is what the table's own cells do at the same breakpoint.
+// row instead, which is what the table's own cells do at the same breakpoint. The rule is the
+// REPLAY grid's now — a live strip is docked full width by the berth around it at every size —
+// and the replay is the surface that still lays nodes out as one flat grid.
 test('a strip spans the width of a phone rather than sharing it with a card', () => {
   assert.match(atMedia('(max-width: 46rem)'), /\.node\[data-role="agent"\][^{]*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
+});
+
+// ── the berth, as layout ─────────────────────────────────────────────────────────────────
+//
+// The frames are laid out as a row of boxes that wrap, and each one is as wide as what it
+// holds. The flat grid stays where it is still the shape: behind the scrubber, where the
+// record has no directory to group by.
+test('the live map is a row of frames, and the replay is still the flat grid', () => {
+  assert.equal(declared('.map.berths', 'display'), 'flex');
+  assert.equal(declared('.map.flat', 'display'), 'grid');
+  assert.match(declared('.map.flat', 'grid-template-columns'), /auto-fill/);
+});
+
+// The strips are docked under the cards of their own berth, full width of it, one under the
+// other — the shape a line of text wants, and the one that keeps the prompt off an ellipsis.
+test('the strips of a berth are stacked under its cards, across the frame', () => {
+  assert.equal(declared('.berth-strips', 'flex-direction'), 'column');
+  assert.equal(declared('.berth-cards', 'flex-wrap'), 'wrap', 'and the cards sit side by side until they run out');
+});
+
+// On a phone the frames stop sharing a row: each takes the width, and the cards inside it stop
+// being a fixed column so two of them still fit across. Nothing else changes — the border of
+// a berth and the border of a card are both a hairline, and a phone is not a reason to draw
+// the one claim this view makes any heavier.
+test('on a phone the frames stack, and their cards stretch to the width they are given', () => {
+  const phone = atMedia('(max-width: 46rem)');
+  assert.match(phone, /\.berth\s*\{[^}]*width:\s*100%/);
+  assert.match(phone, /\.berth-cards\s+\.node\s*\{[^}]*flex:/);
 });
 
 // Both views are in the fragment, and one of them is behind `display:none` — so a sentence
@@ -543,7 +672,7 @@ test('the map and the table count the same sessions', () => {
 test('the page carries both views, so one refresh feeds them both', () => {
   const html = renderPage(fleet([row()]), 'map');
   assert.match(html, /<table/, 'the table is still rendered');
-  assert.match(html, /class="map"/);
+  assert.match(html, /class="map berths"/);
 });
 
 test('the page opens on the view that was asked for', () => {
