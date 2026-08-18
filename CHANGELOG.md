@@ -12,6 +12,16 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **A background agent is drawn as a strip on the map, not as a small dial.** It was a card at
+  three quarters scale, which meant a context ring on a session that has no terminal to draw a
+  statusline frame with — a gauge that can never fill, captioned "not chained", the words of a
+  fault someone could go and fix. The strip carries what the source really publishes about an
+  agent: its state, its project, the kind it calls itself, and the prompt it was named after,
+  with the state in the same glyph and a three-pixel accent down its left edge. No context is
+  claimed at all where none can be measured — not a percentage, not a dash. A percentage the
+  source does publish for one is printed inline, and dated when it is stale. Replays draw them
+  the same way. (#58)
+
 - **The two configuration tables agree about where the snapshots are read from.** The README's
   named the path frozen into the installed wrapper, the manual's named the XDG default; each is
   true in one case, and read side by side they contradict each other. Both cells now carry the

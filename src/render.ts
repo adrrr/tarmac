@@ -687,7 +687,10 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .node[data-role="agent"] { align-items:stretch; text-align:left;
           padding:.5rem .7rem .55rem; border-radius:8px;
           background:color-mix(in srgb, var(--line) 18%, transparent);
-          border-left-width:3px; border-left-color:var(--dim); }
+          /* The box goes back to the neutral line the tinted rule above gave it: the accent is
+             the channel that carries state here, and a strip outlined in its hue as well was
+             the same fact said twice, in two weights, on a shape half the size of a card. */
+          border-color:var(--line); border-left-width:3px; border-left-color:var(--dim); }
   .node[data-role="agent"][data-state="busy"] { border-left-color:var(--busy); }
   .node[data-role="agent"][data-state="waiting"] { border-left-color:var(--wait); }
   .node[data-role="agent"][data-state="unknown"] { border-left-color:var(--warn); }
