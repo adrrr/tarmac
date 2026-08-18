@@ -17,8 +17,9 @@
 // this file (#65). The work does not move with the machine. A frame that walked no directory
 // and unlinked nothing did not pay for the backlog, on any hardware, under any load.
 //
-// Two shims on the PATH do the counting — `find` and `rm`, the only utilities the prune block
-// runs — and the sweep's `find` is HELD at the shim, before it has looked at anything, until
+// Two shims on the PATH do the counting — `find` and `rm`, the only two that can do work
+// proportional to the backlog (the `touch` that refreshes the marker is O(1) on one path)
+// — and the sweep's `find` is HELD at the shim, before it has looked at anything, until
 // the frames are over. The pin is what makes the count exact instead of a race against a child
 // that is already deleting: what the log holds when the last frame returns is what the frames
 // did, and nothing else. Same licence as `sweep-detached.test.ts` and for the same reason —
@@ -57,6 +58,9 @@ const FRAMES = 12;
  * and a pin with no way out would hang the runner instead of printing what went wrong.
  */
 const PIN_TICKS = 200;
+// Fractional sleep is not POSIX (the standard only promises whole seconds), but it is real on
+// every shell in the CI matrix — and on a strict integer `sleep`, `sleep 0.1` returning at
+// once would spin the pin through its 200 ticks in microseconds and fail racy and unreadable.
 const PIN_TICK_S = 0.1;
 
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
@@ -228,14 +232,17 @@ test(`no frame pays for the backlog with ${STOCK} snapshots to sweep`, async (t)
     assert.match(out, /CHAINED/, `frame ${i} rendered nothing`);
   }
 
+  // Frame times print BEFORE the barrier below: the two failure modes that trip there would
+  // otherwise die without a number on the record.
+  t.diagnostic(`stock ${STOCK} (${COLD} cold) — frames in ms: ${frames.map((f) => f.toFixed(0)).join(' ')} (measured, asserted by nothing)`);
+
   // The sweep announces itself from the CHILD, so it is waited for and never read on the line
   // after the frame — that read is a race between a fork and a `printf`, and it loses about one
   // run in fifteen on a loaded machine. Once the announcement is in, the count is settled:
   // the sweep is holding at the pin, and a held sweep cannot add to it.
-  await waitFor(() => r.work().pinned, 'the sweep to announce that it started');
+  await waitFor(() => r.work().pinned, 'the sweep to announce that it started (the shim recognises it by -prune)');
   const charged = r.work();
 
-  t.diagnostic(`stock ${STOCK} (${COLD} cold) — frames in ms: ${frames.map((f) => f.toFixed(0)).join(' ')} (measured, asserted by nothing)`);
   t.diagnostic(`charged to the ${FRAMES} frames: ${charged.markers} marker checks, ${charged.walks} walks, ${charged.unlinked} unlinks`);
 
   // The pin is released by the line below the assertions; a sweep that gave up waiting for it
@@ -251,7 +258,7 @@ test(`no frame pays for the backlog with ${STOCK} snapshots to sweep`, async (t)
   assert.equal(
     charged.unlinked,
     0,
-    `a frame paid for the backlog: ${charged.unlinked} of the ${COLD} cold snapshots were unlinked before the frames returned.${stuck}`,
+    `a frame paid for the backlog: ${charged.unlinked} path(s) unlinked by the frames before they returned.${stuck}`,
   );
   // …and none of the two above is worth anything if the frames never reached the prune block:
   // a wrapper that stopped pruning charges nothing to anybody. Every frame runs the check, and
