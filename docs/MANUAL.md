@@ -3,6 +3,19 @@
 The [README](../README.md) is the tour; this is the reference. Everything below is held
 up by the test suite — none of it is aspiration.
 
+## Commands and options
+
+| Command | What it does | Options |
+|---|---|---|
+| `tarmac list` | one-shot fleet table — the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
+| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin` |
+| `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
+| `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
+
+`--help` works everywhere. An option handed to a command that does not read it is an
+**error**, not something quietly ignored — and the error names the commands it does belong
+to.
+
 ## Degradation, state by state
 
 The real defence is not immunity, it is **visible degradation**. When a field moves,
@@ -69,7 +82,11 @@ display is byte-identical. Only two files land under `DIR/.claude/`, and neither
 at runtime: the wrapper itself and the `backup.json` that undoes it. `uninstall` restores the original `settings.json` verbatim
 when you have not edited it since, and surgically (statusLine key only) when you have. If
 someone else has taken over the status line in the meantime, tarmac leaves it alone and
-tells you it restored nothing.
+tells you it restored nothing. It names which of its four restore modes ran: `bytes`, the
+usual one, puts the original file back exactly.
+
+The write re-serialises `settings.json`, so a version-controlled one shows a formatting diff,
+not a one-line diff.
 
 tarmac deletes two things, and both of them are its own. At `serve` start it removes temp
 files an interrupted wrapper left behind — over an hour old, and **signed**, meaning named
@@ -185,6 +202,20 @@ non-UUID name is still read. It is what separates "no frame drawn yet", which `t
 install` and one frame fix, from "no frame will ever produce one", which nothing fixes. Both
 renderers say which of the two they are looking at rather than defaulting to install advice.
 
+## What `serve` listens on
+
+`serve` prints the settings it resolved, then the URL it got:
+
+```
+tarmac serving http://127.0.0.1:4477
+```
+
+It binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
+does not mark same-origin — your cwd paths and costs never leave the machine. A busy
+**default** port walks up to the next free one and says so; a port you chose yourself — flag,
+environment or config file — refuses instead, because you chose it
+(see [configuration](#configuration)).
+
 ## Staying open
 
 Both live views owe you the same two facts, and neither is allowed to be quiet about them:
@@ -290,6 +321,11 @@ at once — six on a session that is waiting — in channels that never rely on 
 | the session's state | the shape by the name | `●` busy or an agent working, `○` idle or an agent finished, `◐` halted until a human answers, `▲` a word tarmac does not flatten into any of those — printed as it came |
 | what a waiting session waits for | a caption under the name | `permission prompt`, `input needed`, `sandbox request`, `worker request`, `dialog open` — the vocabulary the source publishes |
 | a reading just landed | one halo, once | a measured reading for that session is under 10s old |
+
+The sort puts `waiting` first, then busy, then unknown, with idle last — the row that has
+stopped until someone answers it is the one that must not be under the fold, and a fleet holds
+one or two of those at a time. It is the fleet's own order, the one the table uses; the map
+draws it with each agent lifted out to sit beside its session (below).
 
 The state and the reading are two different clocks and are never merged. `busy` comes from
 `claude agents --json`, read at the moment you asked; the percentage comes from a file that
@@ -545,6 +581,28 @@ Two edges worth knowing:
   chained yet". It is now the path an install *froze into the wrapper* — chosen, and made, by
   a run that happened — so if it is missing while a wrapper is installed, the writer and the
   reader have parted company, and you are told.
+
+## Developing
+
+```bash
+npm test                       # typecheck (src + test + scripts), then run the suite
+npm run build                  # flat JavaScript into dist/
+node scripts/demo-fleet.ts     # the invented fleet the README's captures are taken of
+```
+
+`demo-fleet` plays an invented day into a real `serve` — the real collector, the real
+renderer, both documented sources standing in as a shell script and a directory of payloads —
+because a screenshot of a real machine carries working directories, prompts and costs, and
+nothing real enters this repo.
+
+CI runs the suite on Node 22 and 24, on Linux and macOS, with `TARMAC_REQUIRE_DASH=1` so a
+machine without dash cannot report a green build it did not earn; a separate job builds
+`dist/` and runs it on Node 20 — the oldest version `engines` promises, and the only place
+the published artefact is ever executed. Releases are cut by hand
+([`PUBLISHING.md`](../PUBLISHING.md)).
+
+The suite runs the TypeScript sources directly through Node's type stripping, so it needs
+Node ≥ 22.18 to *develop*; what ships in `dist/` is plain ES2022 and runs on Node ≥ 20.
 
 ## Capturing a new Claude Code version
 
