@@ -5,17 +5,28 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { buildFleet } from '../src/fleet.ts';
 import { buildMap, PULSE_WITHIN_MS } from '../src/map.ts';
-import { health, row } from './fleet-fixtures.ts';
+import { NOW, health, row } from './fleet-fixtures.ts';
 import type { Fleet, FleetHealth, FleetRow } from '../src/fleet.ts';
+import type { FleetMap, MapNode } from '../src/map.ts';
+import type { Session } from '../src/sessions.ts';
 
 const fleet = (rows: FleetRow[], h: Partial<FleetHealth> = {}): Fleet => ({ rows, health: health(h) });
 
-const only = (r: Partial<FleetRow>): ReturnType<typeof buildMap>['nodes'][number] =>
-  buildMap(fleet([row(r)])).nodes[0];
+/**
+ * Every node the map holds, in the order it is drawn — the berths in theirs, and inside each
+ * one the cards before the strips. The count these flatten to is the invariant the whole view
+ * is checked against: whatever the frames do with an entry, none of them may swallow one.
+ */
+const nodesOf = (map: FleetMap): MapNode[] => map.berths.flatMap((b) => [...b.sessions, ...b.agents]);
+const names = (map: FleetMap): (string | null)[] => nodesOf(map).map((n) => n.row.name);
+const labels = (map: FleetMap): string[] => map.berths.map((b) => b.label);
+
+const only = (r: Partial<FleetRow>): MapNode => nodesOf(buildMap(fleet([row(r)])))[0];
 
 test('a busy session becomes a busy node', () => {
-  const { nodes } = buildMap(fleet([row({ busy: true })]));
+  const nodes = nodesOf(buildMap(fleet([row({ busy: true })])));
   assert.equal(nodes.length, 1);
   assert.equal(nodes[0].state, 'busy');
 });
@@ -132,10 +143,10 @@ test('a session with no reading never pulses', () => {
 // ── agents in flight ─────────────────────────────────────────────────────────────────────
 // `claude agents --json` prints interactive sessions and background ones in the same array,
 // with `kind` as the only thing separating them and no field linking an agent to whoever
-// dispatched it. So the map gives every entry a node of its own and merely PLACES the agents
-// next to the session sharing their working directory — the one field both carry. Nesting
-// one inside the other would be an edge the source never published, and it would let the map
-// show a smaller fleet than the table on the same page.
+// dispatched it. So the map gives every entry a node of its own and merely GROUPS the nodes
+// read in one working directory — the one field both carry — into a berth. Nesting one node
+// inside another would be an edge the source never published, and it would let the map show a
+// smaller fleet than the table on the same page.
 
 // The invariant the whole view is checked against.
 test('every session in the fleet is a node on the map, whatever its kind', () => {
@@ -145,7 +156,7 @@ test('every session in the fleet is a node on the map, whatever its kind', () =>
     row({ sessionId: 'c', kind: 'something-new', cwd: '/x' }),
     row({ sessionId: 'd', kind: null, cwd: null }),
   ];
-  assert.equal(buildMap(fleet(rows)).nodes.length, rows.length);
+  assert.equal(nodesOf(buildMap(fleet(rows))).length, rows.length);
 });
 
 test('an interactive session is a session node', () => {
@@ -174,61 +185,187 @@ test('a session with no kind at all is a session node', () => {
 // Same tolerance `buildFleet` applies to schema drift: a signal that fires for EVERY row is a
 // change in the source, not a fleet that suddenly went dark.
 test('a fleet with no interactive session is read as a renamed kind, not as a fleet of agents', () => {
-  const { nodes } = buildMap(
+  const map = buildMap(
     fleet([
       row({ sessionId: 'a', kind: 'terminal', cwd: '/x', name: 'a' }),
       row({ sessionId: 'b', kind: 'terminal', cwd: '/y', name: 'b' }),
     ]),
   );
-  assert.deepEqual(nodes.map((n) => n.role), ['session', 'session']);
+  assert.deepEqual(nodesOf(map).map((n) => n.role), ['session', 'session']);
 });
 
 test('one interactive session is enough to read the other kinds as agents', () => {
-  const { nodes } = buildMap(
+  const map = buildMap(
     fleet([
       row({ sessionId: 'a', kind: 'interactive', cwd: '/x', name: 'a' }),
       row({ sessionId: 'b', kind: 'background', cwd: '/x', name: 'b' }),
     ]),
   );
-  assert.deepEqual(nodes.map((n) => n.role), ['session', 'agent']);
+  assert.deepEqual(nodesOf(map).map((n) => n.role), ['session', 'agent']);
 });
 
-test('an agent is placed right after the session sharing its working directory', () => {
-  const { nodes } = buildMap(
+// ── the berth ────────────────────────────────────────────────────────────────────────────
+//
+// One frame per working directory, and that is the WHOLE of what the frame claims: these
+// nodes were read in one directory. Not that one dispatched another, not that a session owns
+// the agents beside it — `claude agents --json` publishes no such field, and a berth holding
+// two sessions and two agents says nothing about which of the four asked for which.
+
+test('nodes read in one directory share a berth, labelled with the project', () => {
+  const map = buildMap(
     fleet([
-      row({ sessionId: 'a', kind: 'interactive', cwd: '/Users/jane/apollo', name: 'apollo-7a' }),
-      row({ sessionId: 'b', kind: 'interactive', cwd: '/Users/jane/orion', name: 'orion-11' }),
-      row({ sessionId: 'c', kind: 'background', cwd: '/Users/jane/apollo', name: 'sweep-01' }),
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/Users/jane/apollo', project: 'apollo', name: 'apollo-7a' }),
+      row({ sessionId: 'b', kind: 'background', cwd: '/Users/jane/apollo', project: 'apollo', name: 'sweep-01' }),
     ]),
   );
-  assert.deepEqual(nodes.map((n) => n.row.name), ['apollo-7a', 'sweep-01', 'orion-11']);
+  assert.deepEqual(labels(map), ['apollo']);
+  assert.deepEqual(map.berths[0].sessions.map((n) => n.row.name), ['apollo-7a']);
+  assert.deepEqual(map.berths[0].agents.map((n) => n.row.name), ['sweep-01']);
 });
 
-test('an agent whose directory matches no session comes last, and is still there', () => {
-  const { nodes } = buildMap(
+test('two directories are two berths, and neither borrows the other project', () => {
+  const map = buildMap(
     fleet([
-      row({ sessionId: 'a', kind: 'background', cwd: '/Users/jane/gone', name: 'orphan-01' }),
-      row({ sessionId: 'b', kind: 'interactive', cwd: '/Users/jane/apollo', name: 'apollo-7a' }),
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/Users/jane/apollo', project: 'apollo', name: 'apollo-7a' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/Users/jane/orion', project: 'orion', name: 'orion-11' }),
+      row({ sessionId: 'c', kind: 'background', cwd: '/Users/jane/apollo', project: 'apollo', name: 'sweep-01' }),
     ]),
   );
-  assert.deepEqual(nodes.map((n) => n.row.name), ['apollo-7a', 'orphan-01']);
+  assert.deepEqual(labels(map), ['apollo', 'orion']);
+  assert.deepEqual(names(map), ['apollo-7a', 'sweep-01', 'orion-11']);
 });
 
-// Two directories nobody could read are not the same directory.
-test('an unknown working directory places nothing next to anything', () => {
-  const { nodes } = buildMap(
+// Two sessions in one checkout collected the same agents twice while the map was a flat list
+// and each session gathered its own. A berth is a group, and an agent belongs to one.
+test('two sessions in one directory share one berth, and the agents in it are not doubled', () => {
+  const map = buildMap(
     fleet([
-      row({ sessionId: 'a', kind: 'interactive', cwd: null, name: 'a' }),
-      row({ sessionId: 'b', kind: 'background', cwd: null, name: 'nowhere-01' }),
-      row({ sessionId: 'c', kind: 'interactive', cwd: '/Users/jane/apollo', name: 'c' }),
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/w', project: 'harbor', name: 'harbor-3f' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/w', project: 'harbor', name: 'harbor-9k' }),
+      row({ sessionId: 'c', kind: 'background', cwd: '/w', project: 'harbor', name: 'sweep-01' }),
     ]),
   );
-  assert.deepEqual(nodes.map((n) => n.row.name), ['a', 'c', 'nowhere-01']);
+  assert.equal(map.berths.length, 1);
+  assert.deepEqual(names(map), ['harbor-3f', 'harbor-9k', 'sweep-01']);
+});
+
+// The berths are in the fleet's own order, taken at the FIRST node of each — so this one runs
+// through `buildFleet`, which is where that order is decided. The sort puts a session halted
+// on a human above everything else (#47), and a frame drawn around it that filed it three rows
+// down would have undone the one rank that exists for the reader rather than for the fleet.
+test('a waiting session pulls its berth to the front, through the fleet that sorted it', () => {
+  const session = (over: Partial<Session>): Session => ({
+    sessionId: 's',
+    pid: 1,
+    cwd: '/Users/jane/apollo',
+    name: 'apollo-7a',
+    kind: 'interactive',
+    startedAt: null,
+    status: 'idle',
+    waitingFor: null,
+    busy: false,
+    ...over,
+  });
+  const map = buildMap(
+    buildFleet({
+      sessions: [
+        session({ sessionId: 'a' }),
+        session({
+          sessionId: 'b',
+          cwd: '/Users/jane/orion',
+          name: 'orion-11',
+          status: 'waiting',
+          waitingFor: 'permission prompt',
+          busy: null,
+        }),
+      ],
+      snapshots: new Map(),
+      now: NOW,
+    }),
+  );
+  assert.deepEqual(labels(map), ['orion', 'apollo']);
+});
+
+// An orphan is not demoted to the end any more: it has a frame of its own, so it is a berth
+// like any other and the fleet's sort decides where it comes. Which is what a waiting one
+// needs — the shape that used to file it last was the flat grid, not the data.
+test('an agent whose directory matches no session gets a berth of its own', () => {
+  const map = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'background', cwd: '/Users/jane/gone', project: 'gone', name: 'orphan-01' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/Users/jane/apollo', project: 'apollo', name: 'apollo-7a' }),
+    ]),
+  );
+  assert.deepEqual(labels(map), ['gone', 'apollo']);
+  assert.deepEqual(map.berths[0].sessions, [], 'a berth with nothing but the agent in it');
+  assert.deepEqual(map.berths[0].agents.map((n) => n.row.name), ['orphan-01']);
+});
+
+// Two directories nobody could read are not the same directory, so a frame around both would
+// be the one claim this whole shape exists to refuse.
+test('an unknown working directory is never a directory two nodes share', () => {
+  const map = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: null, project: null, name: 'a' }),
+      row({ sessionId: 'b', kind: 'background', cwd: null, project: null, name: 'nowhere-01' }),
+    ]),
+  );
+  assert.equal(map.berths.length, 2);
+  assert.deepEqual(names(map), ['a', 'nowhere-01']);
+});
+
+// The other shape of the same absence, and the one a null check walks straight past.
+// `readSessions` carries a `cwd` of `''` through verbatim, and `buildFleet` reads it as no
+// directory at all — `project` comes out null. Keyed on the string, every such node landed in
+// one berth: a frame captioned "no directory" asserting a directory they share.
+test('an empty working directory is an absence too, not a directory two nodes share', () => {
+  const map = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: '', project: null, name: 'a' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '', project: null, name: 'b' }),
+    ]),
+  );
+  assert.equal(map.berths.length, 2, 'one frame each, and neither claims the other');
+  assert.deepEqual(labels(map), ['no directory', 'no directory']);
+});
+
+// The invariant the label cannot carry, and the reason the grouping is keyed on the DIRECTORY
+// and never on the project: the project is the basename, so two checkouts of one repository
+// answer to the same word. Grouped by that word, three nodes read in two directories came out
+// under one frame — which is the single claim this shape exists to refuse, made in the one
+// case a reader cannot see through, because the page never prints the path.
+test('two checkouts of one project are two berths, however alike their labels', () => {
+  const map = buildMap(
+    fleet([
+      row({ sessionId: 'a', kind: 'interactive', cwd: '/Users/jane/work/atlas', project: 'atlas', name: 'atlas-7a' }),
+      row({ sessionId: 'b', kind: 'interactive', cwd: '/Users/jane/fork/atlas', project: 'atlas', name: 'atlas-9k' }),
+      row({ sessionId: 'c', kind: 'background', cwd: '/Users/jane/fork/atlas', project: 'atlas', name: 'sweep-01' }),
+    ]),
+  );
+  assert.equal(map.berths.length, 2, 'one frame per directory, not one per name');
+  assert.deepEqual(labels(map), ['atlas', 'atlas']);
+  assert.deepEqual(map.berths[0].sessions.map((n) => n.row.name), ['atlas-7a']);
+  assert.deepEqual(map.berths[1].sessions.map((n) => n.row.name), ['atlas-9k']);
+  assert.deepEqual(map.berths[1].agents.map((n) => n.row.name), ['sweep-01'], 'the agent is in its own checkout');
+});
+
+// And it says which kind of nothing it is, in words — the vocabulary the dials use for a
+// reading they do not have. An empty frame label is a frame that looks like a bug.
+test('a berth whose directory nobody could read says so', () => {
+  const map = buildMap(fleet([row({ cwd: null, project: null })]));
+  assert.deepEqual(labels(map), ['no directory']);
+});
+
+// The one directory that HAS been published and still has no project name: the root, whose
+// basename is the empty string. It is not the case above — something was read — and an empty
+// label is not a label at all: the renderer answers an absent value with a dash element, which
+// in the frame's `aria-label` is markup where a name should be.
+test('a session at the root is labelled with the directory, not with an empty frame', () => {
+  const map = buildMap(fleet([row({ cwd: '/', project: '' })]));
+  assert.deepEqual(labels(map), ['/']);
 });
 
 test('the fleet decides the order of the sessions, and the map keeps it', () => {
-  const { nodes } = buildMap(
-    fleet([row({ sessionId: 'a', name: 'first' }), row({ sessionId: 'b', name: 'second' })]),
-  );
-  assert.deepEqual(nodes.map((n) => n.row.name), ['first', 'second']);
+  const map = buildMap(fleet([row({ sessionId: 'a', name: 'first' }), row({ sessionId: 'b', name: 'second' })]));
+  assert.deepEqual(names(map), ['first', 'second']);
 });

@@ -12,11 +12,31 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The map groups its nodes by working directory.** One frame — a berth — per directory,
+  labelled with its project, the sessions of that directory as cards inside it and the agents
+  docked underneath as strips. It replaces a flat grid in which an agent was merely placed next
+  to a session and had to name its own directory to be checked, on a page where the grid wraps
+  wherever the viewport says. What the frame claims is exactly one thing: these nodes were read
+  in the same directory. **It is not a parentage** — `claude agents --json` publishes nothing
+  that ties an agent to whoever dispatched it, so no label, no position and no line inside a
+  berth says one node asked for another, and a berth holding two sessions and two agents makes
+  no claim about which of the four asked for which. An agent whose directory matches no session
+  gets a berth of its own instead of being filed last; a node whose directory the source did
+  not publish gets one labelled `no directory`, because two directories nobody could read are
+  not the same directory. The berths come in the fleet's own order, each taken at its first
+  node, so a session halted on a human still lifts itself — and now its frame — to the front.
+  Inside a berth a card is headed by its session name, the project having moved to the label
+  above it. The grouping is keyed on the directory and never on the label, because two
+  checkouts of `atlas` answer to one word — which is also why replays stay flat: the record
+  keeps a project name and never the directory it was read in, and it is not being widened
+  until a frame could be earned. The line under the scrubber says so, where a reader reaching
+  for the handle is looking. (#58)
+
 - **A background agent is drawn as a strip on the map, not as a small dial.** It was a card at
   three quarters scale, which meant a context ring on a session that has no terminal to draw a
   statusline frame with — a gauge that can never fill, captioned "not chained", the words of a
   fault someone could go and fix. The strip carries what the source really publishes about an
-  agent: its state, its project, the kind it calls itself, and the prompt it was named after,
+  agent: its state, the kind it calls itself, and the prompt it was named after,
   with the state in the same glyph and a three-pixel accent down its left edge. Nothing is
   claimed where the source published nothing — not a percentage, not a dash. What it did
   publish is printed inline and labelled, `ctx 41% · Fable 5 · max`, dated when the reading is

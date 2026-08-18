@@ -332,7 +332,8 @@ says fewer things (below).
 The sort puts `waiting` first, then busy, then unknown, with idle last — the row that has
 stopped until someone answers it is the one that must not be under the fold, and a fleet holds
 one or two of those at a time. It is the fleet's own order, the one the table uses; the map
-draws it with each agent lifted out to sit beside its session (below).
+groups it into berths (below), each of which takes its place at its first node — so a session
+halted on a human lifts the frame around it to the front of the page along with itself.
 
 The state and the reading are two different clocks and are never merged. `busy` comes from
 `claude agents --json`, read at the moment you asked; the percentage comes from a file that
@@ -380,23 +381,35 @@ answer this tool exists to refuse. Under `prefers-reduced-motion: reduce` it sto
 stays as a faint ring: the movement goes, the fact it carries does not. It is also written out
 beside the dial, so the claim is in the markup and not only in the drawing.
 
-**Background agents.** `claude agents --json` prints interactive and background sessions in
-one array, and publishes nothing that ties an agent to whoever dispatched it. So the map does
-not draw one: an agent is a strip placed *next to* the session sharing its working directory —
-the only field both carry — and it keeps a node of its own, with its own project on it, even
-when no session matches. An edge would claim a parentage the source does not contain; nesting
-would let this page show a smaller fleet than the table beside it; and nothing points at the
-neighbouring node either, because the grid wraps where the viewport says and the fleet's sort
-can hand the same agent a different neighbour on the next poll.
+**Berths: the nodes are grouped by working directory.** A frame per directory, labelled with
+its project in small uppercase type, the sessions of that directory as cards inside it and the
+agents docked underneath as strips, across the frame. The working directory is the only field
+every kind of node carries, so it is the only thing the page can group by — and the label is
+the entire claim. **A berth says "read in the same directory". It never says who dispatched
+whom.** `claude agents --json` publishes no such field, so a berth holding two sessions and
+two agents makes no claim about which of the four asked for which: no label, no position and
+no line inside a frame means "parent of". The day that relation is published, it can be drawn
+between nodes already sitting side by side, without a frame moving.
 
-A strip is a band of text, left-aligned, half the height of the card beside it: the state in
-the same glyph a node uses and again in a three-pixel accent down its left edge, then the
-project, the kind it calls itself, and the prompt it was named after on the line below —
-ellipsised to that line. A waiting agent captions itself with what it waits for, like any
-other node. What it has no room for and no source for is the dial: the arc, its weight and
-the halo are all drawn from a statusline frame, and there is no terminal here to draw one. A
-ring on an agent could never fill, and the middle of it said `not chained` — the words of a
-fault someone could go and repair (`tarmac install`), about a session no install can cover.
+Two directories that end in the same folder name are two berths wearing one label — the label
+is the basename, and the full path is not printed on this page any more than anywhere else.
+Which is also why the grouping is keyed on the directory and never on the label: two checkouts
+of `atlas` answer to one word, and a frame drawn on that word would claim a directory they do
+not share. A node whose working directory the source did not publish is a berth of its own,
+labelled `no directory`: two directories nobody could read are not the same directory. So is an
+agent whose directory matches no session, because a frame is a claim about a directory, and
+that agent's is nobody else's.
+
+**Background agents.** An agent is a strip: a band of text, left-aligned, half the height of a
+card, docked under the cards of its berth. The state in the same glyph a node uses and again in
+a three-pixel accent down its left edge, then the prompt it was named after — ellipsised to
+its line — and the kind it calls itself at the end of it. Not the project: the berth around it
+says the directory once, for every node in it. A waiting agent captions itself with what it
+waits for, like any other node. What it has no room for and no source for is the dial: the
+arc, its weight and the halo are all drawn from a statusline frame, and there is no terminal
+here to draw one. A ring on an agent could never fill, and the middle of it said `not chained`
+— the words of a fault someone could go and repair (`tarmac install`), about a session no
+install can cover.
 
 The number is not refused, though. **A strip prints what that session's snapshot published,
 and nothing where nothing was published.** The percentage, the model and the effort come out
@@ -445,6 +458,15 @@ A replay is never allowed to pass for the present:
 - **no halos.** The halo means a reading landed moments ago, which is never true of a sample
 - a session absent from a sample is absent from the map, never a dial at zero
 - an agent replays as its kind and its numbers. The ring holds no names, so neither does this
+  — and a replayed card is headed by its project where a live one, framed by a berth that
+  already says the directory, is headed by its session name
+- **no berths.** The ring keeps a project name and never the working directory it was read in,
+  and a basename is not a directory: a frame drawn on it would group two checkouts of `atlas`
+  into one, claiming the very thing a berth exists to be trusted about. So a replayed fleet is
+  drawn flat, in the order the sample carries — with no directory to group on, there is no
+  grouping to put a node anywhere else. The alternative was to widen the record until a frame
+  could be earned; it already shows less than the live view does, on purpose, and one more
+  field in every one of 1440 samples buys one border
 - the poll goes on underneath, so returning to now is instant and a page left on replay does
   not rot
 - the banner carries `role="status"` and the minute travels with the handle as its
@@ -455,13 +477,11 @@ whose every reading failed says *that* rather than reading like a serve which ha
 The handle steps through readings, not minutes, so the line under it also names how many
 minutes have none.
 
-Two things it deliberately does not do. **It does not date the readings it draws**: the ring
+One thing it deliberately does not do. **It does not date the readings it draws**: the ring
 keeps each reading, never how old that reading was, so a replayed arc can be neither the solid
 one of a fresh reading nor the thin amber one of a stale reading. It gets a third weight of its
 own — full colour, a shade lighter, `data-reading="undatable"` in the markup — and the line
-under the scrubber says why. And it does not place an agent beside the session it shares a
-directory with, because the ring holds no working directory: the past is drawn in the order the
-sample carries.
+under the scrubber says why.
 
 A record that is refreshed under a reader who has taken hold of it is not swapped: the answer
 re-asks whether anyone is scrubbing at the moment it lands, and a refresh that fails leaves the
