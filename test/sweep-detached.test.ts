@@ -1,20 +1,22 @@
 // The sweep runs beside the frame, not inside it (#8) — asked of the real generated script,
 // with the cost of the sweep made visible instead of guessed.
 //
-// `test/sweep-perf.test.ts` measures the frame against a real 20 000-file stock, which is
-// the honest end-to-end number and, for the same reason, a number that moves with whatever
-// machine runs it. These tests pin the PROPERTY rather than the duration: a `find` on the
-// PATH that takes a full second to answer turns "the frame does not wait for the sweep" into
-// something a clock can settle on any machine, and turns "one sweep per hour, not one per
+// `test/sweep-perf.test.ts` puts a real 20 000-file backlog behind the frame and counts what
+// the frame charged to itself; it still prints the end-to-end milliseconds, which are honest
+// and move with whatever machine runs it, and asserts nothing about them (#65). These tests
+// pin the same property from the other side, on a handful of files: a `find` on the PATH that
+// takes a full second to answer turns "the frame does not wait for the sweep" into something a
+// clock can settle on any machine — two orders of magnitude apart, which is the one shape of
+// duration assertion a loaded runner cannot flip — and turns "one sweep per hour, not one per
 // frame" into a count that a second frame can contradict WHILE the first sweep is in flight —
 // the concurrency case a fast sweep can never build.
 //
-// Stubbing `find` is legitimate here and nowhere else in this suite: the wrapper calls it
-// unqualified, by design, so the PATH is part of its contract with the machine. The delaying
-// stubs delegate to the real one, so what is deleted is still decided by the real expression;
-// the refusing ones (#6) stand in for the two states no permission bit can build — a `touch`
-// that cannot stamp, a `find` with no `-mmin` to answer — and there the pin is that NOTHING
-// is decided: no sweep starts, nothing reaches stderr.
+// Stubbing `find` is legitimate here and in `sweep-perf.test.ts`, and nowhere else in this
+// suite: the wrapper calls it unqualified, by design, so the PATH is part of its contract with
+// the machine. The delaying stubs delegate to the real one, so what is deleted is still decided
+// by the real expression; the refusing ones (#6) stand in for the two states no permission bit
+// can build — a `touch` that cannot stamp, a `find` with no `-mmin` to answer — and there the
+// pin is that NOTHING is decided: no sweep starts, nothing reaches stderr.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
