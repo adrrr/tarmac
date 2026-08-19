@@ -235,8 +235,10 @@ export function renderTable({ rows, health }: Fleet): string {
  * basename, a status word tarmac does not know or the free text a `waiting` session gives, a
  * model name, an effort — and one long value in any of them used to push every row of the
  * table past 190 columns, on a terminal that wraps at 80. The caps are picked so that the
- * worst fleet a source can hand this renderer still fits 120: the page has CSS to wrap with,
- * a terminal has nothing. The other four are a percentage, an age, a cost and an hour count;
+ * worst fleet a source can hand this renderer stays within 120 CODE POINTS a row — display
+ * width is the wider, separate question (#80): a CJK glyph is one point and two columns, and
+ * the width math below counts `.length` like it always has. The page has CSS to wrap with, a
+ * terminal has nothing. The other four are a percentage, an age, a cost and an hour count;
  * their own magnitude is what bounds them, and no cap here would ever bite.
  */
 // STATE is the widest of the four because it is two facts on one line: the state, and the

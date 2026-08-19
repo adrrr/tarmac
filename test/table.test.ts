@@ -191,6 +191,21 @@ test('an unknown status word is cut too, and never past its column', () => {
   assert.ok(out.split('\n')[1].length <= 120);
 });
 
+// The same property pinned to the character: nineteen glyphs, the ellipsis, then padding. An
+// off-by-one in the cut (slice(0, cap) instead of cap - 1) moves the … one column right, and
+// the ≤ 120 assert above has too much slack to see one character.
+test('spends the ellipsis out of the cap, never past it', () => {
+  const out = renderTable(fleet([row({ project: 'p'.repeat(60) })]));
+  assert.match(out.split('\n')[1], /^p{19}… {2}/);
+});
+
+// "Cut by code point" is a claim about astral glyphs, so it is tested with one: a name of
+// rockets must never come back ending in half a surrogate pair.
+test('cuts by code point — never half a surrogate pair', () => {
+  const out = renderTable(fleet([row({ project: '🚀'.repeat(60) })]));
+  assert.doesNotMatch(out, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+});
+
 // A cap that bites a fleet nobody would call wide is a cap that hides the fleet. Every value
 // of the fixture fits its column, and none of them may come out marked.
 test('leaves an ordinary fleet whole', () => {
