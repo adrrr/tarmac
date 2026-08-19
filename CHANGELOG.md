@@ -59,6 +59,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   `undo tarmac uninstall` and stopped one line short of the prompt that follows it, which is
   the step the whole section is about. (#71)
 
+- **`tarmac list` keeps its columns inside a terminal.** Four of them carry a string the tool
+  did not choose the length of — the project, the state (an unrecognised status word, or the
+  free text a `waiting` session gives), the model, the effort — and one long value in any of
+  them pushed every row past 190 columns, wrapping the whole table on an 80-column terminal.
+  Each of the four now has a cap, with an ellipsis marking where a value was cut, so the worst
+  fleet a source can hand the renderer still fits 120 columns. The page is unchanged: it wraps
+  in CSS and has never needed one. (#49)
+
 ## [0.4.1] — 2026-08-18
 
 ### Added
