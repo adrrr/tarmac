@@ -36,26 +36,54 @@ const fixturesDir = path.join(repo, 'fixtures');
  * `2.1.232-waiting` into the checked list, where it silently vouches for a build that does
  * not exist and, being an exact-equality member, silences nothing real.
  *
- * The tag is peeled only when the rest of the name cannot claim it: lazily, so
- * `agents-2.1.226-rc.1.json` is still the prerelease it says it is rather than `2.1.226`
- * wearing a tag. A tag is a lowercase word for that reason — anything a version could
- * contain would take the ambiguity back.
+ * So the tag is behind a DOUBLE dash, and the version is the whole of what comes before it.
+ * A single dash used to separate both a tag and a prerelease, and the two were told apart by
+ * peeling the tag lazily — which reads `agents-2.1.226-rc.1.json` correctly and reads
+ * `agents-2.1.232-rc.json` as build `2.1.232` wearing a tag called `rc`. There is no lazy
+ * rule that gets both, because with one separator the two names are the same name. Nothing
+ * published carries a dotless prerelease today; a naming rule that only works while that
+ * holds is one nobody will remember the day it stops.
+ *
+ * A name that keeps neither shape is refused rather than bent into a version: `--WAITING`
+ * and `--waiting-two` break the "one lowercase word" rule the manual states, and a parser
+ * that quietly returns `2.1.232-WAITING` reports a build nobody ever captured (#50).
  */
-const agentsVersion = (file: string): string | null => /^agents-(.+?)(?:-[a-z]+)?\.json$/.exec(file)?.[1] ?? null;
+const AGENTS_FIXTURE = /^agents-(\d+\.\d+\.\d+(?:-[0-9a-z.]+)?)(?:--[a-z]+)?\.json$/;
+
+const agentsVersion = (file: string): string | null => AGENTS_FIXTURE.exec(file)?.[1] ?? null;
+
+const STATUSLINE_FIXTURE = /^statusline-payload-(.+)-[^-]+\.json$/;
+
+/** What a fixture may be called, said once, in the words the failure below hands the reader. */
+const NAMING_RULE =
+  'an agents capture is `agents-<version>.json` or `agents-<version>--<tag>.json` (one lowercase word for the tag, ' +
+  'behind a double dash); a statusline capture is `statusline-payload-<version>-<tag>.json`';
 
 test('the checked versions are exactly the ones fixtures/ covers', () => {
   const files = fs.readdirSync(fixturesDir).filter((f) => f.endsWith('.json'));
-  const statusline = files
-    .map((f) => /^statusline-payload-(.+)-[^-]+\.json$/.exec(f)?.[1])
-    .filter((v): v is string => Boolean(v));
+  const statusline = files.map((f) => STATUSLINE_FIXTURE.exec(f)?.[1]).filter((v): v is string => Boolean(v));
   const agents = files.map(agentsVersion).filter((v): v is string => Boolean(v));
 
-  assert.deepEqual([...CHECKED_VERSIONS.statusline].sort(), [...new Set(statusline)].sort());
-  assert.deepEqual([...CHECKED_VERSIONS.agents].sort(), [...new Set(agents)].sort());
-  assert.equal(
-    files.length,
-    statusline.length + agents.length,
-    'every .json in fixtures/ is named so the guard can see it — an unrecognised name is an invisible fixture',
+  // Same rule in both failures: a version in one list and not the other usually means a
+  // fixture NAME parsed into a build nobody captured — check the name against the rule
+  // before touching CHECKED_VERSIONS (#50's "obvious wrong fix").
+  assert.deepEqual(
+    [...CHECKED_VERSIONS.statusline].sort(),
+    [...new Set(statusline)].sort(),
+    `a checked statusline version and fixtures/ disagree — ${NAMING_RULE}`,
+  );
+  assert.deepEqual(
+    [...CHECKED_VERSIONS.agents].sort(),
+    [...new Set(agents)].sort(),
+    `a checked agents version and fixtures/ disagree — ${NAMING_RULE}`,
+  );
+  // Named rather than counted: a file neither rule reads is an invisible fixture, and the
+  // reader of that failure is someone who has just captured one and needs the rule, not a
+  // pair of numbers that do not match.
+  assert.deepEqual(
+    files.filter((f) => agentsVersion(f) === null && !STATUSLINE_FIXTURE.test(f)),
+    [],
+    `fixtures/ holds a name no rule here reads — ${NAMING_RULE}`,
   );
 });
 
@@ -63,10 +91,33 @@ test('the checked versions are exactly the ones fixtures/ covers', () => {
 // invents a build, and a version mistaken for a tag drops a real one out of the checked list
 // — which is silence about a shape nobody captured, the failure this whole file exists for.
 test('a tagged agents fixture is a second capture of one build, never a version of its own', () => {
-  assert.equal(agentsVersion('agents-2.1.232-waiting.json'), '2.1.232', 'the tag says what the capture shows');
+  assert.equal(agentsVersion('agents-2.1.232--waiting.json'), '2.1.232', 'the tag says what the capture shows');
   assert.equal(agentsVersion('agents-2.1.232.json'), '2.1.232', 'and an untagged name is not shortened');
   assert.equal(agentsVersion('agents-2.1.226-rc.1.json'), '2.1.226-rc.1', 'a prerelease is a version, not a tag');
+  assert.equal(agentsVersion('agents-2.1.232-rc.json'), '2.1.232-rc', 'a dotless one is a version too');
+  assert.equal(agentsVersion('agents-2.1.232-rc--waiting.json'), '2.1.232-rc', 'and it can still be tagged');
+  assert.equal(
+    agentsVersion('agents-2.1.232-waiting.json'),
+    '2.1.232-waiting',
+    'one dash is a version, whatever the word behind it means to a human — which is why the tag moved behind two',
+  );
   assert.equal(agentsVersion('statusline-payload-2.1.226-live.json'), null, 'the other family is not this one');
+});
+
+// The manual says a tag is one lowercase word. Unenforced, a name that breaks it did not
+// fail — it PARSED, into `2.1.232-WAITING`, a build nobody ever captured; the deepEqual above
+// then failed against CHECKED_VERSIONS, where the obvious wrong fix is to add that string to
+// the constant and vouch for a build that does not exist.
+test('a name that breaks the tag rule is refused, never bent into a version', () => {
+  for (const bad of [
+    'agents-2.1.232--WAITING.json',
+    'agents-2.1.232--waiting-two.json',
+    'agents-two.json',
+    'agents-.json',
+    'not-agents-2.1.232.json', // the anchor: a suffix match would read a version out of this
+  ]) {
+    assert.equal(agentsVersion(bad), null, `${bad} is not a version this suite may vouch for`);
+  }
 });
 
 // The other half of the same promise, and the half nothing was checking: the guard says
