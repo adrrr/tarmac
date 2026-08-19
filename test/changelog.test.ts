@@ -19,6 +19,16 @@
 // Published sections are append-only in one direction only — a new one is added above them and
 // they are never touched again. Editing history that has shipped is not a typo fix; it is a
 // claim about a tarball nobody can change.
+//
+// The guard is worth exactly the tags it can see, which is why the second test below is not a
+// nicety: a checkout carrying SOME of them would quietly check some of the sections and report
+// success. It compares the dated sections against the tags that ought to exist, and the version
+// tagging began at is written down rather than measured — measuring it from the tags present is
+// circular, and would excuse exactly the partial fetch it is meant to catch.
+//
+// `0.1.0`, `0.1.1` and `0.1.2` shipped before this repository tagged anything, and they are the
+// one thing here nothing can vouch for: there is no record of what they said. They sit below the
+// floor, deliberately and in writing, rather than being quietly skipped.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,6 +38,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repo = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (p: string): string => fs.readFileSync(path.join(repo, p), 'utf8');
 
 /**
  * `git`, anchored on the repository rather than on the runner's working directory — `node
@@ -47,26 +58,20 @@ function git(...args: string[]): string | null {
 }
 
 /**
- * The section a version owns: its `## [x.y.z] — date` heading and everything under it, up to
- * the next `## ` heading or the end of the file.
- *
- * The heading is part of the section on purpose. Re-dating a release that has shipped is the
- * same lie as re-writing its bullets, and the date is the half a merge is least likely to
- * touch and a tidy-up most likely to.
- *
- * Compared after `trimEnd`: how many blank lines separate a section from the next heading is a
- * property of its neighbour, not of the release, and it changes whenever a new version is
- * added above. Every real artefact — a bullet added, removed, reworded, a date moved — survives
- * that trim.
+ * Which lines are section headings, which is not the same question as which lines start with
+ * `## `.
  *
  * A `## ` inside a code fence is not a heading. No entry carries a fence today, but the day one
- * quotes a markdown sample the boundary would move — identically in both trees, which is the
- * bad way for it to be wrong: the sections would still match while everything below the fence
- * went unread. `###` is not a boundary either; it is the `Added`/`Changed`/`Fixed` level.
+ * quotes a markdown sample the boundary would move — identically in both trees, which is the bad
+ * way for it to be wrong: the sections would still compare equal while everything below the
+ * fence went unread. `###` is not a boundary either; it is the `Added`/`Changed`/`Fixed` level.
+ *
+ * `fenceLeftOpen` is reported rather than ignored because the failure it causes is a lie: one
+ * unclosed fence hides every heading after it, and a section that is plainly there is then
+ * reported as having disappeared.
  */
-function section(changelog: string, version: string): string | null {
+function scan(changelog: string): { lines: string[]; isHeading: boolean[]; fenceLeftOpen: boolean } {
   const lines = changelog.split('\n');
-
   const isHeading: boolean[] = [];
   let fenced = false;
   for (const line of lines) {
@@ -78,7 +83,24 @@ function section(changelog: string, version: string): string | null {
     }
     isHeading.push(!fenced && line.startsWith('## '));
   }
+  return { lines, isHeading, fenceLeftOpen: fenced };
+}
 
+/**
+ * The section a version owns: its `## [x.y.z] — date` heading and everything under it, up to
+ * the next heading or the end of the file.
+ *
+ * The heading is part of the section on purpose. Re-dating a release that has shipped is the
+ * same lie as re-writing its bullets, and the date is the half a merge is least likely to
+ * touch and a tidy-up most likely to.
+ *
+ * Compared after `trimEnd`: how many blank lines separate a section from the next heading is a
+ * property of its neighbour, not of the release, and it changes whenever a new version is
+ * added above. Every real artefact — a bullet added, removed, reworded, a date moved — survives
+ * that trim.
+ */
+function section(changelog: string, version: string): string | null {
+  const { lines, isHeading } = scan(changelog);
   const start = lines.findIndex((l, i) => isHeading[i] && l.startsWith(`## [${version}]`));
   if (start === -1) return null;
   let end = lines.length;
@@ -89,6 +111,42 @@ function section(changelog: string, version: string): string | null {
     }
   }
   return lines.slice(start, end).join('\n').trimEnd();
+}
+
+/** Every version that owns a dated section, in the order the file gives them. */
+function datedVersions(changelog: string): string[] {
+  const { lines, isHeading } = scan(changelog);
+  return lines
+    .filter((_, i) => isHeading[i])
+    .map((l) => /^## \[(\d+\.\d+\.\d+)\]/.exec(l)?.[1])
+    .filter((v): v is string => v !== undefined);
+}
+
+/** Numeric precedence, so `0.10.0` sorts above `0.9.0` rather than below it. */
+function atLeast(a: string, b: string): boolean {
+  const [x, y] = [a.split('.').map(Number), b.split('.').map(Number)];
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return true;
+}
+
+/**
+ * The tags that name a release, each kept beside the version it spells: one is what `git show`
+ * is given, the other is what the heading says, and they are not the same string.
+ *
+ * Releases only — a prerelease documents itself under the version it is a candidate for, so
+ * `v1.0.0-rc.1` has no section of its own to compare.
+ */
+function taggedReleases(): { tag: string; version: string }[] {
+  const listed = git('tag', '--list');
+  assert.ok(
+    listed !== null,
+    'git could not list tags in this checkout, so this guard cannot compare anything — it fails rather than pass on nothing',
+  );
+  return listed
+    .split('\n')
+    .map((l) => l.trim())
+    .map((tag) => ({ tag, version: /^v(\d+\.\d+\.\d+)$/.exec(tag)?.[1] }))
+    .filter((r): r is { tag: string; version: string } => r.version !== undefined);
 }
 
 /** The first line at which two sections part company, for a message that points at the edit. */
@@ -104,32 +162,21 @@ function firstDifference(tagged: string, current: string): string {
 }
 
 test('every published CHANGELOG section still says what it said when it was tagged', () => {
-  const listed = git('tag', '--list', 'v*');
-  assert.ok(
-    listed !== null,
-    'git could not list tags in this checkout, so this guard cannot compare anything — it fails rather than pass on nothing',
-  );
-
-  // The tag is kept beside the version it names rather than rebuilt from it: one is what
-  // `git show` is given, the other is what the heading spells, and they are not the same
-  // string. Releases only — a prerelease documents itself under the version it is a candidate
-  // for, so `v1.0.0-rc.1` has no section of its own to compare.
-  const releases = listed
-    .split('\n')
-    .map((l) => l.trim())
-    .map((tag) => ({ tag, version: /^v(\d+\.\d+\.\d+)$/.exec(tag)?.[1] }))
-    .filter((r): r is { tag: string; version: string } => r.version !== undefined);
+  const releases = taggedReleases();
 
   // The failure this whole file is built to avoid, one level up. A shallow checkout has no
-  // tags, every loop below runs zero times, and the run is green having asserted nothing —
-  // a guard reporting success for the one reason it should report alarm. `actions/checkout`
-  // fetches no tags by default, which is why the CI assertion below is not optional.
+  // tags, the loop below runs zero times, and the run is green having asserted nothing — a
+  // guard reporting success for the one reason it should report alarm.
   assert.ok(
     releases.length > 0,
     'no vX.Y.Z tags in this checkout: the comparison below would pass on an empty list. Run `git fetch --tags` (a shallow clone has none) — this guard reads the tags or it fails.',
   );
 
-  const current = fs.readFileSync(path.join(repo, 'CHANGELOG.md'), 'utf8');
+  const current = read('CHANGELOG.md');
+  assert.ok(
+    !scan(current).fenceLeftOpen,
+    'the CHANGELOG leaves a code fence open: every heading after it stops being read as one, so the sections below would be reported as missing when they are plainly there',
+  );
 
   for (const { tag, version } of releases) {
     const taggedFile = git('show', `${tag}:CHANGELOG.md`);
@@ -153,39 +200,83 @@ test('every published CHANGELOG section still says what it said when it was tagg
   }
 });
 
-// The guard above reads tags, and `actions/checkout` fetches none: its default `fetch-depth: 1`
-// downloads a single commit, and git's tag auto-following only picks up tags pointing at
-// objects it downloaded — which, at depth 1, is none of them.
+// What the comparison above cannot say for itself: it checks the versions it finds tags for, and
+// is silent about the rest. One tag present is enough to satisfy its floor, and four sections
+// then go unread while the suite reports success.
 //
-// `fetch-tags: true` does NOT fix that. With `fetch-depth` above zero, checkout builds a refspec
-// for the requested branch alone and `fetch-tags` merely suppresses `--no-tags`, leaving the
-// auto-follow that already reaches nothing. Only `fetch-depth: 0` swaps in the all-history
-// refspec, which carries `+refs/tags/*:refs/tags/*` — the tags are fetched by name rather than
-// hoped for. It costs nothing worth counting here: this repository's full history packs smaller
-// than a depth-1 clone plus tags.
+// That is not a hypothesis. `fetch-tags: true` at `fetch-depth: 1` delivers exactly the tag on
+// the commit it downloaded — which, on a push to `main` straight after a release, is the tag just
+// created. The cheap-looking workflow fix would therefore have produced this state, and it is
+// worse than fetching nothing: zero tags fails loudly, one tag passes quietly.
+test('every dated section since tagging began carries the tag that published it', () => {
+  const releases = taggedReleases();
+  assert.ok(releases.length > 0, 'no vX.Y.Z tags in this checkout, so nothing can be said about which sections are covered');
+
+  const current = read('CHANGELOG.md');
+  const dated = datedVersions(current);
+  assert.ok(dated.length > 0, 'no dated sections in the CHANGELOG — the assertions that follow would pass on nothing');
+
+  // A duplicated heading is broken for a reader whatever this file thinks, and it also splits a
+  // version in two, of which only the first is ever compared — a merge or a revert can leave
+  // exactly that, with the pristine copy on top and the rewritten one below.
+  const counted = new Map<string, number>();
+  for (const v of dated) counted.set(v, (counted.get(v) ?? 0) + 1);
+  const duplicated = [...counted].filter(([, n]) => n > 1).map(([v]) => v);
+  assert.deepEqual(duplicated, [], `versions with more than one dated section: ${duplicated.join(', ')} — only the first is ever read`);
+
+  // The floor is a fact about this project's history, not about this checkout, and that is the
+  // whole point. Deriving it from the tags present would be circular: a checkout carrying only
+  // `v0.5.0` would set the floor at 0.5.0, excuse the four sections below it, and report success
+  // on precisely the partial fetch this test exists to catch. Written down, it cannot move when
+  // the evidence does. It only ever needs lowering — a version released after 0.2.0 is covered
+  // by construction.
+  const TAGGING_BEGAN_AT = '0.2.0';
+  const tagged = new Set(releases.map((r) => r.version));
+  const unvouched = dated.filter((v) => atLeast(v, TAGGING_BEGAN_AT) && !tagged.has(v));
+  assert.deepEqual(
+    unvouched,
+    [],
+    `dated sections at or above ${TAGGING_BEGAN_AT} with no matching tag: ${unvouched.join(', ')} — nothing records what they published, so the comparison above skips them in silence. Either the tag is missing from this checkout (\`git fetch --tags\`) or the release was never tagged.`,
+  );
+});
+
+// The tests above read tags, and `actions/checkout` fetches none by default: at `fetch-depth: 1`
+// it passes `--no-tags`, so not one arrives.
+//
+// `fetch-tags: true` is the obvious cheaper fix and it is the wrong one. Above depth zero
+// checkout builds a refspec for the requested branch alone and `fetch-tags` only suppresses
+// `--no-tags`, leaving git's tag auto-following — which picks up tags pointing at objects it
+// downloaded. At depth 1 that is one commit: nothing on a normal push, and precisely the new tag
+// on the push that follows a release. A single tag is worse than none, because none is loud.
+// Only `fetch-depth: 0` swaps in the all-history refspec, which names `+refs/tags/*:refs/tags/*`
+// and fetches them all by name rather than hoping. It costs nothing worth counting here: this
+// repository's full history packs smaller than a depth-1 clone plus its tags.
 //
 // Asserted rather than commented because the guard's silence would be the symptom, and the
 // message on that silence would send the reader hunting through git rather than through a diff
 // that removed one line from a workflow.
-test('CI fetches the tags the guard above reads', () => {
-  const ci = fs.readFileSync(path.join(repo, '.github/workflows/ci.yml'), 'utf8');
-  const jobs = ci.split(/^jobs:$/m)[1] ?? '';
+test('CI fetches the tags the guards above read', () => {
+  const jobs = read('.github/workflows/ci.yml').split(/^jobs:$/m)[1] ?? '';
   const blocks = jobs.split(/^ {2}(?=[A-Za-z_])/m).slice(1);
   assert.ok(blocks.length > 0, 'no CI jobs matched — the assertion that follows would pass on nothing');
 
-  const running = blocks.filter((b) => /run: npm test/.test(b));
-  assert.ok(running.length > 0, 'no CI job runs `npm test` — the guard above never runs in CI');
+  const running = blocks.filter((b) => /run: npm (run )?test\b/.test(b));
+  assert.ok(running.length > 0, 'no CI job runs the suite — the guards above never run in CI');
 
-  // Anchored to a whole line, so it is the setting that satisfies this and not prose about it:
-  // the comment above the checkout step in `ci.yml` spells `fetch-depth: 0` too, and a substring
-  // search is answered by that comment alone once the setting under it has been deleted — this
-  // assertion passing on a workflow that fetches nothing, which is the exact shape of the bug
-  // the file is here to prevent. A comment line cannot match: `#` falls between the margin and
-  // the key.
-  const shallow = running.filter((b) => !/^\s*fetch-depth: 0\s*$/m.test(b)).map((b) => b.slice(0, b.indexOf(':')));
+  // Read per step, not per job, and anchored to a whole line. Both matter, and both were found
+  // by mutating this assertion rather than the workflow: a substring search over the job is
+  // answered by the comment that explains the setting, and a job-wide search is answered by
+  // `fetch-depth: 0` sitting under `setup-node`, where it is silently ignored. What has to be
+  // true is narrower than either — the checkout step itself carries it.
+  const shallow = running
+    .filter((b) => {
+      const steps = b.split(/^ {6}- /m).slice(1);
+      return !steps.some((s) => /^uses: actions\/checkout/.test(s) && /^\s*fetch-depth: 0\s*$/m.test(s));
+    })
+    .map((b) => b.slice(0, b.indexOf(':')));
   assert.deepEqual(
     shallow,
     [],
-    `CI jobs running the suite without \`fetch-depth: 0\` on their checkout: ${shallow.join(', ')} — with no tags fetched, the CHANGELOG guard compares nothing and passes`,
+    `CI jobs running the suite whose \`actions/checkout\` step has no \`fetch-depth: 0\`: ${shallow.join(', ')} — with no tags fetched, the CHANGELOG guard compares nothing and passes`,
   );
 });
