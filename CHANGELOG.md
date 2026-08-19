@@ -12,13 +12,15 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **A published CHANGELOG section can no longer be rewritten by a merge.** A branch cut before a
-  release commit carries its entry against the pre-release blob — the bullet sits under
-  `## [Unreleased]`, and so does the heading the release later renamed — so the 3-way merge parks
-  it inside the section the release has just dated, cleanly and without a conflict to review. The
-  merged tree then claims a tarball already on the registry contains a change it does not. It
-  happened twice in one morning, green both times, and hand review was the only thing that caught
-  it. `test/changelog.test.ts` now reads every `vX.Y.Z` tag and requires the section in the working
+- **A published CHANGELOG section can no longer be rewritten by a merge.** A release inserts its
+  dated heading beneath `## [Unreleased]` rather than renaming it, so the `### Changed` block
+  under it never moves — its bullets simply come to belong to the new section. A branch cut
+  before that commit appends its own entry after the very same `### Changed`, against context
+  the release left untouched, and the 3-way merge therefore parks it inside the section that has
+  just shipped: no conflict, nothing to review. The merged tree then claims a tarball already on
+  the registry contains a change it does not. It happened twice in one morning, green both times,
+  and hand review was the only thing that caught it.
+  `test/changelog.test.ts` now reads every `vX.Y.Z` tag and requires the section in the working
   tree to be what `git show vX.Y.Z:CHANGELOG.md` says it was, heading and date included, naming the
   version and the likely cause when it is not. The tags are the only record of what a version
   actually said, so the guard is worth exactly what it can read: it fails rather than skip when a

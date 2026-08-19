@@ -1,11 +1,13 @@
 // The CHANGELOG's published sections, held against the tags that published them.
 //
-// A branch cut before a release commit carries its entry against the pre-release blob: the
-// bullet sits under `## [Unreleased]`, and so does the heading the release later renamed. Git
-// resolves that as a clean 3-way merge — no conflict, nothing to review — and parks the bullet
-// inside the section the release just dated. The merged tree then claims a tarball that is
-// already on the registry contains a change it does not. Twice in one morning (#78, #79), CI
-// green both times, caught only by eye.
+// A release does not rename `## [Unreleased]`; it inserts a dated heading beneath it, and the
+// `### Changed` block below stays exactly where it was — the bullets do not move, they simply
+// come to belong to a new section. So a branch cut before that commit, which appends its own
+// bullet after the very same `### Changed`, merges against unchanged context: git resolves it
+// as a clean 3-way merge, no conflict, nothing to review, and the bullet lands inside the
+// section the release just dated. The merged tree then claims a tarball that is already on the
+// registry contains a change it does not. Twice in one morning (#78, #79), CI green both times,
+// caught only by eye.
 //
 // Nothing else here can catch it. The suite reads the CHANGELOG nowhere, `npm pack` does not
 // ship it, and a diff that adds a bullet to a released section is indistinguishable at a glance
