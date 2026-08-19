@@ -10,9 +10,26 @@ const ONE_HOME = 'bounded.ts';
  * `fetch` is judged where it is written, because its deadline IS one expression and belongs
  * next to the call, where a reader sees it. Line-based, so a fetch split over several lines
  * reads as unbounded — write it on one.
+ *
+ * The bound has to be `NET_DEADLINE_MS` and not merely SOME `AbortSignal.timeout`, because
+ * a number typed next to the call is how the first version of this rule was satisfied
+ * nineteen times over with 4000ms — until a loaded machine aborted two of those requests on
+ * a server that was answering them (#73). A literal passes review, reads as bounded, and is
+ * a guess about how fast a machine is; the shared constant is half the runner's own timeout.
+ * Copying a neighbouring call is how every one of the nineteen got written, so the neighbour
+ * is what the rule has to police.
  */
 const BARE_FETCH = /\bfetch\s*\(/;
-const BOUNDED = /AbortSignal\.timeout/;
+const BOUNDED = /AbortSignal\.timeout\(\s*NET_DEADLINE_MS\s*\)/;
+
+/**
+ * The rule above checks a NAME, and a name is cheap: `const NET_DEADLINE_MS = 4000` one line
+ * up satisfies it while writing back the exact literal it exists to refuse. So the shadow is
+ * banned outright outside the one home — the same move as judging the raw client at its
+ * import rather than at its call, and for the same reason. Importing the constant is not a
+ * declaration and does not match.
+ */
+const SHADOWS_DEADLINE = /\b(?:const|let|var)\s+NET_DEADLINE_MS\b/;
 
 /**
  * A raw `node:http` client is judged at the IMPORT, not the call, and that is the whole
@@ -47,7 +64,12 @@ export function unboundedWaits(file: string, source: string): string[] {
     if (opensWithComment(raw)) return;
     const line = stripComment(raw);
     const at = `${file}:${i + 1}`;
-    if (BARE_FETCH.test(line) && !BOUNDED.test(line)) found.push(`${at} needs an AbortSignal.timeout`);
+    if (BARE_FETCH.test(line) && !BOUNDED.test(line)) {
+      found.push(`${at} needs an AbortSignal.timeout(NET_DEADLINE_MS) from ${ONE_HOME}`);
+    }
+    if (SHADOWS_DEADLINE.test(line) && file !== ONE_HOME) {
+      found.push(`${at} must import NET_DEADLINE_MS from ${ONE_HOME}, not declare one of its own`);
+    }
     if (IMPORTS_RAW_CLIENT.test(line) && !TYPE_ONLY.test(line) && file !== ONE_HOME) {
       found.push(`${at} must use rawGet from ${ONE_HOME}, not a raw http client`);
     }

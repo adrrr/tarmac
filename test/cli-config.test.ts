@@ -17,7 +17,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { waitForOutput } from './bounded.ts';
+import { NET_DEADLINE_MS, waitForOutput } from './bounded.ts';
 import { tempDir } from './sandbox.ts';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
@@ -259,7 +259,7 @@ test('/api/fleet is judged by the configured threshold, not by the default', asy
   try {
     const port = /127\.0\.0\.1:(\d+)/.exec(out)?.[1];
     assert.ok(port, `no port in: ${out}`);
-    const fleet = (await (await fetch(`http://127.0.0.1:${port}/api/fleet`, { signal: AbortSignal.timeout(4000) })).json()) as {
+    const fleet = (await (await fetch(`http://127.0.0.1:${port}/api/fleet`, { signal: AbortSignal.timeout(NET_DEADLINE_MS) })).json()) as {
       rows: Array<{ stale: boolean }>;
       health: { staleAfterMs: number; stale: number };
     };
@@ -282,7 +282,7 @@ test('serve binds the port it was configured with, not one of its own choosing',
   const { child, out } = await serve(h);
   try {
     assert.match(out, new RegExp(`tarmac serving http://127\\.0\\.0\\.1:${wanted}\\b`), out);
-    const res = await fetch(`http://127.0.0.1:${wanted}/api/fleet`, { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(`http://127.0.0.1:${wanted}/api/fleet`, { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 200, 'and it is really answering there');
   } finally {
     child.kill('SIGKILL');
