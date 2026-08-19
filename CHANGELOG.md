@@ -12,6 +12,19 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **A published CHANGELOG section can no longer be rewritten by a merge.** A branch cut before a
+  release commit carries its entry against the pre-release blob — the bullet sits under
+  `## [Unreleased]`, and so does the heading the release later renamed — so the 3-way merge parks
+  it inside the section the release has just dated, cleanly and without a conflict to review. The
+  merged tree then claims a tarball already on the registry contains a change it does not. It
+  happened twice in one morning, green both times, and hand review was the only thing that caught
+  it. `test/changelog.test.ts` now reads every `vX.Y.Z` tag and requires the section in the working
+  tree to be what `git show vX.Y.Z:CHANGELOG.md` says it was, heading and date included, naming the
+  version and the likely cause when it is not. The tags are the only record of what a version
+  actually said, so the guard is worth exactly what it can read: it fails rather than skip when a
+  checkout has none, and CI fetches them with `fetch-depth: 0` — the default depth-1 checkout has
+  no tags at all, and `fetch-tags: true` does not change that above depth zero. (#81)
+
 - **A second capture of one build is tagged behind a double dash.** `agents-<version>--<tag>.json`,
   where the manual said `-<tag>`: with one separator, a tag and a dotless prerelease are the same
   name, and the lazy rule that read `agents-2.1.226-rc.1.json` correctly read

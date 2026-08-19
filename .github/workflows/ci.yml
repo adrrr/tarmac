@@ -30,7 +30,15 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         node: ['22', '24']
     steps:
+      # `fetch-depth: 0` for the tags, which `test/changelog.test.ts` compares the CHANGELOG's
+      # published sections against. The default depth-1 checkout fetches none — and neither
+      # does `fetch-tags: true`, which above depth zero only drops `--no-tags` and leaves git's
+      # auto-follow, which reaches no tag when one commit was downloaded. Only depth 0 swaps in
+      # the refspec that names `refs/tags/*`. Without it that guard compares an empty list and
+      # passes, which is the one way it can fail. Full history here packs under 3 MB.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
