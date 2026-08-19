@@ -31,35 +31,58 @@ const NO_RUNNER_DEADLINE_MS = 60_000;
  * report, "test timed out after 120000ms" is a shrug. The runner stays the outer net — and
  * a net is ALL it is: a test it times out is marked failed, but the socket left pending
  * keeps the file's process alive, so the run does not end, it hangs having already decided.
- * Measured on node 26: a file whose test timed out at 3s was still up nine seconds later,
- * and was killed from outside. That is why removing these deadlines is not an option.
+ * Measured on node 26: a file whose only test timed out at 3s was still running half a
+ * minute later, and left only when it was killed from outside. That is why removing these
+ * deadlines — the other fix #73 offered — is not an option.
  *
- * Exported for its own test. `--test-timeout` is read from `process.execArgv` because that
- * is where the runner republishes the flags of the run to each test file, and it is read in
- * the `=` form only: node normalises the space form into one before re-emitting the raw
- * pair, so the LAST `=` occurrence is the value in force under either spelling. Zero is not
- * a timeout — node treats `--test-timeout=0` as none at all — so it takes the fallback.
+ * Exported for its own test. `--test-timeout` is read from `process.execArgv`, where the
+ * runner republishes the flags of the run to each test file, and BOTH spellings are read
+ * because both really occur. The usual run leaves three copies: node dumps every option it
+ * holds, effective value in `=` form, then re-emits the raw argv after it — so `--test-timeout
+ * 30000` normally survives as an `=` too. Not always: under `--test-isolation=none` the dump
+ * is not there and the space form is ALL that is left (captured). Reading `=` only would take
+ * the fallback there, and a fallback LONGER than the runner's own timeout is the inversion
+ * this whole constant exists to prevent — the request would stop losing the race. Last
+ * occurrence of either spelling wins, as it does in node. Zero is not a timeout — node treats
+ * `--test-timeout=0` as none at all — so it takes the fallback.
+ *
+ * Floored, because the halving is the one place a fraction can appear and
+ * `AbortSignal.timeout()` refuses one: `--test-timeout=4001` would have thrown
+ * `ERR_OUT_OF_RANGE` out of all nineteen requests while the two helpers, which take a
+ * fractional delay quite happily, carried on — a breakage split in half is the worst kind.
  */
 export function netDeadlineFrom(argv: readonly string[]): number {
   let runnerMs = 0;
-  for (const arg of argv) {
-    const flag = /^--test-timeout=(\d+)$/.exec(arg);
-    if (flag) runnerMs = Number(flag[1]);
-  }
-  return runnerMs > 0 ? runnerMs / 2 : NO_RUNNER_DEADLINE_MS;
+  argv.forEach((arg, i) => {
+    const inline = /^--test-timeout=(\d+)$/.exec(arg);
+    if (inline) runnerMs = Number(inline[1]);
+    else if (arg === '--test-timeout' && /^\d+$/.test(argv[i + 1] ?? '')) runnerMs = Number(argv[i + 1]);
+  });
+  return runnerMs > 0 ? Math.floor(runnerMs / 2) : NO_RUNNER_DEADLINE_MS;
 }
 
 /**
  * The deadline every wait in this suite carries, for the run in progress.
  *
- * It is one number for the whole suite because it was twenty-two of them, all written 4000
- * or 20_000 next to the call and none of them derived from anything: four suites at once on
- * a busy machine aborted requests that servers were about to answer, in files whose slowest
- * test takes twelve seconds under that load (#73). A deadline typed by hand is a guess
- * about a machine, and the only machine-independent bound in reach is the runner's own —
- * hence this, and hence the static guard that now insists every `fetch` in the suite carry
- * exactly it. A test that needs a SHORT deadline because the deadline is what it is testing
- * passes its own, as the three below do.
+ * It is one number for the whole suite because it was twenty-two of them — 4000 written out
+ * at nineteen `fetch` calls, and three defaults nobody passes — and not one derived from
+ * anything. With four suites running at once, both requests in `cli-config.test.ts` aborted
+ * on a server that was answering them: a loopback request took longer than four seconds
+ * because the machine was busy, which is a fact about the machine and not about the code
+ * under test (#73). That is the whole argument. A hand-typed deadline is a guess about a
+ * machine; the runner's own timeout is the one bound in reach that is not.
+ *
+ * The other seventeen requests were never seen to fail — they move because a rule the
+ * suite can check beats seventeen numbers that happen to be the same today, and because
+ * the static guard now insists on this constant rather than on any literal.
+ *
+ * The cost is named, not hidden: a route that hangs takes 60s to report where 4000ms used
+ * to do it. That is the price of the deadline meaning "the machine is gone" rather than
+ * "the machine is busy", and it is only ever paid on a run that is already failing.
+ *
+ * A wait whose deadline is the thing under test passes its own, as the three below do. For
+ * `fetch` the guard leaves no such door: no test needs one today, and the day one does, the
+ * exception belongs in the rule rather than in a call nobody can find again.
  */
 export const NET_DEADLINE_MS = netDeadlineFrom(process.execArgv);
 

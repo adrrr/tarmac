@@ -31,22 +31,30 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **The suite's deadlines are the runner's, not a number typed next to each wait.** Every
-  network wait under `test/` carried one of its own — 4000ms on nineteen `fetch` calls and on
-  two poll budgets, 20s on the helper both serve harnesses block on — in files whose slowest
-  test takes twelve seconds when four of them run at once. Nothing was ever wrong with the
-  servers underneath: the client gave up on one that was answering, so a busy laptop or a CI
-  runner with noisy neighbours turned a correct suite red at random, on ephemeral ports that
-  could not collide. They share one deadline now, half of whatever `--test-timeout` the run
-  is under — 60s beneath `npm test`'s 120s, and a finite fallback for a file run on its own,
-  which node gives no per-test timeout at all. Half, so the request loses the race and the
-  failure names the URL instead of shrugging `test timed out after 120000ms`. Dropping the
-  deadlines and leaning on the runner was the tempting reading and it is the wrong one: a
-  test the runner times out is marked failed, but the socket left pending keeps the file's
-  process alive — measured on node 26, a file whose test timed out at 3s was still up nine
-  seconds later and had to be killed from outside. The static guard that keeps every `fetch`
-  in the suite bounded now insists on the shared constant rather than on any literal, since
-  copying the neighbouring call is how all nineteen came to be written. (#73)
+- **The suite's deadlines are the runner's, not a number typed next to each wait.** Every wait
+  under `test/` on a socket or on a child's output carried one of its own — 4000ms written out
+  at nineteen `fetch` calls, on `rawGet`'s socket deadline and on a poll budget, 20s on the
+  helper both serve harnesses block on and once more longhand in `cli-list`. With four suites
+  running at once, both requests in `cli-config.test.ts` aborted on a server that was answering
+  them: a loopback request took more than four seconds because the machine was busy, on
+  ephemeral ports that could not collide, so a laptop on battery or a CI runner with noisy
+  neighbours turned a correct suite red at random. They share one deadline now, half of
+  whatever `--test-timeout` the run is under — 60s beneath `npm test`'s 120s — read in both
+  spellings node uses, because under `--test-isolation=none` the spaced one is all that reaches
+  a test file, and a fallback longer than the runner's own timeout would be the inversion of
+  the whole point. Half, so the request loses the race and the failure names the URL instead of
+  shrugging `test timed out after 120000ms`. A file run on its own gets a finite fallback: node
+  gives it no per-test timeout at all, and neither does `--test-timeout=0`. Dropping the
+  deadlines and leaning on the runner was the tempting reading of the report and it is the
+  wrong one — a test the runner times out is marked failed, but the socket left pending keeps
+  the file's process alive, and a file whose test timed out at 3s was measured still running
+  half a minute later, waiting to be killed from outside. The static guard that keeps every
+  `fetch` in the suite bounded now insists on the shared constant rather than on any literal,
+  and refuses a local redeclaration of its name, since copying the neighbouring call is how all
+  nineteen came to be written. The seventeen requests in `server.test.ts` were never seen to
+  fail; they move because one rule the suite can check beats seventeen numbers that agree by
+  coincidence. The cost, named: a route that hangs now takes 60s to report where 4000ms used to
+  do it, and only ever on a run that is already failing. (#73)
 
 ## [0.5.0] — 2026-08-18
 

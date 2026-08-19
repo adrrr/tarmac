@@ -51,25 +51,32 @@ test('the one home may hold the raw client the others may not', () => {
 
 // ── the deadline all of them carry ────────────────────────────────────────────────────
 // A deadline is what the guard above is for; a SHORT one is the other half of the same
-// failure. Every wait in this suite carried a number typed next to it — 4000ms on nineteen
-// `fetch` calls and on two poll budgets, 20s on `waitForOutput` — in files whose slowest test
-// already takes twelve seconds when four of them run at once. Nothing was wrong with the
-// servers: the client gave up on one that was answering (#73). The number is derived from
-// the runner's own per-test timeout now, and the derivation is what is worth testing —
-// `process.execArgv` is the only place the runner publishes that timeout, and it does not
+// failure. Every wait in this suite carried a number typed next to it — 4000ms at nineteen
+// `fetch` calls, on `rawGet`'s socket deadline and on a poll budget, 20s on `waitForOutput`.
+// With four suites running at once both requests in `cli-config.test.ts` aborted on a server
+// that was answering: a loopback request took more than four seconds because the machine was
+// busy (#73). The number comes off the runner's own per-test timeout now, and THAT is what is
+// worth testing — `process.execArgv` is where the runner publishes it, and it does not
 // publish it in one shape.
 
 test('the deadline is half the runner timeout in force', () => {
   assert.equal(netDeadlineFrom(['--test-timeout=120000']), 60_000, "what `npm test`'s own 120s yields");
-  // Both shapes below are what `node --test` really leaves in execArgv, captured rather than
-  // guessed: it normalises the space form into an `=` one and re-emits the raw pair after it,
-  // and two flags leave both — the LAST `=` occurrence is always the one node applies.
+  // Every array below is the `--test-timeout` part of a real `execArgv`, run and captured —
+  // the rest of it, some thirty-odd entries of node dumping its own options, is cut. The dump
+  // is where the `=` copy of a space-form flag comes from, and the raw pair follows it.
   assert.equal(netDeadlineFrom(['--test-timeout=77000', '--test-timeout', '77000']), 38_500, 'the space form');
   assert.equal(
     netDeadlineFrom(['--test-timeout=5000', '--test-timeout=1000', '--test-timeout=5000']),
     2500,
     'the last flag wins, as it does in node',
   );
+  // `--test-isolation=none` leaves no dump, and then the space form is all there is. Read the
+  // `=` form alone and this falls to the fallback — a deadline LONGER than the runner's, which
+  // can no longer fire first, which is the hang the file is about wearing a green disguise.
+  assert.equal(netDeadlineFrom(['--test', '--test-isolation=none', '--test-timeout', '30000']), 15_000, 'no dump');
+  // The halving is where a fraction can appear, and `AbortSignal.timeout` throws on one —
+  // `ERR_OUT_OF_RANGE`, from the nineteen requests but not from the two helpers, which take it.
+  assert.equal(netDeadlineFrom(['--test-timeout=4001']), 2000, 'an odd timeout still yields an integer');
 });
 
 test('with no runner timeout the deadline is the only net, and it is finite', () => {
@@ -81,8 +88,20 @@ test('with no runner timeout the deadline is the only net, and it is finite', ()
   assert.equal(netDeadlineFrom(['--test-timeout=0']), bare, 'a zero is not a timeout to halve');
 });
 
-test('the deadline the suite carries is the one derived from the run in progress', () => {
+// The invariant the whole design rests on, read off the run in progress rather than off a
+// fixture: the request has to lose the race, or its deadline never fires and the runner is
+// back to timing out a test whose socket keeps the file alive. The runner timeout is parsed
+// here a second time, deliberately — a test that called `netDeadlineFrom` to check
+// `netDeadlineFrom` would agree with any parser, including one that reads nothing at all.
+test('the deadline the suite carries loses to the runner it came from', () => {
   assert.equal(NET_DEADLINE_MS, netDeadlineFrom(process.execArgv), 'not a number of its own');
+  let runnerMs = 0;
+  process.execArgv.forEach((arg, i) => {
+    if (/^--test-timeout=\d+$/.test(arg)) runnerMs = Number(arg.split('=')[1]);
+    else if (arg === '--test-timeout' && /^\d+$/.test(process.execArgv[i + 1] ?? '')) runnerMs = Number(process.execArgv[i + 1]);
+  });
+  if (runnerMs > 0) assert.ok(NET_DEADLINE_MS < runnerMs, `${NET_DEADLINE_MS}ms must fire before the runner's ${runnerMs}ms`);
+  else assert.equal(NET_DEADLINE_MS, netDeadlineFrom([]), 'a run with no per-test timeout gets the fallback');
 });
 
 // ── the wait both serve harnesses are built on ────────────────────────────────────────

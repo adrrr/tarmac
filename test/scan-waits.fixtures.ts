@@ -23,6 +23,22 @@ export const VERDICTS: Verdict[] = [
     caught: true,
     why: 'a deadline typed by hand is the one that was too short (#73)',
   },
+  { line: 'await fetch(url, { signal: AbortSignal.timeout( NET_DEADLINE_MS ) });', caught: false, why: 'spaced inside the call' },
+  {
+    line: 'await fetch(url, { signal: AbortSignal.timeout(NET_DEADLINE_MS_SOMETHING) });',
+    caught: true,
+    why: 'a name that merely starts like it is not it',
+  },
+  {
+    line: 'const NET_DEADLINE_MS = 4000;',
+    caught: true,
+    why: 'a local shadow is the literal wearing the constant’s name',
+  },
+  {
+    line: "import { NET_DEADLINE_MS } from './bounded.ts';",
+    caught: false,
+    why: 'importing it is the point, not a shadow of it',
+  },
   {
     line: 'const r = await fetch(url); // TODO: add AbortSignal.timeout',
     caught: true,

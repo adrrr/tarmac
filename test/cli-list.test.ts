@@ -14,6 +14,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
+import { waitForOutput } from './bounded.ts';
 import { tempDir } from './sandbox.ts';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
@@ -87,19 +88,12 @@ test('list --watch draws a live frame and leaves on a Ctrl-C', async () => {
   const child = spawn(process.execPath, [CLI, 'list', '--watch', '--claude-bin', bin, '--snapshots-dir', snapshots], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  let out = '';
   try {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`no frame in 20s. stdout so far:\n${out}`)), 20_000);
-      child.stdout.setEncoding('utf8').on('data', (d: string) => {
-        out += d;
-        if (out.includes('^C to quit')) {
-          clearTimeout(timer);
-          resolve();
-        }
-      });
-      child.on('error', reject);
-    });
+    // Longhand here once, deadline and all, which is how it came to carry a 20s of its own
+    // while every other wait in the suite moved to the runner's (#73). `waitForOutput` is the
+    // same wait, minus the copy: it carries the shared deadline, quotes what did arrive, and
+    // kills the child on the way out — which this one never did.
+    const out = await waitForOutput(child, /\^C to quit/);
     assert.match(out, /26%/, 'the fleet');
     assert.match(out, /updated 0s ago/, 'and the age of the reading');
   } finally {
