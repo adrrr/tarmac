@@ -85,41 +85,45 @@ test('every published CHANGELOG section still says what it said when it was tagg
     'git could not list tags in this checkout, so this guard cannot compare anything — it fails rather than pass on nothing',
   );
 
-  const versions = listed
+  // The tag is kept beside the version it names rather than rebuilt from it: one is what
+  // `git show` is given, the other is what the heading spells, and they are not the same
+  // string. Releases only — a prerelease documents itself under the version it is a candidate
+  // for, so `v1.0.0-rc.1` has no section of its own to compare.
+  const releases = listed
     .split('\n')
     .map((l) => l.trim())
-    .map((l) => /^v(\d+\.\d+\.\d+)$/.exec(l)?.[1])
-    .filter((v): v is string => v !== undefined);
+    .map((tag) => ({ tag, version: /^v(\d+\.\d+\.\d+)$/.exec(tag)?.[1] }))
+    .filter((r): r is { tag: string; version: string } => r.version !== undefined);
 
   // The failure this whole file is built to avoid, one level up. A shallow checkout has no
   // tags, every loop below runs zero times, and the run is green having asserted nothing —
   // a guard reporting success for the one reason it should report alarm. `actions/checkout`
   // fetches no tags by default, which is why the CI assertion below is not optional.
   assert.ok(
-    versions.length > 0,
+    releases.length > 0,
     'no vX.Y.Z tags in this checkout: the comparison below would pass on an empty list. Run `git fetch --tags` (a shallow clone has none) — this guard reads the tags or it fails.',
   );
 
   const current = fs.readFileSync(path.join(repo, 'CHANGELOG.md'), 'utf8');
 
-  for (const version of versions) {
-    const taggedFile = git('show', `v${version}:CHANGELOG.md`);
-    assert.ok(taggedFile !== null, `v${version} has no CHANGELOG.md, so what it published cannot be read`);
+  for (const { tag, version } of releases) {
+    const taggedFile = git('show', `${tag}:CHANGELOG.md`);
+    assert.ok(taggedFile !== null, `${tag} has no CHANGELOG.md, so what it published cannot be read`);
 
     const was = section(taggedFile, version);
     const now = section(current, version);
 
-    assert.ok(was !== null, `v${version} shipped without a \`## [${version}]\` section of its own — nothing records what it released`);
+    assert.ok(was !== null, `${tag} shipped without a \`## [${version}]\` section of its own — nothing records what it released`);
     assert.ok(
       now !== null,
-      `the \`## [${version}]\` section has disappeared from the CHANGELOG, but v${version} is published and said something`,
+      `the \`## [${version}]\` section has disappeared from the CHANGELOG, but ${tag} is published and said something`,
     );
     // `ok` rather than `equal`: a section runs to fifty lines of prose, and the two that
     // `equal` prints bury the sentence that says what to do under six kilobytes of text that
     // reads as identical. The line named below is the whole of what a reader needs.
     assert.ok(
       now === was,
-      `the \`## [${version}]\` section no longer matches what v${version} published — most likely an entry merged into a section that had already shipped (a branch cut before the release commit), so move it to \`## [Unreleased]\`. First difference at ${firstDifference(was, now)}`,
+      `the \`## [${version}]\` section no longer matches what ${tag} published — most likely an entry merged into a section that had already shipped (a branch cut before the release commit), so move it to \`## [Unreleased]\`. First difference at ${firstDifference(was, now)}`,
     );
   }
 });
