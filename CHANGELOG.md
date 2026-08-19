@@ -40,7 +40,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   ephemeral ports that could not collide, so a laptop on battery or a CI runner with noisy
   neighbours turned a correct suite red at random. They share one deadline now, half of
   whatever `--test-timeout` the run is under — 60s beneath `npm test`'s 120s — read in both
-  spellings node uses, because under `--test-isolation=none` the spaced one is all that reaches
+  spellings node uses, because on node 22 the spaced one is all that ever reaches
   a test file, and a fallback longer than the runner's own timeout would be the inversion of
   the whole point. Half, so the request loses the race and the failure names the URL instead of
   shrugging `test timed out after 120000ms`. A file run on its own gets a finite fallback: node

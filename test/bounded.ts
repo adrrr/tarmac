@@ -37,10 +37,12 @@ const NO_RUNNER_DEADLINE_MS = 60_000;
  *
  * Exported for its own test. `--test-timeout` is read from `process.execArgv`, where the
  * runner republishes the flags of the run to each test file, and BOTH spellings are read
- * because both really occur. The usual run leaves three copies: node dumps every option it
- * holds, effective value in `=` form, then re-emits the raw argv after it — so `--test-timeout
- * 30000` normally survives as an `=` too. Not always: under `--test-isolation=none` the dump
- * is not there and the space form is ALL that is left (captured). Reading `=` only would take
+ * because both really occur. On node 24+ a run leaves three copies: node dumps every option
+ * it holds, effective value in `=` form, then re-emits the raw argv after it — so
+ * `--test-timeout 30000` normally survives as an `=` too. On node 22 there is NO dump, ever
+ * (and no `--test-isolation` to blame — the flag does not exist there): a plain spaced
+ * `--test-timeout 30000` reaches a test file spaced and spaced only (captured on all three
+ * node lines of the CI matrix). Reading `=` only would take
  * the fallback there, and a fallback LONGER than the runner's own timeout is the inversion
  * this whole constant exists to prevent — the request would stop losing the race. Last
  * occurrence of either spelling wins, as it does in node. Zero is not a timeout — node treats

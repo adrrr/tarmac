@@ -62,9 +62,11 @@ test('the one home may hold the raw client the others may not', () => {
 test('the deadline is half the runner timeout in force', () => {
   assert.equal(netDeadlineFrom(['--test-timeout=120000']), 60_000, "what `npm test`'s own 120s yields");
   // Every array below is the `--test-timeout` part of a real `execArgv`, run and captured —
-  // the rest of it, some thirty-odd entries of node dumping its own options, is cut. The dump
-  // is where the `=` copy of a space-form flag comes from, and the raw pair follows it.
+  // the rest of it, on node 24+ some thirty-odd entries of node dumping its own options, is
+  // cut. The dump is where the `=` copy of a space-form flag comes from, and the raw pair
+  // follows it. Node 22 never dumps: a spaced flag arrives spaced, alone.
   assert.equal(netDeadlineFrom(['--test-timeout=77000', '--test-timeout', '77000']), 38_500, 'the space form');
+  assert.equal(netDeadlineFrom(['--test-timeout', '30000']), 15_000, 'node 22: spaced, no dump, nothing else');
   assert.equal(
     netDeadlineFrom(['--test-timeout=5000', '--test-timeout=1000', '--test-timeout=5000']),
     2500,
@@ -133,7 +135,7 @@ test('a line that never comes is a rejection carrying what did arrive', async ()
 test('the line resolves with everything printed up to it', async () => {
   const c = child('console.log("settings"); console.log("tarmac serving http://127.0.0.1:1"); setInterval(() => {}, 1000)');
   try {
-    const out = await waitForOutput(c, /tarmac serving/, 20_000);
+    const out = await waitForOutput(c, /tarmac serving/, NET_DEADLINE_MS);
     assert.match(out, /settings/, 'the block printed before the marker is what the assertions read');
     assert.match(out, /tarmac serving/);
   } finally {
@@ -160,7 +162,7 @@ test('a wait that fails takes the child with it', async () => {
 // The failure mode that already worked, kept: a CLI that dies before the line says why.
 test('a child that dies before the line fails with what it printed', async () => {
   const c = child('console.error("port 4477 already in use"); process.exit(1)');
-  await assert.rejects(() => waitForOutput(c, /tarmac serving/, 20_000), /already in use/);
+  await assert.rejects(() => waitForOutput(c, /tarmac serving/, NET_DEADLINE_MS), /already in use/);
 });
 
 // ── the request the other half of the suite is built on ───────────────────────────────
