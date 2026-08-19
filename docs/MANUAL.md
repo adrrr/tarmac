@@ -668,6 +668,9 @@ fixtures in this repo are the real shapes with synthetic values, and that is the
 new one has to meet.
 
 One build is sometimes worth capturing twice — a `waiting` session, say, which the first
-capture happened not to catch. Rename the copy `agents-<version>-<tag>.json`, one lowercase
-word for what the capture *shows*; the guard reads the version and ignores the tag, so a
-second capture does not invent a build called `2.1.232-waiting`.
+capture happened not to catch. Rename the copy `agents-<version>--<tag>.json`, one lowercase
+word for what the capture *shows*, behind a **double** dash; the suite reads the version and
+ignores the tag, so a second capture does not invent a build called `2.1.232-waiting`. A
+single dash belongs to the version — `agents-2.1.232-rc.json` is the prerelease it looks like
+— and a name that keeps neither shape fails the suite with the rule rather than being read as
+some third thing.
