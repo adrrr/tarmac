@@ -56,13 +56,36 @@ function git(...args: string[]): string | null {
  * property of its neighbour, not of the release, and it changes whenever a new version is
  * added above. Every real artefact — a bullet added, removed, reworded, a date moved — survives
  * that trim.
+ *
+ * A `## ` inside a code fence is not a heading. No entry carries a fence today, but the day one
+ * quotes a markdown sample the boundary would move — identically in both trees, which is the
+ * bad way for it to be wrong: the sections would still match while everything below the fence
+ * went unread. `###` is not a boundary either; it is the `Added`/`Changed`/`Fixed` level.
  */
 function section(changelog: string, version: string): string | null {
   const lines = changelog.split('\n');
-  const start = lines.findIndex((l) => l.startsWith(`## [${version}]`));
+
+  const isHeading: boolean[] = [];
+  let fenced = false;
+  for (const line of lines) {
+    // A fence marker is never a heading, and flips what the lines after it are.
+    if (/^\s{0,3}(```|~~~)/.test(line)) {
+      isHeading.push(false);
+      fenced = !fenced;
+      continue;
+    }
+    isHeading.push(!fenced && line.startsWith('## '));
+  }
+
+  const start = lines.findIndex((l, i) => isHeading[i] && l.startsWith(`## [${version}]`));
   if (start === -1) return null;
-  const after = lines.slice(start + 1).findIndex((l) => l.startsWith('## '));
-  const end = after === -1 ? lines.length : start + 1 + after;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (isHeading[i]) {
+      end = i;
+      break;
+    }
+  }
   return lines.slice(start, end).join('\n').trimEnd();
 }
 
