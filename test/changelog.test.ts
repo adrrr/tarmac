@@ -151,7 +151,13 @@ test('CI fetches the tags the guard above reads', () => {
   const running = blocks.filter((b) => /run: npm test/.test(b));
   assert.ok(running.length > 0, 'no CI job runs `npm test` — the guard above never runs in CI');
 
-  const shallow = running.filter((b) => !/fetch-depth: 0/.test(b)).map((b) => b.slice(0, b.indexOf(':')));
+  // Anchored to a whole line, so it is the setting that satisfies this and not prose about it:
+  // the comment above the checkout step in `ci.yml` spells `fetch-depth: 0` too, and a substring
+  // search is answered by that comment alone once the setting under it has been deleted — this
+  // assertion passing on a workflow that fetches nothing, which is the exact shape of the bug
+  // the file is here to prevent. A comment line cannot match: `#` falls between the margin and
+  // the key.
+  const shallow = running.filter((b) => !/^\s*fetch-depth: 0\s*$/m.test(b)).map((b) => b.slice(0, b.indexOf(':')));
   assert.deepEqual(
     shallow,
     [],
