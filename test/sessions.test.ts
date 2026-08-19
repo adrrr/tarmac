@@ -99,7 +99,7 @@ test('a running background agent is working, and a finished one is not', () => {
 });
 
 // A session halted until a human answers — the shape captured off a real machine (CC 2.1.232,
-// frozen in fixtures/agents-2.1.232-waiting.json), the values synthetic per the fixtures
+// frozen in fixtures/agents-2.1.232--waiting.json), the values synthetic per the fixtures
 // standard. `waitingFor` is the field that says which human answer, out of a vocabulary the
 // surface documents: permission prompt, input needed, sandbox request, worker request,
 // dialog open.

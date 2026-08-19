@@ -12,6 +12,26 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **A second capture of one build is tagged behind a double dash.** `agents-<version>--<tag>.json`,
+  where the manual said `-<tag>`: with one separator, a tag and a dotless prerelease are the same
+  name, and the lazy rule that read `agents-2.1.226-rc.1.json` correctly read
+  `agents-2.1.232-rc.json` as build `2.1.232` wearing a tag. A single dash now belongs to the
+  version, and a name that keeps neither shape fails the suite with the naming rule rather than
+  parsing into a build nobody captured. The one tagged fixture in the repo is renamed; no
+  published Claude Code carries a prerelease today, so nothing else moves. (#50)
+
+- **`tarmac list` keeps its columns inside a terminal.** Four of them carry a string the tool
+  did not choose the length of — the project, the state (an unrecognised status word, or the
+  free text a `waiting` session gives), the model, the effort — and one long value in any of
+  them pushed every row past 190 columns, wrapping the whole table on an 80-column terminal.
+  Each of the four now has a cap, with an ellipsis marking where a value was cut, so the worst
+  fleet a source can hand the renderer still fits 120 columns. The page is unchanged: it wraps
+  in CSS and has never needed one. (#49)
+
+## [0.5.0] — 2026-08-18
+
+### Changed
+
 - **The map groups its nodes by working directory.** One frame — a berth — per directory,
   labelled with its project, the sessions of that directory as cards inside it and the agents
   docked underneath as strips. It replaces a flat grid in which an agent was merely placed next
@@ -58,14 +78,6 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - **The manual's install walkthrough shows the line you answer.** The block ended at
   `undo tarmac uninstall` and stopped one line short of the prompt that follows it, which is
   the step the whole section is about. (#71)
-
-- **`tarmac list` keeps its columns inside a terminal.** Four of them carry a string the tool
-  did not choose the length of — the project, the state (an unrecognised status word, or the
-  free text a `waiting` session gives), the model, the effort — and one long value in any of
-  them pushed every row past 190 columns, wrapping the whole table on an 80-column terminal.
-  Each of the four now has a cap, with an ellipsis marking where a value was cut, so the worst
-  fleet a source can hand the renderer still fits 120 columns. The page is unchanged: it wraps
-  in CSS and has never needed one. (#49)
 
 ## [0.4.1] — 2026-08-18
 
