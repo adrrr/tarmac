@@ -64,8 +64,19 @@ test('the checked versions are exactly the ones fixtures/ covers', () => {
   const statusline = files.map((f) => STATUSLINE_FIXTURE.exec(f)?.[1]).filter((v): v is string => Boolean(v));
   const agents = files.map(agentsVersion).filter((v): v is string => Boolean(v));
 
-  assert.deepEqual([...CHECKED_VERSIONS.statusline].sort(), [...new Set(statusline)].sort());
-  assert.deepEqual([...CHECKED_VERSIONS.agents].sort(), [...new Set(agents)].sort());
+  // Same rule in both failures: a version in one list and not the other usually means a
+  // fixture NAME parsed into a build nobody captured — check the name against the rule
+  // before touching CHECKED_VERSIONS (#50's "obvious wrong fix").
+  assert.deepEqual(
+    [...CHECKED_VERSIONS.statusline].sort(),
+    [...new Set(statusline)].sort(),
+    `a checked statusline version and fixtures/ disagree — ${NAMING_RULE}`,
+  );
+  assert.deepEqual(
+    [...CHECKED_VERSIONS.agents].sort(),
+    [...new Set(agents)].sort(),
+    `a checked agents version and fixtures/ disagree — ${NAMING_RULE}`,
+  );
   // Named rather than counted: a file neither rule reads is an invisible fixture, and the
   // reader of that failure is someone who has just captured one and needs the rule, not a
   // pair of numbers that do not match.
@@ -103,6 +114,7 @@ test('a name that breaks the tag rule is refused, never bent into a version', ()
     'agents-2.1.232--waiting-two.json',
     'agents-two.json',
     'agents-.json',
+    'not-agents-2.1.232.json', // the anchor: a suffix match would read a version out of this
   ]) {
     assert.equal(agentsVersion(bad), null, `${bad} is not a version this suite may vouch for`);
   }
