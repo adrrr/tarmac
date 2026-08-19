@@ -10,7 +10,7 @@ import { guardVersions } from '../src/schema.ts';
 import { buildFleet } from '../src/fleet.ts';
 import { parseAgents } from '../src/sessions.ts';
 import { health, row } from './fleet-fixtures.ts';
-import { rawGet } from './bounded.ts';
+import { NET_DEADLINE_MS, rawGet } from './bounded.ts';
 import { HISTORY_CADENCE_MS } from '../src/history.ts';
 import type { HistoryPayload } from '../src/history.ts';
 import type { Fleet, FleetRow } from '../src/fleet.ts';
@@ -572,7 +572,7 @@ const collectOk = async (): Promise<Fleet> => ({ rows: [row()], health: health()
 
 test('GET / serves the dashboard page', async () => {
   await withServer(collectOk, async (base) => {
-    const res = await fetch(base + '/', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type')!, /text\/html/);
     assert.match(await res.text(), /alpha/);
@@ -581,7 +581,7 @@ test('GET / serves the dashboard page', async () => {
 
 test('GET /api/fleet serves the same data as JSON', async () => {
   await withServer(collectOk, async (base) => {
-    const res = await fetch(base + '/api/fleet', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/api/fleet', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 200);
     const body = (await res.json()) as Fleet;
     assert.equal(body.rows[0].ctxPct, 26);
@@ -613,7 +613,7 @@ test('serves a request with a loopback Host and a port', async () => {
 // re-serving the shell would replace the running script with a copy of itself.
 test('GET /live serves the fragment the page swaps in', async () => {
   await withServer(collectOk, async (base) => {
-    const res = await fetch(base + '/live', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/live', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type')!, /text\/html/);
     const body = await res.text();
@@ -636,7 +636,7 @@ test('a failing collector answers /live with the reason too', async () => {
     throw new Error('claude: not found');
   };
   await withServer(boom, async (base) => {
-    const res = await fetch(base + '/live', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/live', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 500);
     assert.match(await res.text(), /claude: not found/);
   });
@@ -651,10 +651,10 @@ test('a renderer that throws is a 500, and the server is still there afterwards'
   await withServer(cursed, async (base) => {
     // Bounded on purpose: before the fix this did not fail, it HUNG — the 200 headers were
     // already on the wire and the body never came, so the browser waits forever.
-    const res = await fetch(base + '/', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 500);
     assert.match(await res.text(), /tarmac could not/i);
-    const again = await fetch(base + '/', { signal: AbortSignal.timeout(4000) });
+    const again = await fetch(base + '/', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(again.status, 500, 'still answering, not gone');
   });
 });
@@ -681,7 +681,7 @@ test('a request a browser labels cross-site is refused before it can spawn anyth
 // reload and a bookmark.
 test('GET /map serves the page opened on the map', async () => {
   await withServer(collectOk, async (base) => {
-    const res = await fetch(base + '/map', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/map', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 200);
     const body = await res.text();
     assert.match(body, /<!doctype/i, 'the shell, not the fragment');
@@ -691,7 +691,7 @@ test('GET /map serves the page opened on the map', async () => {
 
 test('an unknown path is a 404, not the dashboard', async () => {
   await withServer(collectOk, async (base) => {
-    assert.equal((await fetch(base + '/nope', { signal: AbortSignal.timeout(4000) })).status, 404);
+    assert.equal((await fetch(base + '/nope', { signal: AbortSignal.timeout(NET_DEADLINE_MS) })).status, 404);
   });
 });
 
@@ -700,7 +700,7 @@ test('a failing collector answers 500 with the reason, not a blank page', async 
     throw new Error('claude: not found');
   };
   await withServer(boom, async (base) => {
-    const res = await fetch(base + '/', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 500);
     assert.match(await res.text(), /claude: not found/);
   });
@@ -714,11 +714,11 @@ test('a failing collector answers 500 with the reason, not a blank page', async 
 test('every answer identifies itself as tarmac, refusals and failures included', async () => {
   await withServer(collectOk, async (base) => {
     for (const p of ['/', '/live', '/api/fleet', '/api/history']) {
-      const res = await fetch(base + p, { signal: AbortSignal.timeout(4000) });
+      const res = await fetch(base + p, { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
       assert.equal(res.headers.get('x-tarmac'), '1', p);
       await res.text();
     }
-    const missing = await fetch(base + '/nope', { signal: AbortSignal.timeout(4000) });
+    const missing = await fetch(base + '/nope', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(missing.headers.get('x-tarmac'), '1', '404');
     await missing.text();
   });
@@ -727,7 +727,7 @@ test('every answer identifies itself as tarmac, refusals and failures included',
     throw new Error('claude: not found');
   };
   await withServer(boom, async (base) => {
-    const res = await fetch(base + '/live', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/live', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.headers.get('x-tarmac'), '1', 'a 500 the page will quote');
     await res.text();
   });
@@ -750,16 +750,20 @@ test('the page says when two snapshot files claimed the same session', () => {
  * Polls the record until `pred` holds, and throws at the deadline — `bounded.ts`'s rule for
  * the network waits, applied to a timer. The payload is in the message because a poll that
  * gives up carries no other clue about which half of the sampler never arrived.
+ *
+ * The budget is the suite's too, and not a number of this file's own: a tighter one here
+ * would simply become the binding deadline over the requests the loop makes, and hand the
+ * loaded machine of #73 the same spurious failure back under a different message.
  */
 async function historyUntil(
   base: string,
   pred: (h: HistoryPayload) => boolean,
   what: string,
-  timeoutMs = 4000,
+  timeoutMs = NET_DEADLINE_MS,
 ): Promise<HistoryPayload> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const res = await fetch(base + '/api/history', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/api/history', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     const h = (await res.json()) as HistoryPayload;
     if (pred(h)) return h;
     if (Date.now() >= deadline) throw new Error(`waited ${timeoutMs}ms for ${what}, and got ${JSON.stringify(h)}`);
@@ -777,7 +781,7 @@ test('GET /api/history serves the record without reading the fleet to do it', as
   };
   const started = Date.now();
   await withServer(counting, async (base) => {
-    const res = await fetch(base + '/api/history', { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(base + '/api/history', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type')!, /application\/json/);
     assert.equal(res.headers.get('cache-control'), 'no-store');
@@ -817,7 +821,7 @@ test("a background agent's name never enters the record", async () => {
     withAgent,
     async (base) => {
       await historyUntil(base, (x) => x.samples.length >= 1, 'a sample');
-      const raw = await (await fetch(base + '/api/history', { signal: AbortSignal.timeout(4000) })).text();
+      const raw = await (await fetch(base + '/api/history', { signal: AbortSignal.timeout(NET_DEADLINE_MS) })).text();
       assert.equal(raw.includes(PROMPT), false, 'not under any field');
       assert.equal(raw.includes('payroll'), false, 'nor a word of it');
       // The agent is IN the record — this is an omitted field, not an omitted session, and
@@ -826,7 +830,7 @@ test("a background agent's name never enters the record", async () => {
       assert.equal(h.samples[0].sessions.length, 2);
       assert.equal(h.samples[0].sessions[1].sid, 's2');
       assert.equal(h.samples[0].sessions[1].kind, 'background');
-      const fleet = await (await fetch(base + '/api/fleet', { signal: AbortSignal.timeout(4000) })).text();
+      const fleet = await (await fetch(base + '/api/fleet', { signal: AbortSignal.timeout(NET_DEADLINE_MS) })).text();
       assert.ok(fleet.includes(PROMPT), 'the live reading still says it');
     },
     { sampleEveryMs: 20 },
@@ -1062,7 +1066,7 @@ test('the server it walked to still serves the dashboard', async () => {
     // servers that accept a connection and answer nothing. If the walk ever fails to happen,
     // an unbounded fetch here lands on one of them and waits forever — turning a test that
     // should go red into a suite that never finishes.
-    const res = await fetch(`http://127.0.0.1:${bound.port}/api/fleet`, { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(`http://127.0.0.1:${bound.port}/api/fleet`, { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('x-tarmac'), '1');
     assert.equal(((await res.json()) as Fleet).rows[0].project, 'alpha');

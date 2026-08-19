@@ -19,7 +19,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { rawGet, silentServer, waitForOutput } from './bounded.ts';
+import { NET_DEADLINE_MS, netDeadlineFrom, rawGet, silentServer, waitForOutput } from './bounded.ts';
 import { unboundedWaits } from './scan-waits.ts';
 import { RAW_CLIENT_IMPORT, VERDICTS } from './scan-waits.fixtures.ts';
 
@@ -47,6 +47,63 @@ test('the guard catches what it claims to, and nothing it does not', () => {
 
 test('the one home may hold the raw client the others may not', () => {
   assert.deepEqual(unboundedWaits('bounded.ts', RAW_CLIENT_IMPORT), []);
+});
+
+// ── the deadline all of them carry ────────────────────────────────────────────────────
+// A deadline is what the guard above is for; a SHORT one is the other half of the same
+// failure. Every wait in this suite carried a number typed next to it — 4000ms at nineteen
+// `fetch` calls, on `rawGet`'s socket deadline and on a poll budget, 20s on `waitForOutput`.
+// With four suites running at once both requests in `cli-config.test.ts` aborted on a server
+// that was answering: a loopback request took more than four seconds because the machine was
+// busy (#73). The number comes off the runner's own per-test timeout now, and THAT is what is
+// worth testing — `process.execArgv` is where the runner publishes it, and it does not
+// publish it in one shape.
+
+test('the deadline is half the runner timeout in force', () => {
+  assert.equal(netDeadlineFrom(['--test-timeout=120000']), 60_000, "what `npm test`'s own 120s yields");
+  // Every array below is the `--test-timeout` part of a real `execArgv`, run and captured —
+  // the rest of it, on node 24+ some thirty-odd entries of node dumping its own options, is
+  // cut. The dump is where the `=` copy of a space-form flag comes from, and the raw pair
+  // follows it. Node 22 never dumps: a spaced flag arrives spaced, alone.
+  assert.equal(netDeadlineFrom(['--test-timeout=77000', '--test-timeout', '77000']), 38_500, 'the space form');
+  assert.equal(netDeadlineFrom(['--test-timeout', '30000']), 15_000, 'node 22: spaced, no dump, nothing else');
+  assert.equal(
+    netDeadlineFrom(['--test-timeout=5000', '--test-timeout=1000', '--test-timeout=5000']),
+    2500,
+    'the last flag wins, as it does in node',
+  );
+  // `--test-isolation=none` leaves no dump, and then the space form is all there is. Read the
+  // `=` form alone and this falls to the fallback — a deadline LONGER than the runner's, which
+  // can no longer fire first, which is the hang the file is about wearing a green disguise.
+  assert.equal(netDeadlineFrom(['--test', '--test-isolation=none', '--test-timeout', '30000']), 15_000, 'no dump');
+  // The halving is where a fraction can appear, and `AbortSignal.timeout` throws on one —
+  // `ERR_OUT_OF_RANGE`, from the nineteen requests but not from the two helpers, which take it.
+  assert.equal(netDeadlineFrom(['--test-timeout=4001']), 2000, 'an odd timeout still yields an integer');
+});
+
+test('with no runner timeout the deadline is the only net, and it is finite', () => {
+  // `node --test one.test.ts` with no flag has no per-test timeout at all, and neither does
+  // `--test-timeout=0` — verified: a 600ms test passes under it. Halving either into the
+  // deadline would hand the suite back the unbounded wait this whole file exists to prevent.
+  const bare = netDeadlineFrom([]);
+  assert.ok(Number.isFinite(bare) && bare > 0, `a fallback that cannot fire is no fallback: ${bare}`);
+  assert.equal(netDeadlineFrom(['--test-timeout=0']), bare, 'a zero is not a timeout to halve');
+});
+
+// The invariant the whole design rests on, read off the run in progress rather than off a
+// fixture: the request has to lose the race, or its deadline never fires and the runner is
+// back to timing out a test whose socket keeps the file alive. The runner timeout is parsed
+// here a second time, deliberately — a test that called `netDeadlineFrom` to check
+// `netDeadlineFrom` would agree with any parser, including one that reads nothing at all.
+test('the deadline the suite carries loses to the runner it came from', () => {
+  assert.equal(NET_DEADLINE_MS, netDeadlineFrom(process.execArgv), 'not a number of its own');
+  let runnerMs = 0;
+  process.execArgv.forEach((arg, i) => {
+    if (/^--test-timeout=\d+$/.test(arg)) runnerMs = Number(arg.split('=')[1]);
+    else if (arg === '--test-timeout' && /^\d+$/.test(process.execArgv[i + 1] ?? '')) runnerMs = Number(process.execArgv[i + 1]);
+  });
+  if (runnerMs > 0) assert.ok(NET_DEADLINE_MS < runnerMs, `${NET_DEADLINE_MS}ms must fire before the runner's ${runnerMs}ms`);
+  else assert.equal(NET_DEADLINE_MS, netDeadlineFrom([]), 'a run with no per-test timeout gets the fallback');
 });
 
 // ── the wait both serve harnesses are built on ────────────────────────────────────────
@@ -78,7 +135,7 @@ test('a line that never comes is a rejection carrying what did arrive', async ()
 test('the line resolves with everything printed up to it', async () => {
   const c = child('console.log("settings"); console.log("tarmac serving http://127.0.0.1:1"); setInterval(() => {}, 1000)');
   try {
-    const out = await waitForOutput(c, /tarmac serving/, 20_000);
+    const out = await waitForOutput(c, /tarmac serving/, NET_DEADLINE_MS);
     assert.match(out, /settings/, 'the block printed before the marker is what the assertions read');
     assert.match(out, /tarmac serving/);
   } finally {
@@ -105,7 +162,7 @@ test('a wait that fails takes the child with it', async () => {
 // The failure mode that already worked, kept: a CLI that dies before the line says why.
 test('a child that dies before the line fails with what it printed', async () => {
   const c = child('console.error("port 4477 already in use"); process.exit(1)');
-  await assert.rejects(() => waitForOutput(c, /tarmac serving/, 20_000), /already in use/);
+  await assert.rejects(() => waitForOutput(c, /tarmac serving/, NET_DEADLINE_MS), /already in use/);
 });
 
 // ── the request the other half of the suite is built on ───────────────────────────────
