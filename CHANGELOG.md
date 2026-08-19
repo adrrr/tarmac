@@ -12,6 +12,27 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **A published CHANGELOG section can no longer be rewritten by a merge.** A release inserts its
+  dated heading beneath `## [Unreleased]` rather than renaming it, so the `### Changed` block
+  under it never moves — its bullets simply come to belong to the new section. A branch cut
+  before that commit appends its own entry after the very same `### Changed`, against context
+  the release left untouched, and the 3-way merge therefore parks it inside the section that has
+  just shipped: no conflict, nothing to review. The merged tree then claims a tarball already on
+  the registry contains a change it does not. It happened twice in one morning, green both times,
+  and hand review was the only thing that caught it.
+  `test/changelog.test.ts` now reads every `vX.Y.Z` tag and requires the section in the working
+  tree to be what `git show vX.Y.Z:CHANGELOG.md` says it was, heading and date included, naming the
+  version and the likely cause when it is not. The tags are the only record of what a version
+  actually said, so the guard is worth exactly what it can read, and it says so: no tags is a
+  failure rather than a skip, and every dated section from 0.2.0 — the release tagging began at —
+  must carry the tag that published it, so a checkout holding only some of them cannot check only
+  some of the sections and call that success. CI fetches them with `fetch-depth: 0`, which is not
+  interchangeable with `fetch-tags: true`: above depth zero that setting leaves git's tag
+  auto-follow, which at depth 1 reaches the tag on the single commit fetched — nothing on an
+  ordinary push, and the new tag on the push right after a release, the worse of the two failures
+  because it is the quiet one. The three 0.1.x releases predate tagging and are named as the one
+  thing nothing here can vouch for. (#81)
+
 - **A second capture of one build is tagged behind a double dash.** `agents-<version>--<tag>.json`,
   where the manual said `-<tag>`: with one separator, a tag and a dotless prerelease are the same
   name, and the lazy rule that read `agents-2.1.226-rc.1.json` correctly read
