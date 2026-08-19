@@ -30,7 +30,9 @@ so the checklist below is done **first**, not after.
 - [ ] **`CHANGELOG.md` is current** — everything under `Unreleased` moves under the new
       version with today's date. It is written at release time from the merged PRs, not
       reconstructed after; the npm page is the only window users have into what changed.
-- [ ] **`npm version <patch|minor|major>`** on a clean tree (it tags the commit).
+- [ ] **`npm version <patch|minor|major>`** on a clean tree (it tags the commit). Between the
+      changelog step above and this one, `npm test` is red by design — the dated section has
+      no tag yet, and the changelog guard says so; finishing the release clears it.
 - [ ] **CI is green on the commit being published**, and `npm pack --dry-run` still lists
       `dist/*.js` plus `README.md`, `LICENSE` and `package.json`, nothing else.
 

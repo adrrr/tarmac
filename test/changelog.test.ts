@@ -81,7 +81,10 @@ function scan(changelog: string): { lines: string[]; isHeading: boolean[]; fence
       fenced = !fenced;
       continue;
     }
-    isHeading.push(!fenced && line.startsWith('## '));
+    // `## [` and not `## `: a non-version H2 (a "Migration notes" someone adds one day) would
+    // be a section boundary in BOTH trees — cutting the comparison symmetrically, the same
+    // silent truncation the fence handling above exists to prevent.
+    isHeading.push(!fenced && line.startsWith('## ['));
   }
   return { lines, isHeading, fenceLeftOpen: fenced };
 }
@@ -236,7 +239,7 @@ test('every dated section since tagging began carries the tag that published it'
   assert.deepEqual(
     unvouched,
     [],
-    `dated sections at or above ${TAGGING_BEGAN_AT} with no matching tag: ${unvouched.join(', ')} — nothing records what they published, so the comparison above skips them in silence. Either the tag is missing from this checkout (\`git fetch --tags\`) or the release was never tagged.`,
+    `dated sections at or above ${TAGGING_BEGAN_AT} with no matching tag: ${unvouched.join(', ')} — nothing records what they published, so the comparison above skips them in silence. Either the tag is missing from this checkout (\`git fetch --tags\`), or you are mid-release — the changelog is dated and \`npm version\` has not run yet (finish the release) — or the release was never tagged.`,
   );
 });
 
@@ -271,7 +274,10 @@ test('CI fetches the tags the guards above read', () => {
   const shallow = running
     .filter((b) => {
       const steps = b.split(/^ {6}- /m).slice(1);
-      return !steps.some((s) => /^uses: actions\/checkout/.test(s) && /^\s*fetch-depth: 0\s*$/m.test(s));
+      // `m` and leading whitespace on the uses-matcher: a NAMED checkout step (`- name: …`
+      // first, `uses:` indented below — the style this very file uses elsewhere) is not a
+      // violation, and without the flag the guard goes red on a perfectly correct workflow.
+      return !steps.some((s) => /^\s*uses: actions\/checkout/m.test(s) && /^\s*fetch-depth: 0\s*$/m.test(s));
     })
     .map((b) => b.slice(0, b.indexOf(':')));
   assert.deepEqual(
