@@ -19,7 +19,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { rawGet, silentServer, waitForOutput } from './bounded.ts';
+import { NET_DEADLINE_MS, netDeadlineFrom, rawGet, silentServer, waitForOutput } from './bounded.ts';
 import { unboundedWaits } from './scan-waits.ts';
 import { RAW_CLIENT_IMPORT, VERDICTS } from './scan-waits.fixtures.ts';
 
@@ -47,6 +47,42 @@ test('the guard catches what it claims to, and nothing it does not', () => {
 
 test('the one home may hold the raw client the others may not', () => {
   assert.deepEqual(unboundedWaits('bounded.ts', RAW_CLIENT_IMPORT), []);
+});
+
+// ── the deadline all of them carry ────────────────────────────────────────────────────
+// A deadline is what the guard above is for; a SHORT one is the other half of the same
+// failure. Every wait in this suite carried a number typed next to it — 4000ms on nineteen
+// `fetch` calls and on two poll budgets, 20s on `waitForOutput` — in files whose slowest test
+// already takes twelve seconds when four of them run at once. Nothing was wrong with the
+// servers: the client gave up on one that was answering (#73). The number is derived from
+// the runner's own per-test timeout now, and the derivation is what is worth testing —
+// `process.execArgv` is the only place the runner publishes that timeout, and it does not
+// publish it in one shape.
+
+test('the deadline is half the runner timeout in force', () => {
+  assert.equal(netDeadlineFrom(['--test-timeout=120000']), 60_000, "what `npm test`'s own 120s yields");
+  // Both shapes below are what `node --test` really leaves in execArgv, captured rather than
+  // guessed: it normalises the space form into an `=` one and re-emits the raw pair after it,
+  // and two flags leave both — the LAST `=` occurrence is always the one node applies.
+  assert.equal(netDeadlineFrom(['--test-timeout=77000', '--test-timeout', '77000']), 38_500, 'the space form');
+  assert.equal(
+    netDeadlineFrom(['--test-timeout=5000', '--test-timeout=1000', '--test-timeout=5000']),
+    2500,
+    'the last flag wins, as it does in node',
+  );
+});
+
+test('with no runner timeout the deadline is the only net, and it is finite', () => {
+  // `node --test one.test.ts` with no flag has no per-test timeout at all, and neither does
+  // `--test-timeout=0` — verified: a 600ms test passes under it. Halving either into the
+  // deadline would hand the suite back the unbounded wait this whole file exists to prevent.
+  const bare = netDeadlineFrom([]);
+  assert.ok(Number.isFinite(bare) && bare > 0, `a fallback that cannot fire is no fallback: ${bare}`);
+  assert.equal(netDeadlineFrom(['--test-timeout=0']), bare, 'a zero is not a timeout to halve');
+});
+
+test('the deadline the suite carries is the one derived from the run in progress', () => {
+  assert.equal(NET_DEADLINE_MS, netDeadlineFrom(process.execArgv), 'not a number of its own');
 });
 
 // ── the wait both serve harnesses are built on ────────────────────────────────────────

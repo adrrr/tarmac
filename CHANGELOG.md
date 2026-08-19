@@ -29,6 +29,25 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   the wider question — #80). The page is unchanged: it wraps in CSS and has never needed
   one. (#49)
 
+### Fixed
+
+- **The suite's deadlines are the runner's, not a number typed next to each wait.** Every
+  network wait under `test/` carried one of its own — 4000ms on nineteen `fetch` calls and on
+  two poll budgets, 20s on the helper both serve harnesses block on — in files whose slowest
+  test takes twelve seconds when four of them run at once. Nothing was ever wrong with the
+  servers underneath: the client gave up on one that was answering, so a busy laptop or a CI
+  runner with noisy neighbours turned a correct suite red at random, on ephemeral ports that
+  could not collide. They share one deadline now, half of whatever `--test-timeout` the run
+  is under — 60s beneath `npm test`'s 120s, and a finite fallback for a file run on its own,
+  which node gives no per-test timeout at all. Half, so the request loses the race and the
+  failure names the URL instead of shrugging `test timed out after 120000ms`. Dropping the
+  deadlines and leaning on the runner was the tempting reading and it is the wrong one: a
+  test the runner times out is marked failed, but the socket left pending keeps the file's
+  process alive — measured on node 26, a file whose test timed out at 3s was still up nine
+  seconds later and had to be killed from outside. The static guard that keeps every `fetch`
+  in the suite bounded now insists on the shared constant rather than on any literal, since
+  copying the neighbouring call is how all nineteen came to be written. (#73)
+
 ## [0.5.0] — 2026-08-18
 
 ### Changed

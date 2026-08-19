@@ -10,9 +10,17 @@ const ONE_HOME = 'bounded.ts';
  * `fetch` is judged where it is written, because its deadline IS one expression and belongs
  * next to the call, where a reader sees it. Line-based, so a fetch split over several lines
  * reads as unbounded — write it on one.
+ *
+ * The bound has to be `NET_DEADLINE_MS` and not merely SOME `AbortSignal.timeout`, because
+ * a number typed next to the call is how the first version of this rule was satisfied
+ * nineteen times over with 4000ms — a deadline shorter than the slowest test of the files
+ * carrying it, which a loaded machine duly tripped on servers that were answering (#73). A
+ * literal passes review, reads as bounded, and is a guess about a machine; the shared
+ * constant is derived from the runner's own timeout. Copying a neighbouring call is how
+ * every one of the nineteen got written, so the neighbour is what the rule has to police.
  */
 const BARE_FETCH = /\bfetch\s*\(/;
-const BOUNDED = /AbortSignal\.timeout/;
+const BOUNDED = /AbortSignal\.timeout\(\s*NET_DEADLINE_MS\s*\)/;
 
 /**
  * A raw `node:http` client is judged at the IMPORT, not the call, and that is the whole
@@ -47,7 +55,9 @@ export function unboundedWaits(file: string, source: string): string[] {
     if (opensWithComment(raw)) return;
     const line = stripComment(raw);
     const at = `${file}:${i + 1}`;
-    if (BARE_FETCH.test(line) && !BOUNDED.test(line)) found.push(`${at} needs an AbortSignal.timeout`);
+    if (BARE_FETCH.test(line) && !BOUNDED.test(line)) {
+      found.push(`${at} needs an AbortSignal.timeout(NET_DEADLINE_MS) from ${ONE_HOME}`);
+    }
     if (IMPORTS_RAW_CLIENT.test(line) && !TYPE_ONLY.test(line) && file !== ONE_HOME) {
       found.push(`${at} must use rawGet from ${ONE_HOME}, not a raw http client`);
     }

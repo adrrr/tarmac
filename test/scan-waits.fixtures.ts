@@ -17,7 +17,12 @@ export interface Verdict {
 
 export const VERDICTS: Verdict[] = [
   { line: 'const r = await fetch(url);', caught: true, why: 'a bare fetch' },
-  { line: 'const r = await fetch(url, { signal: AbortSignal.timeout(4000) });', caught: false, why: 'a bounded one' },
+  { line: 'const r = await fetch(url, { signal: AbortSignal.timeout(NET_DEADLINE_MS) });', caught: false, why: 'a bounded one' },
+  {
+    line: 'const r = await fetch(url, { signal: AbortSignal.timeout(4000) });',
+    caught: true,
+    why: 'a deadline typed by hand is the one that was too short (#73)',
+  },
   {
     line: 'const r = await fetch(url); // TODO: add AbortSignal.timeout',
     caught: true,
@@ -25,7 +30,7 @@ export const VERDICTS: Verdict[] = [
   },
   { line: '// never write a bare fetch(url) in this file', caught: false, why: 'prose ABOUT a bare call is not one' },
   {
-    line: 'await fetch(`http://127.0.0.1:${p}/`, { signal: AbortSignal.timeout(4000) });',
+    line: 'await fetch(`http://127.0.0.1:${p}/`, { signal: AbortSignal.timeout(NET_DEADLINE_MS) });',
     caught: false,
     why: 'the // inside a URL does not open a comment',
   },
