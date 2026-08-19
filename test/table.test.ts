@@ -161,6 +161,57 @@ test('says nothing about clock skew when every reading is in the past', () => {
   assert.equal(/ahead|future/i.test(renderTable(fleet([row()]))), false);
 });
 
+// #49: four of the eight columns carry a string nothing bounds at the source, and one long
+// value in any of them stretched every row of the table past 190 columns — on a terminal
+// wrapping at 80, an unreadable fleet. The worst case a fleet can hand this renderer, in one
+// row: the row has to fit, and the cut has to be visible where it happened.
+const WIDEST = row({
+  project: 'a'.repeat(60),
+  busy: null,
+  status: 'waiting',
+  waitingFor: 'b'.repeat(60),
+  model: 'c'.repeat(60),
+  effort: 'd'.repeat(60),
+  costUsd: 98765.43,
+  uptimeMs: 999 * 3600_000,
+});
+
+test('caps every column a fleet could stretch, and marks where it cut', () => {
+  const out = renderTable(fleet([WIDEST], { costUsd: 98765.43 }));
+  const table = out.split('\n').slice(0, 2);
+  for (const l of table) assert.ok(l.length <= 120, `a row ${l.length} columns wide: ${l}`);
+  for (const cut of ['a', 'b', 'c', 'd']) assert.match(out, new RegExp(`${cut}+…`), `${cut} is cut, and says so`);
+});
+
+// The ellipsis is inside the cap, not added past it — otherwise the widest cell is one
+// character wider than the column that was supposed to hold it.
+test('an unknown status word is cut too, and never past its column', () => {
+  const out = renderTable(fleet([row({ busy: null, status: 'z'.repeat(80) })], { unknownStatus: 1 }));
+  assert.match(out, /\?z+…/);
+  assert.ok(out.split('\n')[1].length <= 120);
+});
+
+// The same property pinned to the character: nineteen glyphs, the ellipsis, then padding. An
+// off-by-one in the cut (slice(0, cap) instead of cap - 1) moves the … one column right, and
+// the ≤ 120 assert above has too much slack to see one character.
+test('spends the ellipsis out of the cap, never past it', () => {
+  const out = renderTable(fleet([row({ project: 'p'.repeat(60) })]));
+  assert.match(out.split('\n')[1], /^p{19}… {2}/);
+});
+
+// "Cut by code point" is a claim about astral glyphs, so it is tested with one: a name of
+// rockets must never come back ending in half a surrogate pair.
+test('cuts by code point — never half a surrogate pair', () => {
+  const out = renderTable(fleet([row({ project: '🚀'.repeat(60) })]));
+  assert.doesNotMatch(out, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+});
+
+// A cap that bites a fleet nobody would call wide is a cap that hides the fleet. Every value
+// of the fixture fits its column, and none of them may come out marked.
+test('leaves an ordinary fleet whole', () => {
+  assert.doesNotMatch(renderTable(fleet([row(), row({ project: 'mercury-dashboard', model: 'Opus 5' })])), /…/);
+});
+
 // ── the settings block ────────────────────────────────────────────────────────────────
 // `serve` runs unattended for hours, so the run has to open by saying what it decided and
 // on whose authority. A threshold whose origin is invisible is one nobody can correct.

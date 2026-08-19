@@ -165,17 +165,19 @@ export function renderSettings(config: Config, configFile: string): string {
 /** The one-shot `tarmac list` view: fixed-width columns, then everything we could not see. */
 export function renderTable({ rows, health }: Fleet): string {
   const head = ['PROJECT', 'STATE', 'CTX', 'AS OF', 'MODEL', 'EFFORT', 'COST', 'UP'];
-  const body = rows.map((r) => [
-    r.project ?? '—',
-    stateCell(r),
-    r.ctxPct === null ? `— ${r.ctxState}` : `${r.ctxPct}%`,
-    // The age of the reading, never implied to be "now".
-    r.snapshotAgeMs === null ? '—' : ahead(r) ? '— ahead' : `${age(r.snapshotAgeMs)}${r.stale ? ' !' : ''}`,
-    r.model ?? '—',
-    r.effort ?? '—',
-    r.costUsd === null ? '—' : `$${r.costUsd.toFixed(2)}`,
-    r.uptimeMs === null ? '—' : `${Math.round(r.uptimeMs / 3600000)}h`,
-  ]);
+  const body = rows.map((r) =>
+    [
+      r.project ?? '—',
+      stateCell(r),
+      r.ctxPct === null ? `— ${r.ctxState}` : `${r.ctxPct}%`,
+      // The age of the reading, never implied to be "now".
+      r.snapshotAgeMs === null ? '—' : ahead(r) ? '— ahead' : `${age(r.snapshotAgeMs)}${r.stale ? ' !' : ''}`,
+      r.model ?? '—',
+      r.effort ?? '—',
+      r.costUsd === null ? '—' : `$${r.costUsd.toFixed(2)}`,
+      r.uptimeMs === null ? '—' : `${Math.round(r.uptimeMs / 3600000)}h`,
+    ].map(clip),
+  );
   const w = head.map((h, i) => Math.max(h.length, ...body.map((r) => r[i].length)));
   const line = (cells: string[]): string => cells.map((c, i) => c.padEnd(w[i])).join('  ').trimEnd();
 
@@ -224,6 +226,36 @@ export function renderTable({ rows, health }: Fleet): string {
     (warns.length ? '\n' + warns.join('\n') + '\n' : '') +
     `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n`
   );
+}
+
+/**
+ * How wide a column may get, `null` for one nothing can stretch.
+ *
+ * Four of the eight carry a string this tool did not choose the length of — a directory
+ * basename, a status word tarmac does not know or the free text a `waiting` session gives, a
+ * model name, an effort — and one long value in any of them used to push every row of the
+ * table past 190 columns, on a terminal that wraps at 80. The caps are picked so that the
+ * worst fleet a source can hand this renderer stays within 120 CODE POINTS a row — display
+ * width is the wider, separate question (#80): a CJK glyph is one point and two columns, and
+ * the width math below counts `.length` like it always has. The page has CSS to wrap with, a
+ * terminal has nothing. The other four are a percentage, an age, a cost and an hour count;
+ * their own magnitude is what bounds them, and no cap here would ever bite.
+ */
+// STATE is the widest of the four because it is two facts on one line: the state, and the
+// reason a `waiting` session gives for being in it. `waiting · permission prompt` — the
+// reason the fleet's own suite is written around — is 27 of these 28 columns.
+const CAPS: Array<number | null> = [20, 28, null, null, 16, 8, null, null];
+
+/**
+ * One cell, cut to its column. The ellipsis is spent out of the cap rather than added past
+ * it — a cap a cut cell can exceed is not a cap — and the cut is by code point, because half
+ * a surrogate pair is not a shorter name, it is a broken one.
+ */
+function clip(cell: string, i: number): string {
+  const cap = CAPS[i];
+  if (cap === null) return cell;
+  const chars = Array.from(cell);
+  return chars.length <= cap ? cell : chars.slice(0, cap - 1).join('') + '…';
 }
 
 /**
