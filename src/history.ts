@@ -36,7 +36,7 @@ export interface HistorySession {
   project: string | null;
   kind: string | null;
   /**
-   * The same three words the map draws, out of the same function. A replay that reached its
+   * The same four words the map draws, out of the same function. A replay that reached its
    * own verdict about a session would be a second opinion on a fact the live view already
    * states, and the two would disagree the day either one changed.
    */

@@ -5,6 +5,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildFleet } from '../src/fleet.ts';
 import { buildMap, PULSE_WITHIN_MS } from '../src/map.ts';
 import { NOW, health, row } from './fleet-fixtures.ts';
@@ -47,6 +50,36 @@ test('a session halted on a human is waiting, not unknown', () => {
 // simply not carry, and a session with no reason is not thereby a session with no state.
 test('a waiting session with no reason is still waiting', () => {
   assert.equal(only({ busy: null, status: 'waiting', waitingFor: null }).state, 'waiting');
+});
+
+// The vocabulary is closed, and the prose around it counts. `waiting` joined the states in
+// #46 and two comments went on calling them three words for two releases — a numeral in a
+// sentence reads as true at review time, and nothing else here can read it. The count is taken
+// off the union rather than written down a third time, and every place that spells it out is
+// held to it. The anchors are the phrases those comments use, so each must still find
+// something: a reworded sentence fails here rather than slipping out of the check.
+const NUMERALS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+const COUNTS = ['words the map draws', 'words a node can be'];
+
+test('every comment that counts the node states counts all of them', () => {
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  const union = fs.readFileSync(path.join(dir, '..', 'src', 'map.ts'), 'utf8').match(/export type NodeState =([^;]+);/);
+  assert.ok(union !== null, 'no NodeState union in src/map.ts to count');
+  const expected = NUMERALS[union[1].split('|').length];
+
+  const files = ['src', 'test'].flatMap((d) =>
+    fs.readdirSync(path.join(dir, '..', d)).filter((f) => f.endsWith('.ts')).map((f) => path.join(dir, '..', d, f)),
+  );
+  for (const phrase of COUNTS) {
+    let found = 0;
+    for (const file of files) {
+      for (const m of fs.readFileSync(file, 'utf8').matchAll(new RegExp(`(\\w+) ${phrase}`, 'g'))) {
+        found++;
+        assert.equal(m[1], expected, `${path.basename(file)} says "${m[0]}", and there are ${expected}`);
+      }
+    }
+    assert.ok(found > 0, `nothing says "… ${phrase}" any more — reword the anchor or drop it`);
+  }
 });
 
 test('a reading inside the freshness threshold is live', () => {
