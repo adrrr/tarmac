@@ -39,7 +39,7 @@ test('a waiting session keeps its reason in the ring', () => {
   assert.equal(session.waitingFor, 'permission prompt');
 });
 
-// The three words the map draws, out of the same function: a replay that disagreed with the
+// The four words the map draws, out of the same function: a replay that disagreed with the
 // live view about the same session would be showing two states, not one.
 test('a session whose status tarmac does not recognise is unknown in the ring too', () => {
   const h = createHistory({ since: NOW, cadence: HISTORY_CADENCE_MS });

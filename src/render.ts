@@ -782,7 +782,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      it is the only thing on the strip that has no length limit. */
   .node .prompt { flex:1; min-width:0; color:var(--dim); font-size:.76rem;
           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  /* Said, not shown: the three glyphs differ in silhouette, so a reader who cannot separate
+  /* Said, not shown: the four glyphs differ in silhouette, so a reader who cannot separate
      two hues still has the state — but a screen reader is handed a bullet and nothing else. */
   .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
   .dial { position:relative; width:5.5rem; height:5.5rem; }
@@ -973,7 +973,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
  * The replay below is the one exception, and it is one the issue asks for: scrubbing a day
  * has to be a lookup in samples the page already holds, or every pixel of a drag would be a
  * request and a `claude agents --json` behind it. So a second, smaller renderer lives in the
- * browser — fed the same three words, the same three glyphs and the same dial geometry as the
+ * browser — fed the same three words, the same four glyphs and the same dial geometry as the
  * server's, by interpolation rather than by copy, and executed by `test/replay-script`.
  */
 export const REFRESH_MS = 5000;
@@ -1114,7 +1114,7 @@ function pageScript(view: View): string {
   var record = null, recordAt = 0, at = -1, replaying = false, playing = null, hgen = 0;
 
   // The vocabulary and the geometry, handed over rather than written twice: three words for
-  // the three kinds of missing, three glyphs for the three states, one dial radius.
+  // the three kinds of missing, four glyphs for the four states, one dial radius.
   var WHY = ${JSON.stringify(CTX_WHY)}, SHAPE = ${JSON.stringify(SHAPE)};
   var INTERACTIVE = ${JSON.stringify(INTERACTIVE)};
   var ENT = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
