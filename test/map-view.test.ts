@@ -124,7 +124,7 @@ test('a reading that just landed pulses, and a stale one never does', () => {
 });
 
 // The table's pill is "● busy" for a reason: shape, word and border, so the state survives a
-// reader who cannot separate two hues. The map's three glyphs differ in silhouette, which
+// reader who cannot separate two hues. The map's four glyphs differ in silhouette, which
 // covers that reader — but a screen reader is handed "●" and nothing else, and an unrecognised
 // status, the one state the table spells out in full, disappears entirely.
 test('a node names its state in words, not only in a shape', () => {
