@@ -5,12 +5,21 @@ All notable changes to `@adrrr/tarmac` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions
 follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
-> Issue references below (`#16`, `#19`, `#20`, …) point at the pre-V1 development
-> history, which is not part of this repository's tracker.
+> Issue references from `0.3.0` on are issues of this repository. Below that — `#16`, `#19`,
+> `#20` and the rest, in `0.2.0` and the `0.1.x` sections — they point at the pre-V1
+> development history, which the tracker does not carry: the same numbers name other subjects
+> here.
 
 ## [Unreleased]
 
 ### Changed
+
+- **The disclaimer above says which sections it disclaims.** Issue references from `0.3.0` on are
+  this repository's tracker, and the note dismissed all of them as history the tracker is not part
+  of: a reader following it would drop `#47`, `#52`, `#59`, `#69`–`#71` and everything since as
+  unresolvable. The clause is still true of `0.2.0` and below — the changelog's `#20` is the
+  snapshots path, this repository's is the uninstall plan — so it is bounded rather than
+  deleted. (#75)
 
 - **A published CHANGELOG section can no longer be rewritten by a merge.** A release inserts its
   dated heading beneath `## [Unreleased]` rather than renaming it, so the `### Changed` block
