@@ -5,6 +5,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildFleet } from '../src/fleet.ts';
 import { buildMap, PULSE_WITHIN_MS } from '../src/map.ts';
 import { NOW, health, row } from './fleet-fixtures.ts';
@@ -47,6 +50,50 @@ test('a session halted on a human is waiting, not unknown', () => {
 // simply not carry, and a session with no reason is not thereby a session with no state.
 test('a waiting session with no reason is still waiting', () => {
   assert.equal(only({ busy: null, status: 'waiting', waitingFor: null }).state, 'waiting');
+});
+
+// The vocabulary is closed, and the prose around it counts. `waiting` joined the states in
+// #46 and two comments went on calling them three words through three releases — a numeral in
+// a sentence reads as true at review time, and nothing else here can read it. The count comes
+// off the union rather than being written down once more here, and every comment that spells
+// it out is held to it — the glyph prose of render.ts and map-view went stale in #46 the same
+// way, so those sentences are anchored too. Each anchor is a phrase with the numeral just
+// before it, pinned to the number of sites that carry it: a reworded sentence — even one of
+// two — fails here rather than slipping out of the check.
+const NUMERALS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+const COUNTS = [
+  { phrase: 'words the map draws', sites: 2 },
+  { phrase: 'words a node can be', sites: 1 },
+  { phrase: 'glyphs differ in silhouette', sites: 2 },
+  { phrase: 'glyphs and the same dial', sites: 1 },
+  { phrase: 'glyphs for the', sites: 1 },
+  { phrase: 'states, one dial radius', sites: 1 },
+  { phrase: 'states, so the two channels', sites: 1 },
+  { phrase: 'states, and the waiting one', sites: 1 },
+];
+
+test('every comment that counts the node states counts all of them', () => {
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  const union = fs.readFileSync(path.join(dir, '..', 'src', 'map.ts'), 'utf8').match(/export type NodeState =([^;]+);/);
+  assert.ok(union !== null, 'no NodeState union in src/map.ts to count');
+  const members = union[1].split('|').filter((s) => s.trim()).length;
+  const expected = NUMERALS[members];
+  assert.ok(expected !== undefined, `the union counts ${members} states — extend NUMERALS`);
+
+  const files = ['src', 'test'].flatMap((d) =>
+    fs.readdirSync(path.join(dir, '..', d)).filter((f) => f.endsWith('.ts')).map((f) => path.join(dir, '..', d, f)),
+  );
+  for (const { phrase, sites } of COUNTS) {
+    let found = 0;
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const file of files) {
+      for (const m of fs.readFileSync(file, 'utf8').matchAll(new RegExp(`(\\w+) ${escaped}`, 'g'))) {
+        found++;
+        assert.equal(m[1], expected, `${path.basename(file)} says "${m[0]}", and there are ${expected}`);
+      }
+    }
+    assert.equal(found, sites, `"… ${phrase}" anchors ${sites} site(s) and matched ${found} — reword the anchor or update its count`);
+  }
 });
 
 test('a reading inside the freshness threshold is live', () => {
