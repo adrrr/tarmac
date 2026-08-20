@@ -14,9 +14,9 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **The disclaimer above says which sections it disclaims.** Issue references from `0.3.0` on are
-  this repository's tracker, and the note dismissed all of them as history the tracker is not part
-  of: a reader following it would drop `#47`, `#52`, `#59`, `#69`–`#71` and everything since as
+- **The disclaimer above says which sections it disclaims.** Issue references from `0.3.0` on
+  resolve in this repository's tracker, and the note dismissed all of them as history the tracker
+  does not carry: a reader following it would drop `#47`, `#52`, `#59`, `#69`–`#71` and everything since as
   unresolvable. The clause is still true of `0.2.0` and below — the changelog's `#20` is the
   snapshots path, this repository's is the uninstall plan — so it is bounded rather than
   deleted. (#75)
