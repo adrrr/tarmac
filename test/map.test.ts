@@ -53,11 +53,11 @@ test('a waiting session with no reason is still waiting', () => {
 });
 
 // The vocabulary is closed, and the prose around it counts. `waiting` joined the states in
-// #46 and two comments went on calling them three words for two releases — a numeral in a
-// sentence reads as true at review time, and nothing else here can read it. The count is taken
-// off the union rather than written down a third time, and every place that spells it out is
-// held to it. The anchors are the phrases those comments use, so each must still find
-// something: a reworded sentence fails here rather than slipping out of the check.
+// #46 and two comments went on calling them three words through three releases — a numeral in
+// a sentence reads as true at review time, and nothing else here can read it. The count comes
+// off the union rather than being written down once more here, and every comment that spells
+// it out is held to it. The anchors are the phrases those comments use, so each must still
+// find something: a reworded sentence fails here rather than slipping out of the check.
 const NUMERALS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
 const COUNTS = ['words the map draws', 'words a node can be'];
 
