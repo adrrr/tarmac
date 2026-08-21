@@ -21,7 +21,7 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { NET_DEADLINE_MS, netDeadlineFrom, rawGet, silentServer, waitForOutput } from './bounded.ts';
 import { unboundedWaits } from './scan-waits.ts';
-import { RAW_CLIENT_IMPORT, VERDICTS } from './scan-waits.fixtures.ts';
+import { DEADLINE_UNDER_TEST_CALL, RAW_CLIENT_IMPORT, VERDICTS } from './scan-waits.fixtures.ts';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,8 +45,25 @@ test('the guard catches what it claims to, and nothing it does not', () => {
   assert.deepEqual(wrong, []);
 });
 
+// The two halves of #85 read the same line, and only one of them is right about it: a helper
+// whose default is a literal is a default to fix, not a call handing itself a number. Told
+// twice, in two registers, the report stops saying where to go and starts needing a reading.
+test('a literal default is one finding, and it is the one that names the default', () => {
+  const found = unboundedWaits('watch.test.ts', 'export async function waitFor(pred, what, timeoutMs = 10_000) {');
+  assert.equal(found.length, 1, `a definition is not also a call: ${found.join(' / ')}`);
+  assert.match(found[0]!, /must default to NET_DEADLINE_MS/);
+});
+
 test('the one home may hold the raw client the others may not', () => {
   assert.deepEqual(unboundedWaits('bounded.ts', RAW_CLIENT_IMPORT), []);
+});
+
+// The other file-deep exemption, and the narrower one: a test OF a deadline has to be able to
+// hand a wait a number, or the four below could only be written with the suite's own 60s. It is
+// this file and no other, which is what makes it worth asserting from both sides.
+test('the file that tests the deadlines may hand a wait a number, and no other file may', () => {
+  assert.deepEqual(unboundedWaits('bounded-waits.test.ts', DEADLINE_UNDER_TEST_CALL), []);
+  assert.equal(unboundedWaits('watch.test.ts', DEADLINE_UNDER_TEST_CALL).length, 1, 'an offence anywhere else');
 });
 
 // ── the deadline all of them carry ────────────────────────────────────────────────────
