@@ -52,6 +52,12 @@ const NO_RUNNER_DEADLINE_MS = 60_000;
  * `AbortSignal.timeout()` refuses one: `--test-timeout=4001` would have thrown
  * `ERR_OUT_OF_RANGE` out of all nineteen requests while the two helpers, which take a
  * fractional delay quite happily, carried on — a breakage split in half is the worst kind.
+ *
+ * And floored to ONE, not to zero, because zero is not a short deadline — it is two different
+ * absences, and `--test-timeout=1` is enough to reach both. `AbortSignal.timeout(0)` aborts a
+ * request before it is sent, so the nineteen fail whatever the server does; `timeout: 0` on
+ * `http.request` means no timeout at all, so `rawGet` waits forever on the silent server this
+ * module exists for. One millisecond fires, which is what a caller typing 1 asked for.
  */
 export function netDeadlineFrom(argv: readonly string[]): number {
   let runnerMs = 0;
@@ -60,7 +66,7 @@ export function netDeadlineFrom(argv: readonly string[]): number {
     if (inline) runnerMs = Number(inline[1]);
     else if (arg === '--test-timeout' && /^\d+$/.test(argv[i + 1] ?? '')) runnerMs = Number(argv[i + 1]);
   });
-  return runnerMs > 0 ? Math.floor(runnerMs / 2) : NO_RUNNER_DEADLINE_MS;
+  return runnerMs > 0 ? Math.max(1, Math.floor(runnerMs / 2)) : NO_RUNNER_DEADLINE_MS;
 }
 
 /**

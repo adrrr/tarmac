@@ -96,6 +96,11 @@ test('the deadline is half the runner timeout in force', () => {
   // The halving is where a fraction can appear, and `AbortSignal.timeout` throws on one —
   // `ERR_OUT_OF_RANGE`, from the nineteen requests but not from the two helpers, which take it.
   assert.equal(netDeadlineFrom(['--test-timeout=4001']), 2000, 'an odd timeout still yields an integer');
+  // It is also where a zero can appear, and a zero is not a short deadline — it is two different
+  // absences. `AbortSignal.timeout(0)` aborts every `fetch` before it is sent; `timeout: 0` on
+  // `http.request` means NO timeout at all, which hands `rawGet` back the unbounded wait. One
+  // millisecond is a deadline that fires, which is what the caller asked for by typing 1.
+  assert.equal(netDeadlineFrom(['--test-timeout=1']), 1, 'an absurd timeout is still a timeout, never a zero');
 });
 
 test('with no runner timeout the deadline is the only net, and it is finite', () => {
@@ -105,6 +110,20 @@ test('with no runner timeout the deadline is the only net, and it is finite', ()
   const bare = netDeadlineFrom([]);
   assert.ok(Number.isFinite(bare) && bare > 0, `a fallback that cannot fire is no fallback: ${bare}`);
   assert.equal(netDeadlineFrom(['--test-timeout=0']), bare, 'a zero is not a timeout to halve');
+});
+
+// Finite and positive is the weaker half of what the fallback has to be. The other half is its
+// MAGNITUDE: it is taken whenever the flag cannot be read — the node 22 spaced form was exactly
+// that until #84 — and a fallback longer than the timeout the runner is still holding no longer
+// fires first. The wait then loses nothing and reports nothing, and the runner times out a test
+// whose socket keeps the file alive: the hang this file exists for, wearing a green disguise.
+// `200_000` against `npm test`'s own 120s passes every other assertion here.
+test('the fallback fires before the timeout npm test puts in force', () => {
+  const script = (JSON.parse(fs.readFileSync(path.join(testDir, '..', 'package.json'), 'utf8')).scripts as Record<string, string>).test;
+  const runnerMs = Number(/--test-timeout[= ](\d+)/.exec(script ?? '')?.[1]);
+  assert.ok(runnerMs > 0, `the suite's own runner timeout is what this is measured against: ${script}`);
+  const bare = netDeadlineFrom([]);
+  assert.ok(bare < runnerMs, `a fallback of ${bare}ms cannot fire before the runner's ${runnerMs}ms`);
 });
 
 // The invariant the whole design rests on, read off the run in progress rather than off a
