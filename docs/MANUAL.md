@@ -32,7 +32,7 @@ the field moved. It never turns a measurement it could not take into a confident
 | a session halted until you answer something | `waiting`, and which answer: `permission prompt`, `dialog open`, … |
 | a snapshot directory it could not read | the errno, not "run tarmac install" |
 | a cost key that is absent | `—` for the row, and a total qualified by how many sessions really report one |
-| no snapshot carrying the account's rate limits | `— no reading` in both gauges, on a dotted rail — never a window at 0% |
+| no snapshot carrying the account's rate limits | `— no reading` in both gauges, on a dotted rail, never a window at 0% |
 | a rate-limit reset nowhere near the reading that carried it | `reset —`; the percentage stands, the impossible countdown does not |
 | a Claude Code version no fixture covers | a footnote naming that version. Nothing blocked, nothing hidden |
 
@@ -444,7 +444,7 @@ Under the map is a scrubber, and it is the one place on this page where a node i
 fleet as of the reading in the header. Drag it and the dials render the fleet as the serve
 recorded it at that minute; the play button walks the readings, one every 100ms, and stops at
 the end rather than looping. The record is asked for when the page loads, and again when a tab
-that has been away comes back — never per position, so a drag is a lookup in samples the page
+that has been away comes back, never per position, so a drag is a lookup in samples the page
 already holds. A scrubber that asked per position would spawn a `claude agents --json` for
 every pixel of it. It is asked for on `/map` only: the table has no scrubber, and a full ring
 is megabytes.
@@ -452,17 +452,17 @@ is megabytes.
 A replay is never allowed to pass for the present:
 
 - a sticky banner names the minute on screen and carries one button back to live
-- the live fragment — its map, its totals, its timestamp, its warnings, all of them about now
-  — is hidden while the past is up, so two fleets of two moments are never stacked
+- the live fragment, with its map, its totals, its timestamp and its warnings, all of them
+  about now, is hidden while the past is up, so two fleets of two moments are never stacked
 - **no halos.** The halo means a reading landed moments ago, which is never true of a sample
 - a session absent from a sample is absent from the map, never a dial at zero
-- an agent replays as its kind and its numbers. The ring holds no names, so neither does this
-  — and a replayed card is headed by its project where a live one, framed by a berth that
-  already says the directory, is headed by its session name
+- an agent replays as its kind and its numbers. The ring holds no names, so neither does this.
+  A replayed card is headed by its project where a live one, framed by a berth that already
+  says the directory, is headed by its session name
 - **no berths.** The ring keeps a project name and never the working directory it was read in,
   and a basename is not a directory: a frame drawn on it would group two checkouts of `atlas`
   into one, claiming the very thing a berth exists to be trusted about. So a replayed fleet is
-  drawn flat, in the order the sample carries — with no directory to group on, there is no
+  drawn flat, in the order the sample carries. With no directory to group on, there is no
   grouping to put a node anywhere else. The alternative was to widen the record until a frame
   could be earned; it already shows less than the live view does, on purpose, and one more
   field in every one of 1440 samples buys one border
@@ -471,15 +471,15 @@ A replay is never allowed to pass for the present:
 - the banner carries `role="status"` and the minute travels with the handle as its
   `aria-valuetext`, because a yellow box is nothing at all to a reader who cannot see it
 
-The range says what it really covers — a serve ten minutes old offers ten minutes, and a record
+The range says what it really covers. A serve ten minutes old offers ten minutes, and a record
 whose every reading failed says *that* rather than reading like a serve which has just started.
 The handle steps through readings, not minutes, so the line under it also names how many
 minutes have none.
 
-One thing it deliberately does not do. **It does not date the readings it draws**: the ring
-keeps each reading, never how old that reading was, so a replayed arc can be neither the solid
-one of a fresh reading nor the thin amber one of a stale reading. It gets a third weight of its
-own — full colour, a shade lighter, `data-reading="undatable"` in the markup — and the line
+One thing it deliberately does not do: it does not date the readings it draws. The ring keeps
+each reading, never how old that reading was, so a replayed arc can be neither the solid one
+of a fresh reading nor the thin amber one of a stale reading. It gets a third weight of its
+own, full colour, a shade lighter, `data-reading="undatable"` in the markup, and the line
 under the scrubber says why.
 
 A record that is refreshed under a reader who has taken hold of it is not swapped: the answer
@@ -495,7 +495,7 @@ What the *serve* remembers, and hands the scrubber, is below.
 ## What the serve remembers
 
 `serve` reads the whole fleet on every request. Since it is running anyway, it also reads it
-on a timer of its own — **once a minute, into a ring of 1440 slots**: 24 hours, after which
+on a timer of its own, once a minute, into a ring of 1440 slots. That is 24 hours, after which
 the oldest minute falls off. `GET /api/history` hands that ring back.
 
 ```json
@@ -519,43 +519,43 @@ the oldest minute falls off. `GET /api/history` hands that ring back.
 **In memory, and nowhere else.** A fleet journal on disk is the one file this tool promised
 never to write: it would outlive the process that made it and sit in a home directory carrying
 session ids, working directories and costs. So the record starts when the serve starts, and
-`since` says so — a page that needs to state what it covers reads that field rather than
+`since` says so. A page that needs to state what it covers reads that field rather than
 assuming a full day. Restarting `serve` is how you clear it.
 
-`since` is the oldest minute the record still **holds**, not the oldest it ever held: for the
+`since` is the oldest minute the record still holds, not the oldest it ever held: for the
 first day it is the moment `serve` started, and from the first eviction on it moves with the
-ring. A serve that has been up 34 hours covers 24 of them and says 24 — the alternative is a
+ring. A serve that has been up 34 hours covers 24 of them and says 24. The alternative is a
 page that reads `since`, promises a day and a half, and shows a day.
 
 **A sample carries no names.** A background session is named after the prompt it was given
-(see [the map](#the-map)), which the live surfaces show because someone is looking at their own
+(see [the map](#the-map)), which the live views show because someone is looking at their own
 screen in the present tense. A day of them, retained by a process and served on a route, is a
-different object — so no name enters the ring, for any kind of session. The agent is still
+different object, so no name enters the ring, for any kind of session. The agent is still
 there, with its `sid`, its project and its state; it is the field that is missing, not the row.
 
 `waitingFor` is the one string off the source that the ring does keep, and the difference is
-what it is: a closed vocabulary the surface publishes — five words about the fleet's own
-machinery — rather than a sentence somebody typed. "Blocked on a permission prompt at 14:02"
+what it is: a closed vocabulary the source publishes, five words about the fleet's own
+machinery, rather than a sentence somebody typed. "Blocked on a permission prompt at 14:02"
 is the reason to keep a day of readings at all.
 
 **A reading that failed is a counted slot.** `missed` is how many minutes were due and never
-filled — a collector that threw, or a fleet still being read when the next tick came (only one
+filled: a collector that threw, or a fleet still being read when the next tick came (only one
 read runs at a time, so a slow `claude agents --json` costs a minute, never a queue of
 processes). A gap that says it is a gap is not a gap. It counts slots inside the span `since`
 names, not since the process booted: the 1440 slots hold minutes, and a minute nobody could
-read is one of them — it takes a slot from the samples and ages out with them.
+read is one of them, taking a slot from the samples and ageing out with them.
 
 **One minute and one day are the product.** There is no flag, no environment variable and no
 config key for the cadence or the retention, and none is planned: a cadence knob is a way to
 ask this process to spawn `claude agents --json` every second, and a retention knob is a way to
 ask it to hold a week of fleets in RAM. `/api/history` carries the same `X-Tarmac: 1` identity
-header and `Cache-Control: no-store` as every other answer, and — alone among the routes — it
+header and `Cache-Control: no-store` as every other answer, and alone among the routes it
 never reads the fleet to answer: it serves what was already read.
 
 ## Configuration
 
-Three of tarmac's numbers are opinions, not truths, so all three are yours to set. Nothing
-else is configurable, and every one of them keeps working with no configuration at all.
+Three of tarmac's numbers are opinions rather than truths, so all three are yours to set.
+Nothing else is configurable, and every one of them keeps working with no configuration at all.
 
 | Setting | What it decides | Default |
 |---|---|---|
@@ -563,8 +563,8 @@ else is configurable, and every one of them keeps working with no configuration 
 | port | where `serve` listens | `4477` |
 | snapshots directory | where `list` and `serve` **read** payloads from | the path frozen into the installed wrapper, so the reader follows the writer; with no install to ask, `$XDG_STATE_HOME/tarmac/snapshots`, else `<home>/.local/state/tarmac/snapshots` |
 
-**Flag beats environment beats config file beats default**, settled per setting — a port
-pinned in the file and a threshold tightened for one run is the normal case.
+Flag beats environment beats config file beats default, settled per setting. A port pinned in
+the file and a threshold tightened for one run is the normal case.
 
 | Setting | Flag | Environment | `~/.claude/tarmac/config.json` |
 |---|---|---|---|
@@ -576,13 +576,13 @@ pinned in the file and a threshold tightened for one run is the normal case.
 { "staleAfterMs": 900000, "port": 8080 }
 ```
 
-`tarmac serve` opens by printing each effective value **and which of the four sources it
-came from**, and the freshness threshold is named wherever a `!` is put on a reading — beside
-the marks in `list`, in the footnote under the dashboard's fleet. A mark whose threshold is
-invisible is one you cannot argue with.
+`tarmac serve` opens by printing each effective value and which of the four sources it came
+from. The freshness threshold is named wherever a `!` is put on a reading: beside the marks
+in `list`, in the footnote under the dashboard's fleet. A mark whose threshold is invisible is
+one you cannot argue with.
 
 **The default port gets out of the way; a port you named does not.** Nobody chose `4477`,
-so a `4477` that is taken — the dashboard you left running this morning — is not a reason
+so a `4477` that is taken, by the dashboard you left running this morning, is not a reason
 to fail: `serve` walks up to the next free port, up to ten of them, and its first line says
 where it landed.
 
@@ -591,13 +591,13 @@ tarmac serving http://127.0.0.1:4478 — port 4477 was in use
 ```
 
 A port named on the command line, in the environment or in `config.json` is a decision, and
-`serve` will not quietly honour it somewhere else — it refuses, and names the flag that
+`serve` will not quietly honour it somewhere else. It refuses, and names the flag that
 moves it.
 
 Nothing here is ever silently dropped. A duration that will not parse, a port out of range,
-a key that does not exist, a file that is not JSON, a file that exists but cannot be read —
+a key that does not exist, a file that is not JSON, a file that exists but cannot be read:
 each one stops the run and says what it got, where it came from, and what would have worked.
-**Including the ones that lose**: a broken `TARMAC_STALE_AFTER` is refused even when a flag
+That includes the ones that lose. A broken `TARMAC_STALE_AFTER` is refused even when a flag
 was going to beat it, so a stale variable in a shell profile cannot lurk until the day you
 drop the flag.
 
@@ -612,18 +612,18 @@ refuses. An empty environment variable (`TARMAC_PORT= tarmac serve`) means unset
 
 Two edges worth knowing:
 
-- **No config file is not an error** — it is the zero-config contract. `install` and
+- **No config file is not an error.** It is the zero-config contract. `install` and
   `uninstall` never read the file at all, so a typo in it can never be what stands between
   you and putting your status line back.
-- The snapshots directory is a **read-side** setting, exactly like the flag it mirrors.
-  The wrapper writes where `install` put it — the state directory, which both plans print and
-  `serve` prints on startup, and which the readers take from the wrapper when nothing else
+- The snapshots directory is a read-side setting, exactly like the flag it mirrors.
+  The wrapper writes where `install` put it, in the state directory, which both plans print
+  and `serve` prints on startup, and which the readers take from the wrapper when nothing else
   says otherwise. Point the reader at a directory that does not exist and tarmac says so,
   naming the path and the setting that sent it there.
-  **One absence is silent, and only one**: no install here at all. The default used to be a
+  One absence is silent, and only one: no install here at all. The default used to be a
   path nobody had chosen and nothing had created, so "not there" meant "nothing has been
-  chained yet". It is now the path an install *froze into the wrapper* — chosen, and made, by
-  a run that happened — so if it is missing while a wrapper is installed, the writer and the
+  chained yet". It is now the path an install *froze into the wrapper*, chosen and made by
+  a run that happened, so if it is missing while a wrapper is installed, the writer and the
   reader have parted company, and you are told.
 
 ## Developing
@@ -634,14 +634,14 @@ npm run build                  # flat JavaScript into dist/
 node scripts/demo-fleet.ts     # the invented fleet the README's captures are taken of
 ```
 
-`demo-fleet` plays an invented day into a real `serve` — the real collector, the real
-renderer, both documented sources standing in as a shell script and a directory of payloads —
-because a screenshot of a real machine carries working directories, prompts and costs, and
+`demo-fleet` plays an invented day into a real `serve`, with the real collector, the real
+renderer, and both documented sources standing in as a shell script and a directory of
+payloads. A screenshot of a real machine carries working directories, prompts and costs, and
 nothing real enters this repo.
 
 CI runs the suite on Node 22 and 24, on Linux and macOS, with `TARMAC_REQUIRE_DASH=1` so a
 machine without dash cannot report a green build it did not earn; a separate job builds
-`dist/` and runs it on Node 20 — the oldest version `engines` promises, and the only place
+`dist/` and runs it on Node 20, the oldest version `engines` promises, and the only place
 the published artefact is ever executed. Releases are cut by hand
 ([`PUBLISHING.md`](../PUBLISHING.md)).
 
@@ -650,7 +650,7 @@ Node ≥ 22.18 to *develop*; what ships in `dist/` is plain ES2022 and runs on N
 
 ## Capturing a new Claude Code version
 
-When tarmac reports a version it has never checked, capture the pair — both surfaces from
+When tarmac reports a version it has never checked, capture the pair, both sources from
 one build, in one command, with tarmac installed and a session of that build having drawn
 at least one frame:
 
@@ -659,17 +659,17 @@ npm run fixtures:capture
 ```
 
 It writes `fixtures/agents-<version>.json` and `fixtures/statusline-payload-<version>-*.json`
-verbatim, then tells you to add the version to `CHECKED_VERSIONS` in `src/schema.ts` — the
+verbatim, then tells you to add the version to `CHECKED_VERSIONS` in `src/schema.ts`. The
 suite fails while the constant and the directory disagree, which is what keeps the guard
-from claiming a coverage nobody verified. **Read both files before committing, and scrub
-them**: they come off your machine carrying real paths, session names and costs. The
+from claiming a coverage nobody verified. Read both files before committing, and scrub
+them: they come off your machine carrying real paths, session names and costs. The
 fixtures in this repo are the real shapes with synthetic values, and that is the standard a
 new one has to meet.
 
-One build is sometimes worth capturing twice — a `waiting` session, say, which the first
+One build is sometimes worth capturing twice, for a `waiting` session, say, which the first
 capture happened not to catch. Rename the copy `agents-<version>--<tag>.json`, one lowercase
-word for what the capture *shows*, behind a **double** dash; the suite reads the version and
+word for what the capture *shows*, behind a double dash; the suite reads the version and
 ignores the tag, so a second capture does not invent a build called `2.1.232-waiting`. A
-single dash belongs to the version — `agents-2.1.232-rc.json` is the prerelease it looks like
-— and a name that keeps neither shape fails the suite with the rule rather than being read as
-some third thing.
+single dash belongs to the version, since `agents-2.1.232-rc.json` is the prerelease it looks
+like, and a name that keeps neither shape fails the suite with the rule rather than being read
+as some third thing.
