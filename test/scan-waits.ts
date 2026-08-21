@@ -9,10 +9,12 @@ const ONE_HOME = 'bounded.ts';
 /**
  * The one file allowed to hand a wait a number, because there the deadline is the SUBJECT and
  * not the tool: `waitForOutput(c, /tarmac serving/, 500)` is how you prove a deadline fires, and
- * with the suite's own it would take half the runner's timeout to prove it. Every such call
- * there is raced against an outer bound in the same test, which is what keeps the exemption from
- * being the hang it exists to catch. The two rules below are the only ones it excuses — a bare
- * `fetch` in that file is an offence like anywhere else.
+ * with the suite's own it would take half the runner's timeout to prove it. What keeps the
+ * exemption from being the hang it exists to catch: each excused call proves a SHORT deadline
+ * fires — the expected rejection is its own terminus — and the one call that waits for an
+ * answer instead of a rejection is raced against an outer bound in the same test. The two rules
+ * below are the only ones it excuses — a bare `fetch` in that file is an offence like anywhere
+ * else.
  */
 const DEADLINE_UNDER_TEST = 'bounded-waits.test.ts';
 
@@ -78,9 +80,10 @@ const HAND_TYPED_DEFAULT = /\b(?:timeout|deadline|budget|wait)[A-Za-z]*Ms\b(?:\s
  *
  * Read at the CALLEE, because the last argument alone means nothing: `setTimeout(fn, 5000)` is a
  * timer, not a wait, and a rule that could not tell them apart would have to be dropped. Any
- * `wait…` and `rawGet` — the shape every wait helper in this suite is written in.
+ * `wait…`, any `…Until` poller and `rawGet` — the shapes every wait helper in this suite is
+ * written in (`historyUntil` polls a record the way `waitFor` polls a predicate).
  */
-const WAIT_CALL = /\b(?:wait[A-Za-z]*|rawGet)\s*\(/g;
+const WAIT_CALL = /\b(?:wait[A-Za-z]*|[A-Za-z]+Until|rawGet)\s*\(/g;
 /** A trailing positional number, in the argument list of the call it belongs to. */
 const TRAILING_NUMBER = /,\s*\d[\d_]*\s*$/;
 
@@ -93,9 +96,10 @@ const TRAILING_NUMBER = /,\s*\d[\d_]*\s*$/;
  * number that belongs to the assertion — the second is five call sites in `server.test.ts`, and
  * a rule that reported them would be a rule people turn off.
  *
- * Two limits, both narrow and neither silent: a bracket inside a string literal is counted like
- * any other, and a call split over several lines is not read at all — the same line-based rule
- * `fetch` is judged by, for the same reason. Write the wait on one line.
+ * Two limits, both narrow: a bracket inside a string literal is counted like any other, and a
+ * call split over several lines is not read at all. The second is not the `fetch` trade — a
+ * split `fetch` fails CLOSED (its opening line is flagged for missing a signal on it), a split
+ * wait call walks past this rule entirely. Known fail-open. Write the wait on one line.
  */
 function handsOverADeadline(line: string): boolean {
   for (const call of line.matchAll(WAIT_CALL)) {

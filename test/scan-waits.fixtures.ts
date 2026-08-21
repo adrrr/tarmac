@@ -130,3 +130,9 @@ export const RAW_CLIENT_IMPORT = "import http from 'node:http';";
  * test that says so in both directions: an offence anywhere else, allowed there.
  */
 export const DEADLINE_UNDER_TEST_CALL = 'await assert.rejects(() => waitForOutput(c, /tarmac serving/, 500));';
+
+/**
+ * The definition half of #85, for the test that a default is ONE finding — inert here like every
+ * string in this module, an offence when a real file writes it.
+ */
+export const HAND_TYPED_DEFAULT_DEFINITION = 'export async function waitFor(pred, what, timeoutMs = 10_000) {';
