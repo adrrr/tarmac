@@ -259,15 +259,15 @@ where the test suite cannot reach.
 ## The account's two windows
 
 Every session on the page spends from the same two allowances, so they are drawn once, at the
-top of the page, rather than on each node: the **five-hour window** and the **seven-day
-window**, as the statusline payload reports them.
+top of the page, rather than on each node: the five-hour window and the seven-day window, as
+the statusline payload reports them.
 
 ```
 5h ▬▭▭▭  17%  resets in 2h 14m      7d ▬▬▭▭  42%  resets in 3d 11h
 ```
 
-The number is what is authoritative and the bar is a glance — the same bargain the context
-column makes. The reset arrives as an epoch and is shown as **what is left of the window**,
+The number is what is authoritative and the bar is a glance, the same bargain the context
+column makes. The reset arrives as an epoch and is shown as what is left of the window,
 counted from the moment the fleet was read; the fragment is re-rendered every five seconds, so
 it keeps counting down. A window whose reset is already behind the reading that reported it
 says `reset was due 20m ago` rather than a countdown with a minus sign in front of it: the
@@ -275,32 +275,32 @@ percentage beside those words belongs to a window that has since rolled over.
 
 A reset that is not within eight days of the reading is refused the same way a percentage
 outside 0-100 is: the longest window here is seven days, so nothing this account resets at is
-further out — while the two ways that field can move both land far outside it. Read as seconds,
+further out, while the two ways that field can move both land far outside it. Read as seconds,
 the same number in milliseconds is fifty thousand years away; `0`, the sentinel an unset field
 so often is, is 1970. Both used to render with a straight face (`resets in 19656250d`). The
 percentage stands; the countdown becomes `reset —`.
 
-The limits belong to the **account**, and they arrive per session — so several sessions can
-carry the same number at different ages. The freshest reading wins, which is the rule the
+The limits belong to the account, and they arrive per session, so several sessions can carry
+the same number at different ages. The freshest reading wins, which is the rule the
 fleet model already applies to everything else, and a snapshot dated *after* the clock that
 read it is refused rather than believed (see [staying open](#staying-open)).
 
 What is missing is said, never guessed. No snapshot carrying rate limits at all is
-`— no reading` on a dotted rail, the same dotted emptiness an unmeasured dial wears; a window
+`— no reading` on a dotted rail, the same dotted emptiness an unmeasured dial wears. A window
 present with a null percentage is the same, because the key being there means the number has
-simply not been taken; and a window that is gone, or holding something that is not a
-percentage, is `— schema drift`. None of the three is ever a `0%`, which would be the one
-sentence this page must not say about an account: *you have room*.
+simply not been taken. A window that is gone, or holding something that is not a percentage,
+is `— schema drift`. None of the three is ever a `0%`, which would be the one sentence this
+page must not say about an account: *you have room*.
 
-**A stale reading is dated**, like every other stale reading here. The percentage is exactly as
+A stale reading is dated, like every other stale reading here. The percentage is exactly as
 old as the snapshot it came from, while the countdown beside it is recomputed on every
-five-second re-render — so an undated pair would put a frozen number next to a visibly moving
-one and let both read as now. Past the freshness threshold the pair carries `! 40m ago`, once
+five-second re-render. An undated pair would put a frozen number next to a visibly moving one
+and let both read as now. Past the freshness threshold the pair carries `! 40m ago`, once
 for the two, because both windows come out of the same snapshot.
 
 On replay the gauges come down from the header and sit with the fleet they belong to, under
-the banner that dates it — the account of that minute, not of this one. Their reset is counted
-from the **sample's own clock**: at 09:14 the five-hour window had two hours to run, and it had
+the banner that dates it: the account of that minute, not of this one. Their reset is counted
+from the sample's own clock. At 09:14 the five-hour window had two hours to run, and it had
 two hours to run whatever time it is now. Counted against the present, every reset in the
 record would read as long overdue the moment it aged past, and the page would announce an
 account over its limit for a day that has already ended.
@@ -308,58 +308,58 @@ account over its limit for a day that has already ended.
 ## The map
 
 `serve` has a second view of the same fleet, on `/map`, reached by the tab in the header. The
-tabs are links rather than script, so the view survives a reload and a bookmark — and both
-views are rendered into the same fragment, out of the same reading, which is why the two can
-never disagree about a session on the same screen.
+tabs are links rather than script, so the view survives a reload and a bookmark. Both views
+are rendered into the same fragment, out of the same reading, which is why the two can never
+disagree about a session on the same screen.
 
 One node per session, and the count matches the table's rows exactly. A session's node says
-five things at once — six when it is waiting — in channels that never rely on colour alone:
+five things at once, six when it is waiting, in channels that never rely on colour alone:
 
 | What | Where it is | What it means |
 |---|---|---|
 | context | the arc | how full the window is, drawn to the size of the reading |
 | the reading's age | the arc's weight | solid: fresh. Thin, amber and dated `! 3h ago`: past the freshness threshold |
-| no reading at all | a dotted, empty dial | nothing was measured, and the middle says which kind of nothing — `not chained`, `no turn yet`, `schema drift` |
-| the session's state | the shape by the name | `●` busy or an agent working, `○` idle or an agent finished, `◐` halted until a human answers, `▲` a word tarmac does not flatten into any of those — printed as it came |
-| what a waiting session waits for | a caption under the name | `permission prompt`, `input needed`, `sandbox request`, `worker request`, `dialog open` — the vocabulary the source publishes |
+| no reading at all | a dotted, empty dial | nothing was measured, and the middle says which kind of nothing: `not chained`, `no turn yet`, `schema drift` |
+| the session's state | the shape by the name | `●` busy or an agent working, `○` idle or an agent finished, `◐` halted until a human answers, `▲` a word tarmac does not flatten into any of those, printed as it came |
+| what a waiting session waits for | a caption under the name | `permission prompt`, `input needed`, `sandbox request`, `worker request`, `dialog open`, the vocabulary the source publishes |
 | a reading just landed | one halo, once | a measured reading for that session is under 10s old |
 
 Four of those six are the dial and what it wears, and a background agent has no terminal
-behind it to draw one. It is not a smaller node of the same kind: it is a **strip**, and it
-says fewer things (below).
+behind it to draw one. It is not a smaller node of the same kind. It is a strip, and it says
+fewer things (below).
 
-The sort puts `waiting` first, then busy, then unknown, with idle last — the row that has
+The sort puts `waiting` first, then busy, then unknown, with idle last. The row that has
 stopped until someone answers it is the one that must not be under the fold, and a fleet holds
 one or two of those at a time. It is the fleet's own order, the one the table uses; the map
-groups it into berths (below), each of which takes its place at its first node — so a session
+groups it into berths (below), each of which takes its place at its first node, so a session
 halted on a human lifts the frame around it to the front of the page along with itself.
 
 The state and the reading are two different clocks and are never merged. `busy` comes from
 `claude agents --json`, read at the moment you asked; the percentage comes from a file that
 session's terminal wrote whenever it last drew a frame. A busy session with a two-hour-old
-reading is **both** live and stale, and the node says both — a solid green dot beside a thin
+reading is both live and stale, and the node says both: a solid green dot beside a thin
 amber arc dated `! 2h ago`.
 
 One session in that state, on a fleet where something else is fresh, is normal, and the node is
-the only place it is said — a terminal in a window nobody has selected draws no frames while
-its session works. The dashboard raises a banner over it in exactly one case: **no reading
-anywhere on the fleet is fresh, and one of the cold ones belongs to a session that is busy**. A
+the only place it is said: a terminal in a window nobody has selected draws no frames while
+its session works. The dashboard raises a banner over it in exactly one case, when no reading
+anywhere on the fleet is fresh and one of the cold ones belongs to a session that is busy. A
 statusline is written when a terminal draws a frame, so a fleet that idles keeps yesterday's
-numbers — that is the resting state, not an event, and it is what the per-node dating is for. A
+numbers. That is the resting state, not an event, and it is what the per-node dating is for. A
 fleet where nothing at all has been written while something is demonstrably working is the
 writer having stopped: the wrapper uninstalled from `settings.json`, the snapshots directory
 gone or unwritable, a full disk.
 
 Three things end the question. A single fresh reading anywhere, because something is plainly
 writing. A fleet with nobody busy, because that is just the night. And a reading the filesystem
-dates in the **future** — its age cannot be computed at all, and a file that may have been
-written a second ago is not evidence that nothing was; that one gets its own warning instead.
+dates in the future, whose age cannot be computed at all: a file that may have been written a
+second ago is not evidence that nothing was, so that one gets its own warning instead.
 
 On a fleet of one session the two halves meet, and the banner is right to: a lone session
 working against an hours-old reading is the whole machine saying nothing has been written. The
-one moment it can mislead is a fleet waking from a quiet stretch — a night or a lunch break, any
-gap longer than the threshold — because a session is busy on the session list before its first
-frame lands, so the banner can stand for a single poll until that frame arrives. There is no
+one moment it can mislead is a fleet waking from a quiet stretch, a night or a lunch break, any
+gap longer than the threshold. A session is busy on the session list before its first frame
+lands, so the banner can stand for a single poll until that frame arrives. There is no
 grace period under it on purpose: that would be a second threshold nobody chose, and for that
 one poll the newest reading on the machine really is older than the threshold you set.
 
@@ -367,11 +367,11 @@ one poll the newest reading on the machine really is older than the threshold yo
 A session that has taken no turn yet, and one whose payload drifted, both have a snapshot as
 current as any on the machine and neither has a percentage: they get the dotted dial, not the
 solid ring of a session measured at 0%. That distinction matters twice a lifetime and both
-times at once — `no turn yet` is the whole fleet for a few minutes after a restart, and
+times at once: `no turn yet` is the whole fleet for a few minutes after a restart, and
 `schema drift` is the whole fleet the day Claude Code moves the payload.
 
 The halo is the only thing that moves, and it makes one claim: a reading for that session
-arrived moments ago. Three things have to be true for it — the reading is fresh, it is inside
+arrived moments ago. Three things have to be true for it. The reading is fresh, it is inside
 the ten-second window, and there is a number in it. It never fires for a reading the freshness
 threshold calls stale, even when `--stale-after` is set below that window (the threshold is
 the one that judges), and never for a snapshot that carried no measurement: a drifted fleet
@@ -383,14 +383,14 @@ beside the dial, so the claim is in the markup and not only in the drawing.
 **Berths: the nodes are grouped by working directory.** A frame per directory, labelled with
 its project in small uppercase type, the sessions of that directory as cards inside it and the
 agents docked underneath as strips, across the frame. The working directory is the only field
-every kind of node carries, so it is the only thing the page can group by — and the label is
-the entire claim. **A berth says "read in the same directory". It never says who dispatched
-whom.** `claude agents --json` publishes no such field, so a berth holding two sessions and
+every kind of node carries, so it is the only thing the page can group by, and the label is
+the entire claim. A berth says "read in the same directory". It never says who dispatched
+whom. `claude agents --json` publishes no such field, so a berth holding two sessions and
 two agents makes no claim about which of the four asked for which: no label, no position and
 no line inside a frame means "parent of". The day that relation is published, it can be drawn
 between nodes already sitting side by side, without a frame moving.
 
-Two directories that end in the same folder name are two berths wearing one label — the label
+Two directories that end in the same folder name are two berths wearing one label. The label
 is the basename, and the full path is not printed on this page any more than anywhere else.
 Which is also why the grouping is keyed on the directory and never on the label: two checkouts
 of `atlas` answer to one word, and a frame drawn on that word would claim a directory they do
@@ -401,19 +401,19 @@ that agent's is nobody else's.
 
 **Background agents.** An agent is a strip: a band of text, left-aligned, half the height of a
 card, docked under the cards of its berth. The state in the same glyph a node uses and again in
-a three-pixel accent down its left edge, then the prompt it was named after — ellipsised to
-its line — and the kind it calls itself at the end of it. Not the project: the berth around it
+a three-pixel accent down its left edge, then the prompt it was named after, ellipsised to
+its line, and the kind it calls itself at the end of it. Not the project: the berth around it
 says the directory once, for every node in it. A waiting agent captions itself with what it
 waits for, like any other node. What it has no room for and no source for is the dial: the
 arc, its weight and the halo are all drawn from a statusline frame, and there is no terminal
-here to draw one. A ring on an agent could never fill, and the middle of it said `not chained`
-— the words of a fault someone could go and repair (`tarmac install`), about a session no
-install can cover.
+here to draw one. A ring on an agent could never fill, and the middle of it said
+`not chained`, the words of a fault someone could go and repair (`tarmac install`), about a
+session no install can cover.
 
-The number is not refused, though. **A strip prints what that session's snapshot published,
-and nothing where nothing was published.** The percentage, the model and the effort come out
-of one file, so an agent the join found one for carries all three on a line —
-`ctx 41% · Fable 5 · max` — dated `! 3h ago` when the reading is past the freshness threshold,
+The number is not refused, though. A strip prints what that session's snapshot published, and
+nothing where nothing was published. The percentage, the model and the effort come out of one
+file, so an agent the join found one for carries all three on a line,
+`ctx 41% · Fable 5 · max`, dated `! 3h ago` when the reading is past the freshness threshold,
 exactly as a card is. The percentage is labelled because a strip has neither a ring around it
 nor a column header over it, and a bare `41%` under a line of prompt reads as how much of the
 prompt is done. An agent with no snapshot behind it prints none of the three, and no dash
@@ -422,20 +422,20 @@ where they would have been.
 Which entries those are is decided by `kind`. `interactive` is what a terminal calls itself,
 and `background` is the one other value seen so far, on entries that carry no `pid` and report
 their state under `state` instead of `status`. One alternative is not a vocabulary, so
-`interactive` stays the anchor: a fleet in which **nothing** calls itself `interactive` is read as
-a renamed kind rather than as a machine that has gone entirely background — the same tolerance
+`interactive` stays the anchor: a fleet in which nothing calls itself `interactive` is read as
+a renamed kind rather than as a machine that has gone entirely background, the same tolerance
 the fleet applies to telemetry, where a signal true of every row is a change in the source.
 Whatever a node calls itself is printed on it when it is not `interactive`, so that decision is
 never invisible.
 
 **A background session's name is its prompt.** `claude agents --json` names those sessions
-after what they were asked to do, and tarmac carries the name as it came — onto the node, into
+after what they were asked to do, and tarmac carries the name as it came: onto the node, into
 the table's `Session` column, and verbatim into `GET /api/fleet` and `list --json`. A
 screenshot of a real fleet is therefore a screenshot of what its agents were told. A long name
 is ellipsised on a node to fit its column, which is a width, not a redaction: the whole string
-is still in the markup and in both JSON surfaces, and the first half of a prompt is usually
+is still in the markup and in both JSON outputs, and the first half of a prompt is usually
 the half that gives it away. Worth knowing before the screen, or the payload, goes anywhere.
-The one surface it never reaches is the retained record — see
+The one place it never reaches is the retained record, see
 [what the serve remembers](#what-the-serve-remembers).
 
 ### Replaying the day
