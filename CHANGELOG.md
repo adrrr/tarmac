@@ -14,6 +14,17 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The suite's fallback deadline is held to the magnitude its design rests on.** `#84` argued
+  that a fallback longer than the runner's own timeout is the hang wearing a green disguise — it
+  is taken whenever the flag cannot be read, and then it never fires first — but nothing asserted
+  it: `NO_RUNNER_DEADLINE_MS` mutated to `200_000`, longer than `npm test`'s own 120s, survived the
+  whole suite on an `isFinite && > 0`. It is now measured against the `--test-timeout` in
+  `package.json`'s test script, which is where that number actually lives. Beside it, the absurd
+  input the halving reaches: `--test-timeout=1` floored to `0`, and a zero is not a short deadline
+  but two different absences — `AbortSignal.timeout(0)` aborts a request before it is sent, and
+  `timeout: 0` on `http.request` means no timeout at all, leaving `rawGet` waiting forever on the
+  silent server it is tested against. The halving now floors to one millisecond. (#86)
+
 - **The disclaimer above says which sections it disclaims.** Issue references from `0.3.0` on
   resolve in this repository's tracker, and the note dismissed all of them as history the tracker
   does not carry: a reader following it would drop `#47`, `#52`, `#59`, `#69`–`#71` and everything since as
