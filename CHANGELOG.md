@@ -5,10 +5,9 @@ All notable changes to `@adrrr/tarmac` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions
 follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
-> Issue references from `0.3.0` on are issues of this repository. Below that — `#16`, `#19`,
-> `#20` and the rest, in `0.2.0` and the `0.1.x` sections — they point at the pre-V1
-> development history, which the tracker does not carry: the same numbers name other subjects
-> here.
+> Issue references from `0.3.0` on are issues of this repository. Below that, in `0.2.0` and
+> the `0.1.x` sections, `#16`, `#19`, `#20` and the rest point at the pre-V1 development
+> history, which the tracker does not carry: the same numbers name other subjects here.
 
 ## [Unreleased]
 
@@ -16,12 +15,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **The wait guard now reads the two shapes it was written to catch and did not.** `#84` moved
   twenty-two hand-typed deadlines onto one derived constant, but the guard it left behind polices
-  `fetch` lines and a shadowed `NET_DEADLINE_MS` only — so the very forms two of those defects
+  `fetch` lines and a shadowed `NET_DEADLINE_MS` only, so the very forms two of those defects
   arrived in walked past it: a deadline-shaped parameter default (`timeoutMs = 4000`, the pre-fix
   shape of `rawGet` and `historyUntil`) and a positional budget handed to a shared helper
   (`waitForOutput(child, /marker/, 20_000)`). Both are the recurrence path, because both are how
-  the next helper gets written. `test/scan-waits.ts` reads a default by its NAME — an age a test
-  hands its own fixture is data, not a bound — and reads a positional number inside the argument
+  the next helper gets written. `test/scan-waits.ts` reads a default by its NAME, since an age a
+  test hands its own fixture is data and not a bound, and reads a positional number inside the argument
   list it belongs to, counting brackets rather than matching them: `assert.equal(await rawGet(port,
   host), 403)` closes the call before a number that is the assertion's, and reporting those five
   call sites would have been a rule people turn off. `test/sweep.ts`'s `waitFor` joins the rule its
@@ -31,26 +30,26 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   fires looks like. (#85)
 
 - **The suite's fallback deadline is held to the magnitude its design rests on.** `#84` argued
-  that a fallback longer than the runner's own timeout is the hang wearing a green disguise — it
-  is taken whenever the flag cannot be read, and then it never fires first — but nothing asserted
+  that a fallback longer than the runner's own timeout is the hang wearing a green disguise, taken
+  whenever the flag cannot be read and then never firing first, but nothing asserted
   it: `NO_RUNNER_DEADLINE_MS` mutated to `200_000`, longer than `npm test`'s own 120s, survived the
   whole suite on an `isFinite && > 0`. It is now measured against the `--test-timeout` in
   `package.json`'s test script, which is where that number actually lives. Beside it, the absurd
   input the halving reaches: `--test-timeout=1` floored to `0`, and a zero is not a short deadline
-  but two different absences — `AbortSignal.timeout(0)` aborts a request before it is sent, and
+  but two different absences: `AbortSignal.timeout(0)` aborts a request before it is sent, and
   `timeout: 0` on `http.request` means no timeout at all, leaving `rawGet` waiting forever on the
   silent server it is tested against. The halving now floors to one millisecond. (#86)
 
 - **The disclaimer above says which sections it disclaims.** Issue references from `0.3.0` on
   resolve in this repository's tracker, and the note dismissed all of them as history the tracker
   does not carry: a reader following it would drop `#47`, `#52`, `#59`, `#69`–`#71` and everything since as
-  unresolvable. The clause is still true of `0.2.0` and below — the changelog's `#20` is the
-  snapshots path, this repository's is the uninstall plan — so it is bounded rather than
+  unresolvable. The clause is still true of `0.2.0` and below, where the changelog's `#20` is
+  the snapshots path and this repository's is the uninstall plan, so it is bounded rather than
   deleted. (#75)
 
 - **A published CHANGELOG section can no longer be rewritten by a merge.** A release inserts its
   dated heading beneath `## [Unreleased]` rather than renaming it, so the `### Changed` block
-  under it never moves — its bullets simply come to belong to the new section. A branch cut
+  under it never moves. Its bullets simply come to belong to the new section. A branch cut
   before that commit appends its own entry after the very same `### Changed`, against context
   the release left untouched, and the 3-way merge therefore parks it inside the section that has
   just shipped: no conflict, nothing to review. The merged tree then claims a tarball already on
@@ -60,11 +59,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   tree to be what `git show vX.Y.Z:CHANGELOG.md` says it was, heading and date included, naming the
   version and the likely cause when it is not. The tags are the only record of what a version
   actually said, so the guard is worth exactly what it can read, and it says so: no tags is a
-  failure rather than a skip, and every dated section from 0.2.0 — the release tagging began at —
-  must carry the tag that published it, so a checkout holding only some of them cannot check only
+  failure rather than a skip, and every dated section from 0.2.0, the release that tagging began
+  at, must carry the tag that published it, so a checkout holding only some of them cannot check only
   some of the sections and call that success. CI fetches them with `fetch-depth: 0`, which is not
   interchangeable with `fetch-tags: true`: above depth zero that setting leaves git's tag
-  auto-follow, which at depth 1 reaches the tag on the single commit fetched — nothing on an
+  auto-follow, which at depth 1 reaches the tag on the single commit fetched: nothing on an
   ordinary push, and the new tag on the push right after a release, the worse of the two failures
   because it is the quiet one. The three 0.1.x releases predate tagging and are named as the one
   thing nothing here can vouch for. (#81)
@@ -78,32 +77,32 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   published Claude Code carries a prerelease today, so nothing else moves. (#50)
 
 - **`tarmac list` keeps its columns inside a terminal.** Four of them carry a string the tool
-  did not choose the length of — the project, the state (an unrecognised status word, or the
-  free text a `waiting` session gives), the model, the effort — and one long value in any of
+  did not choose the length of: the project, the state (an unrecognised status word, or the
+  free text a `waiting` session gives), the model and the effort. One long value in any of
   them pushed every row past 190 columns, wrapping the whole table on an 80-column terminal.
   Each of the four now has a cap, with an ellipsis marking where a value was cut, so the worst
   fleet a source can hand the renderer stays within 120 code points a row (display width is
-  the wider question — #80). The page is unchanged: it wraps in CSS and has never needed
+  the wider question, #80). The page is unchanged: it wraps in CSS and has never needed
   one. (#49)
 
 ### Fixed
 
 - **The suite's deadlines are the runner's, not a number typed next to each wait.** Every wait
-  under `test/` on a socket or on a child's output carried one of its own — 4000ms written out
+  under `test/` on a socket or on a child's output carried one of its own: 4000ms written out
   at nineteen `fetch` calls, on `rawGet`'s socket deadline and on a poll budget, 20s on the
   helper both serve harnesses block on and once more longhand in `cli-list`. With four suites
   running at once, both requests in `cli-config.test.ts` aborted on a server that was answering
   them: a loopback request took more than four seconds because the machine was busy, on
   ephemeral ports that could not collide, so a laptop on battery or a CI runner with noisy
   neighbours turned a correct suite red at random. They share one deadline now, half of
-  whatever `--test-timeout` the run is under — 60s beneath `npm test`'s 120s — read in both
+  whatever `--test-timeout` the run is under, 60s beneath `npm test`'s 120s, read in both
   spellings node uses, because on node 22 the spaced one is all that ever reaches
   a test file, and a fallback longer than the runner's own timeout would be the inversion of
   the whole point. Half, so the request loses the race and the failure names the URL instead of
   shrugging `test timed out after 120000ms`. A file run on its own gets a finite fallback: node
   gives it no per-test timeout at all, and neither does `--test-timeout=0`. Dropping the
   deadlines and leaning on the runner was the tempting reading of the report and it is the
-  wrong one — a test the runner times out is marked failed, but the socket left pending keeps
+  wrong one. A test the runner times out is marked failed, but the socket left pending keeps
   the file's process alive, and a file whose test timed out at 3s was measured still running
   half a minute later, waiting to be killed from outside. The static guard that keeps every
   `fetch` in the suite bounded now insists on the shared constant rather than on any literal,
