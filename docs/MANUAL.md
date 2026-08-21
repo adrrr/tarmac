@@ -45,7 +45,7 @@ not about the `claude` on your PATH.
 ## Installing safely: the full contract
 
 `install` and `uninstall` change a file your terminal reads on every frame, so neither runs
-on your say-so alone. Both print the plan first, the settings file, what `statusLine` says
+on your say-so alone. Both print the plan first: the settings file, what `statusLine` says
 now, what it will say, the command that is being wrapped, where the payloads will land, and
 the exact command that undoes it. Then they wait for you to type the verb:
 
@@ -435,7 +435,7 @@ screenshot of a real fleet is therefore a screenshot of what its agents were tol
 is ellipsised on a node to fit its column, which is a width, not a redaction: the whole string
 is still in the markup and in both JSON outputs, and the first half of a prompt is usually
 the half that gives it away. Worth knowing before the screen, or the payload, goes anywhere.
-The one place it never reaches is the retained record, see
+The one place it never reaches is the retained record. See
 [what the serve remembers](#what-the-serve-remembers).
 
 ### Replaying the day
