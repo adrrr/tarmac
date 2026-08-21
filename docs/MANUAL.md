@@ -1,4 +1,4 @@
-# The tarmac manual
+# tarmac: the manual
 
 The [README](../README.md) is the tour; this is the reference. Everything below is held up by
 the test suite. None of it is aspiration.
@@ -66,8 +66,8 @@ Upgrading from a version that kept the snapshots inside `.claude` adds two more 
 payloads being cleared out of it, and, if that directory is version-controlled, the
 `.gitignore` line worth adding.
 
-`y` is not an answer, and neither is silence. With stdin not a terminal, a pipe or a CI job,
-tarmac refuses rather than read consent from an unanswerable prompt. Scripts pass `--yes`,
+`y` is not an answer, and neither is silence. When stdin is not a terminal, in a pipe or a CI
+job, tarmac refuses rather than read consent from an unanswerable prompt. Scripts pass `--yes`,
 deliberately and in writing.
 
 `--home DIR` points either command at another home; it selects a target, nothing more. Pass
@@ -117,7 +117,7 @@ frame, not by the time the line is drawn. And your own status line, if you chain
 reads the same directory, now runs beside that sweep rather than after it, so it can see a
 snapshot older than 48h disappear mid-read.
 
-It deletes by the same rule as the temp files, only what it wrote, and that is one rule, not
+It deletes by the same rule as the temp files: only what it wrote. That is one rule, not
 two. A session id is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal; the wrapper refuses
 to file a payload whose `session_id` is anything else, and the sweep unlinks exactly that
 shape at the top level of the snapshots directory `install` made for it, and nothing else: not
@@ -402,7 +402,7 @@ that agent's is nobody else's.
 **Background agents.** An agent is a strip: a band of text, left-aligned, half the height of a
 card, docked under the cards of its berth. The state in the same glyph a node uses and again in
 a three-pixel accent down its left edge, then the prompt it was named after, ellipsised to
-its line, and the kind it calls itself at the end of it. Not the project: the berth around it
+its line, and last the kind it calls itself. Not the project: the berth around it
 says the directory once, for every node in it. A waiting agent captions itself with what it
 waits for, like any other node. What it has no room for and no source for is the dial: the
 arc, its weight and the halo are all drawn from a statusline frame, and there is no terminal
@@ -433,9 +433,9 @@ after what they were asked to do, and tarmac carries the name as it came: onto t
 the table's `Session` column, and verbatim into `GET /api/fleet` and `list --json`. A
 screenshot of a real fleet is therefore a screenshot of what its agents were told. A long name
 is ellipsised on a node to fit its column, which is a width, not a redaction: the whole string
-is still in the markup and in both JSON outputs, and the first half of a prompt is usually
+is still in the markup and in both JSON surfaces, and the first half of a prompt is usually
 the half that gives it away. Worth knowing before the screen, or the payload, goes anywhere.
-The one place it never reaches is the retained record. See
+The one surface it never reaches is the retained record. See
 [what the serve remembers](#what-the-serve-remembers).
 
 ### Replaying the day
@@ -479,8 +479,8 @@ minutes have none.
 One thing it deliberately does not do: it does not date the readings it draws. The ring keeps
 each reading, never how old that reading was, so a replayed arc can be neither the solid one
 of a fresh reading nor the thin amber one of a stale reading. It gets a third weight of its
-own, full colour, a shade lighter, `data-reading="undatable"` in the markup, and the line
-under the scrubber says why.
+own: full colour, a shade lighter, `data-reading="undatable"` in the markup. The line under
+the scrubber says why.
 
 A record that is refreshed under a reader who has taken hold of it is not swapped: the answer
 re-asks whether anyone is scrubbing at the moment it lands, and a refresh that fails leaves the
@@ -534,7 +534,7 @@ different object, so no name enters the ring, for any kind of session. The agent
 there, with its `sid`, its project and its state; it is the field that is missing, not the row.
 
 `waitingFor` is the one string off the source that the ring does keep, and the difference is
-what it is: a closed vocabulary the source publishes, five words about the fleet's own
+what it is: a closed vocabulary the surface publishes, five words about the fleet's own
 machinery, rather than a sentence somebody typed. "Blocked on a permission prompt at 14:02"
 is the reason to keep a day of readings at all.
 
@@ -636,8 +636,8 @@ node scripts/demo-fleet.ts     # the invented fleet the README's captures are ta
 
 `demo-fleet` plays an invented day into a real `serve`, with the real collector, the real
 renderer, and both documented sources standing in as a shell script and a directory of
-payloads. A screenshot of a real machine carries working directories, prompts and costs, and
-nothing real enters this repo.
+payloads. It is invented because a screenshot of a real machine carries working directories,
+prompts and costs, and nothing real enters this repo.
 
 CI runs the suite on Node 22 and 24, on Linux and macOS, with `TARMAC_REQUIRE_DASH=1` so a
 machine without dash cannot report a green build it did not earn; a separate job builds
@@ -670,6 +670,6 @@ One build is sometimes worth capturing twice, for a `waiting` session, say, whic
 capture happened not to catch. Rename the copy `agents-<version>--<tag>.json`, one lowercase
 word for what the capture *shows*, behind a double dash; the suite reads the version and
 ignores the tag, so a second capture does not invent a build called `2.1.232-waiting`. A
-single dash belongs to the version, since `agents-2.1.232-rc.json` is the prerelease it looks
-like, and a name that keeps neither shape fails the suite with the rule rather than being read
+single dash belongs to the version: `agents-2.1.232-rc.json` is the prerelease it looks like.
+And a name that keeps neither shape fails the suite with the rule rather than being read
 as some third thing.

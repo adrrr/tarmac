@@ -82,7 +82,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   them pushed every row past 190 columns, wrapping the whole table on an 80-column terminal.
   Each of the four now has a cap, with an ellipsis marking where a value was cut, so the worst
   fleet a source can hand the renderer stays within 120 code points a row (display width is
-  the wider question, #80). The page is unchanged: it wraps in CSS and has never needed
+  the wider question, see #80). The page is unchanged: it wraps in CSS and has never needed
   one. (#49)
 
 ### Fixed

@@ -7,8 +7,8 @@
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 **Fleet observability for Claude Code.** One table for every session you have running:
-busy or idle, how full its context is, which model, what it has cost so far. It only reads
-what Claude Code documents, never an internal format.
+busy or idle, how full its context is, which model, what it has cost so far. It reads
+documented surfaces only, never an internal format.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/replay-dark.gif">
@@ -72,7 +72,7 @@ client that sends no such mark, curl or a script, is left alone. The listening r
 The tab in the header swaps the table for the same fleet as nodes: one per session, the arc
 its context, the shape by the name its state. A background agent has no terminal behind it to
 draw a frame with, so it gets a strip of text rather than a dial that could never fill. Both
-views are the same reading in the same fragment, so they can never disagree.
+views render the same reading into the same fragment, so they can never disagree.
 
 The nodes are grouped by working directory: a frame per directory, labelled with its project,
 the sessions inside it as cards and the agents docked underneath as strips. That is the whole
@@ -116,13 +116,13 @@ snapshots inside `.claude`:
 
 The usual ways to watch a Claude Code fleet read something Claude Code never promised would
 stay put: transcript files, terminal panes, undocumented paths. Those break on an update, and
-the bad part is that they break *quietly*, reporting a calm empty fleet.
+worse, they break *quietly*, reporting a calm empty fleet.
 
 tarmac reads two things instead:
 
 | Source | What it gives | How solid |
 |---|---|---|
-| `claude agents --json` | which sessions exist, busy, idle or waiting on you, cwd, uptime | a documented CLI output (`--help`: *"Print active sessions … as a JSON array … for scripting"*) |
+| `claude agents --json` | which sessions exist, busy, idle or waiting on you, cwd, uptime | a documented CLI surface (`--help`: *"Print active sessions … as a JSON array … for scripting"*) |
 | the status line payload | context %, model, effort, cost | the JSON Claude Code hands to your own `statusLine.command` on every frame. Observed, not published as a schema |
 
 That second line is the honest caveat. The real defence is not immunity, it is visible
@@ -153,9 +153,9 @@ and what would have worked. Spellings, edge cases and the two health fields
 
 ## What it deliberately does not do
 
-- **No inferred "waiting for you".** `agents --json` reports `waiting` with a reason, a
-  permission prompt or an open dialog, and tarmac draws exactly that, in the table and on the
-  map. What it will not do is guess at the rest: a session that asked you a question in prose
+- **No inferred "waiting for you".** `agents --json` reports `waiting` with a reason, such as
+  a permission prompt or an open dialog, and tarmac draws exactly that, in the table and on
+  the map. What it will not do is guess at the rest: a session that asked you a question in prose
   still reports `idle`, and the only way to know better is to read a transcript, which is
   the one thing this tool will not do. The signal is as good as its source, and no better.
 - **No history on disk.** `tarmac list` is a snapshot in time. A running `serve` holds the
