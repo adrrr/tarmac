@@ -14,6 +14,22 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The wait guard now reads the two shapes it was written to catch and did not.** `#84` moved
+  twenty-two hand-typed deadlines onto one derived constant, but the guard it left behind polices
+  `fetch` lines and a shadowed `NET_DEADLINE_MS` only — so the very forms two of those defects
+  arrived in walked past it: a deadline-shaped parameter default (`timeoutMs = 4000`, the pre-fix
+  shape of `rawGet` and `historyUntil`) and a positional budget handed to a shared helper
+  (`waitForOutput(child, /marker/, 20_000)`). Both are the recurrence path, because both are how
+  the next helper gets written. `test/scan-waits.ts` reads a default by its NAME — an age a test
+  hands its own fixture is data, not a bound — and reads a positional number inside the argument
+  list it belongs to, counting brackets rather than matching them: `assert.equal(await rawGet(port,
+  host), 403)` closes the call before a number that is the assertion's, and reporting those five
+  call sites would have been a rule people turn off. `test/sweep.ts`'s `waitFor` joins the rule its
+  own docstring was citing, and `test/sweep-perf.test.ts` drops the 60_000 it typed to get past the
+  10s default. One exemption, file-deep and asserted from both sides: the file where a deadline is
+  the subject rather than the tool may still hand a wait a number, because that is what proving one
+  fires looks like. (#85)
+
 - **The suite's fallback deadline is held to the magnitude its design rests on.** `#84` argued
   that a fallback longer than the runner's own timeout is the hang wearing a green disguise — it
   is taken whenever the flag cannot be read, and then it never fires first — but nothing asserted

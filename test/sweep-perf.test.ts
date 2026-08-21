@@ -271,7 +271,7 @@ test(`no frame pays for the backlog with ${STOCK} snapshots to sweep`, async (t)
 
   // The work is not gone, it is on the other side of the fork — and it is all still to do.
   r.release();
-  await waitFor(() => coldLeft(r.dir) === 0, `the ${COLD} cold snapshots to be swept`, 60_000);
+  await waitFor(() => coldLeft(r.dir) === 0, `the ${COLD} cold snapshots to be swept`);
   const swept = r.work();
   assert.equal(swept.walks, 1, `the hour's one walk, once the frames are over: ${swept.walks}`);
   assert.equal(swept.unlinked, COLD, `the sweep unlinked ${swept.unlinked} of the ${COLD} cold snapshots`);

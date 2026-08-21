@@ -7,6 +7,18 @@
 const ONE_HOME = 'bounded.ts';
 
 /**
+ * The one file allowed to hand a wait a number, because there the deadline is the SUBJECT and
+ * not the tool: `waitForOutput(c, /tarmac serving/, 500)` is how you prove a deadline fires, and
+ * with the suite's own it would take half the runner's timeout to prove it. What keeps the
+ * exemption from being the hang it exists to catch: each excused call proves a SHORT deadline
+ * fires — the expected rejection is its own terminus — and the one call that waits for an
+ * answer instead of a rejection is raced against an outer bound in the same test. The two rules
+ * below are the only ones it excuses — a bare `fetch` in that file is an offence like anywhere
+ * else.
+ */
+const DEADLINE_UNDER_TEST = 'bounded-waits.test.ts';
+
+/**
  * `fetch` is judged where it is written, because its deadline IS one expression and belongs
  * next to the call, where a reader sees it. Line-based, so a fetch split over several lines
  * reads as unbounded — write it on one.
@@ -48,6 +60,62 @@ const IMPORTS_RAW_CLIENT = /(?:from\s+|require\s*\(\s*)['"](?:node:)?https?['"]/
 const TYPE_ONLY = /^\s*import\s+type\s/;
 
 /**
+ * The literal one line further out: `async function myGet(url, timeoutMs = 4000)`, which is the
+ * pre-fix shape of both `rawGet` and `historyUntil` (#84) and the form a helper written next year
+ * arrives in. The rules above police `fetch` calls and the shadowed constant, and a default is
+ * neither — the number never appears at a call site at all, and every caller inherits it.
+ *
+ * The NAME is what is read, and only a deadline-shaped one: `timeoutMs`, `deadlineMs`, a
+ * `waitMs`. An age or a duration a test hands its own fixture — `snapshotAgeMs = 1200` — is data
+ * it chose, not a bound on anything that can hang, and a rule that reported it would be a rule
+ * people turn off. A `= NET_DEADLINE_MS` is what the rule asks for and does not match; only a
+ * digit on the right does, annotated (`timeoutMs: number = 4000`) or not.
+ */
+const HAND_TYPED_DEFAULT = /\b(?:timeout|deadline|budget|wait)[A-Za-z]*Ms\b(?:\s*:\s*number)?\s*=\s*\d/i;
+
+/**
+ * The same guess made at the call instead: `waitForOutput(child, /marker/, 20_000)`. The default
+ * can be the suite's constant and this still walks past it — which is how a shared helper ends up
+ * carrying twenty-two deadlines again, one call site at a time.
+ *
+ * Read at the CALLEE, because the last argument alone means nothing: `setTimeout(fn, 5000)` is a
+ * timer, not a wait, and a rule that could not tell them apart would have to be dropped. Any
+ * `wait…`, any `…Until` poller and `rawGet` — the shapes every wait helper in this suite is
+ * written in (`historyUntil` polls a record the way `waitFor` polls a predicate).
+ */
+const WAIT_CALL = /\b(?:wait[A-Za-z]*|[A-Za-z]+Until|rawGet)\s*\(/g;
+/** A trailing positional number, in the argument list of the call it belongs to. */
+const TRAILING_NUMBER = /,\s*\d[\d_]*\s*$/;
+
+/**
+ * Whether `line` hands one of those helpers a number of its own.
+ *
+ * The brackets are counted rather than matched, because both ways of writing it past a regex are
+ * ordinary here: `waitFor(() => cold(r.dir) === 0, what, 60_000)` closes a bracket the deadline
+ * is still inside, and `assert.equal(await rawGet(port, host), 403)` closes the call before a
+ * number that belongs to the assertion — the second is five call sites in `server.test.ts`, and
+ * a rule that reported them would be a rule people turn off.
+ *
+ * Two limits, both narrow: a bracket inside a string literal is counted like any other, and a
+ * call split over several lines is not read at all. The second is not the `fetch` trade — a
+ * split `fetch` fails CLOSED (its opening line is flagged for missing a signal on it), a split
+ * wait call walks past this rule entirely. Known fail-open. Write the wait on one line.
+ */
+function handsOverADeadline(line: string): boolean {
+  for (const call of line.matchAll(WAIT_CALL)) {
+    const open = call.index + call[0].length;
+    let depth = 1;
+    let i = open;
+    for (; i < line.length && depth > 0; i++) {
+      if ('([{'.includes(line[i]!)) depth++;
+      else if (')]}'.includes(line[i]!)) depth--;
+    }
+    if (depth === 0 && TRAILING_NUMBER.test(line.slice(open, i - 1))) return true;
+  }
+  return false;
+}
+
+/**
  * Comments are prose, not code — but only a comment that OPENS the line can be skipped
  * wholesale. A trailing one has to be cut instead, and cut carefully: `//` also opens every
  * `http://` URL in this suite, so the cut is made only where the slashes are not preceded by
@@ -72,6 +140,13 @@ export function unboundedWaits(file: string, source: string): string[] {
     }
     if (IMPORTS_RAW_CLIENT.test(line) && !TYPE_ONLY.test(line) && file !== ONE_HOME) {
       found.push(`${at} must use rawGet from ${ONE_HOME}, not a raw http client`);
+    }
+    if (file === DEADLINE_UNDER_TEST) return;
+    if (HAND_TYPED_DEFAULT.test(line)) {
+      found.push(`${at} must default to NET_DEADLINE_MS from ${ONE_HOME}, not to a number of its own`);
+    }
+    if (handsOverADeadline(line)) {
+      found.push(`${at} must let the helper's deadline stand rather than hand it one`);
     }
   });
   return found;

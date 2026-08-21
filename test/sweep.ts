@@ -7,6 +7,7 @@
 // alone — same arrangement as `bounded.ts` and `fleet-fixtures.ts`.
 
 import { setTimeout as sleep } from 'node:timers/promises';
+import { NET_DEADLINE_MS } from './bounded.ts';
 
 /**
  * Draws the frames that must not be timed, before the clock starts.
@@ -32,8 +33,12 @@ export function warmUpFrames(drawFrame: () => void): void {
  * `bounded.ts` states for the network waits, applied to the filesystem: a wait that cannot
  * fail is a test that cannot fail. `what` is in the message because a poll that times out
  * carries no other clue about which of the two halves of a sweep never arrived.
+ *
+ * The budget is `bounded.ts`'s rule too, and not only its prose: 10_000 was a number typed here,
+ * which is a guess about how fast a machine is, and the guess that failed on a loaded one is the
+ * whole of #73. Half the runner's own timeout is the bound in reach that nobody guessed.
  */
-export async function waitFor(pred: () => boolean, what: string, timeoutMs = 10_000): Promise<void> {
+export async function waitFor(pred: () => boolean, what: string, timeoutMs = NET_DEADLINE_MS): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     if (pred()) return;
