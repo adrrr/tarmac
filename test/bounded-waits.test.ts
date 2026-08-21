@@ -117,13 +117,17 @@ test('with no runner timeout the deadline is the only net, and it is finite', ()
 // that until #84 — and a fallback longer than the timeout the runner is still holding no longer
 // fires first. The wait then loses nothing and reports nothing, and the runner times out a test
 // whose socket keeps the file alive: the hang this file exists for, wearing a green disguise.
-// `200_000` against `npm test`'s own 120s passes every other assertion here.
+// `200_000` against `npm test`'s own 120s passes every other assertion here. And `<` alone
+// would admit a 119_000 that only loses the race by a second (#92): the fallback's contract
+// (`bounded.ts` — « the value its own `--test-timeout=120000` yields ») is the exact half,
+// so the exact half is what is pinned. A deliberately more conservative fallback is a
+// decision — it changes this line AND that comment together, which is the point.
 test('the fallback fires before the timeout npm test puts in force', () => {
   const script = (JSON.parse(fs.readFileSync(path.join(testDir, '..', 'package.json'), 'utf8')).scripts as Record<string, string>).test;
   const runnerMs = Number(/--test-timeout[= ](\d+)/.exec(script ?? '')?.[1]);
   assert.ok(runnerMs > 0, `the suite's own runner timeout is what this is measured against: ${script}`);
   const bare = netDeadlineFrom([]);
-  assert.ok(bare < runnerMs, `a fallback of ${bare}ms cannot fire before the runner's ${runnerMs}ms`);
+  assert.equal(bare, Math.floor(runnerMs / 2), `the fallback is the value npm test's own flag yields, not merely something under ${runnerMs}ms`);
 });
 
 // The invariant the whole design rests on, read off the run in progress rather than off a
