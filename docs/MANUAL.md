@@ -1,26 +1,24 @@
-# tarmac — the manual
+# The tarmac manual
 
-The [README](../README.md) is the tour; this is the reference. Everything below is held
-up by the test suite — none of it is aspiration.
+The [README](../README.md) is the tour; this is the reference. Everything below is held up by
+the test suite. None of it is aspiration.
 
 ## Commands and options
 
 | Command | What it does | Options |
 |---|---|---|
-| `tarmac list` | one-shot fleet table — the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
+| `tarmac list` | one-shot fleet table, and the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
 | `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin` |
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
-`--help` works everywhere. An option handed to a command that does not read it is an
-**error**, not something quietly ignored — and the error names the commands it does belong
-to.
+`--help` works everywhere. An option handed to a command that does not read it is an error,
+not something quietly ignored, and the error names the commands it does belong to.
 
 ## Degradation, state by state
 
-The real defence is not immunity, it is **visible degradation**. When a field moves,
-tarmac says the field moved. It never turns a measurement it could not take into a
-confident `0`.
+The real defence is not immunity, it is visible degradation. When a field moves, tarmac says
+the field moved. It never turns a measurement it could not take into a confident `0`.
 
 | What tarmac sees | What it shows |
 |---|---|
@@ -28,28 +26,28 @@ confident `0`.
 | the key is there but null | `— no turn yet` (a session that has not taken a turn) |
 | the key is gone or retyped | `— schema drift`, and a warning if it happened to every session |
 | no snapshot for a live session | `— not chained` |
-| a live session whose id it will never file under | `— not chained`, and a count saying how many — never "run tarmac install" |
-| a reading older than the threshold | the value, **dated** — a stale number is still true, of an earlier moment |
+| a live session whose id it will never file under | `— not chained`, and a count saying how many, never "run tarmac install" |
+| a reading older than the threshold | the value, dated. A stale number is still true, of an earlier moment |
 | a status string it does not know | that string, never "idle" |
-| a session halted until you answer something | `waiting`, and which answer — `permission prompt`, `dialog open`, … |
+| a session halted until you answer something | `waiting`, and which answer: `permission prompt`, `dialog open`, … |
 | a snapshot directory it could not read | the errno, not "run tarmac install" |
 | a cost key that is absent | `—` for the row, and a total qualified by how many sessions really report one |
 | no snapshot carrying the account's rate limits | `— no reading` in both gauges, on a dotted rail — never a window at 0% |
 | a rate-limit reset nowhere near the reading that carried it | `reset —`; the percentage stands, the impossible countdown does not |
-| a Claude Code version no fixture covers | a footnote naming that version — nothing blocked, nothing hidden |
+| a Claude Code version no fixture covers | a footnote naming that version. Nothing blocked, nothing hidden |
 
 That last line is the smoke detector to the rest's alarm. The fields above were *observed*
 on the Claude Code builds frozen in `fixtures/`; when a session shows up on a build nobody
-has captured, tarmac says so **before** anything breaks, and keeps reporting. It reads the
-version off the payload itself, so it tells you about builds actually writing to your fleet
-— not about the `claude` on your PATH.
+has captured, tarmac says so before anything breaks, and keeps reporting. It reads the
+version off the payload itself, so it tells you about builds actually writing to your fleet,
+not about the `claude` on your PATH.
 
-## Installing safely — the full contract
+## Installing safely: the full contract
 
 `install` and `uninstall` change a file your terminal reads on every frame, so neither runs
-on your say-so alone. Both print the plan first — the settings file, what `statusLine` says
+on your say-so alone. Both print the plan first, the settings file, what `statusLine` says
 now, what it will say, the command that is being wrapped, where the payloads will land, and
-the exact command that undoes it — and then wait for you to **type the verb**:
+the exact command that undoes it. Then they wait for you to type the verb:
 
 ```
 tarmac install — your home
@@ -64,25 +62,26 @@ tarmac install — your home
 Type "install" to proceed, anything else to abort:
 ```
 
-Upgrading from a version that kept the snapshots inside `.claude` adds two more lines — the
+Upgrading from a version that kept the snapshots inside `.claude` adds two more lines: the
 payloads being cleared out of it, and, if that directory is version-controlled, the
 `.gitignore` line worth adding.
 
-`y` is not an answer, and neither is silence: with stdin not a terminal — a pipe, a CI job —
+`y` is not an answer, and neither is silence. With stdin not a terminal, a pipe or a CI job,
 tarmac refuses rather than read consent from an unanswerable prompt. Scripts pass `--yes`,
 deliberately and in writing.
 
-`--home DIR` points either command at another home; it selects a target, nothing more.
-**Pass the same `--home` to `list` and `serve`**, which default to yours: installing into
-`DIR` and then running a bare `list` reads a directory nothing was ever written to, and
-reports `statusline chained on 0/1 sessions` — a true statement about the wrong directory.
+`--home DIR` points either command at another home; it selects a target, nothing more. Pass
+the same `--home` to `list` and `serve`, which default to yours: installing into `DIR` and
+then running a bare `list` reads a directory nothing was ever written to, and reports
+`statusline chained on 0/1 sessions`, a true statement about the wrong directory.
 
-`install` does not replace your status line, it **wraps** it: the wrapper drops the payload
-in the state directory (`$XDG_STATE_HOME/tarmac/snapshots/`, or `DIR/.local/state/tarmac/snapshots/`
-when that variable is unset) and then calls whatever command was already configured, so your
-display is byte-identical. Only two files land under `DIR/.claude/`, and neither one changes
-at runtime: the wrapper itself and the `backup.json` that undoes it. `uninstall` restores the original `settings.json` verbatim
-when you have not edited it since, and surgically (statusLine key only) when you have. If
+`install` does not replace your status line, it wraps it: the wrapper drops the payload in
+the state directory (`$XDG_STATE_HOME/tarmac/snapshots/`, or
+`DIR/.local/state/tarmac/snapshots/` when that variable is unset) and then calls whatever
+command was already configured, so your display is byte-identical. Only two files land under
+`DIR/.claude/`, and neither one changes at runtime: the wrapper itself and the `backup.json`
+that undoes it. `uninstall` restores the original `settings.json` verbatim when you have not
+edited it since, and surgically (statusLine key only) when you have. If
 someone else has taken over the status line in the meantime, tarmac leaves it alone and
 tells you it restored nothing. It names which of its four restore modes ran: `bytes`, the
 usual one, puts the original file back exactly.
@@ -91,56 +90,56 @@ The write re-serialises `settings.json`, so a version-controlled one shows a for
 not a one-line diff.
 
 tarmac deletes two things, and both of them are its own. At `serve` start it removes temp
-files an interrupted wrapper left behind — over an hour old, and **signed**, meaning named
+files an interrupted wrapper left behind: over an hour old, and signed, meaning named
 `.tarmac-<session>.<pid>.tmp`, a name nothing but tarmac writes. It will not touch a file
 merely *shaped* like one of ours, because `.<name>.<pid>.tmp` is the temp-file convention of
 half the world.
 
-And the wrapper prunes the snapshots of sessions that stopped rendering. A live session
-rewrites its own snapshot on **every frame**, so a `<session>.json` nothing has rewritten in
-48h belongs to a session that is gone — and without this, a fleet that recycles its sessions
-every night grows one dead file per session per night, forever. The sweep is amortized,
-because it sits in the render path of your status line: a frame costs one `find` on a single
-marker file (`.tarmac-last-prune`), and the directory itself is swept at most once an hour.
+The wrapper also prunes the snapshots of sessions that stopped rendering. A live session
+rewrites its own snapshot on every frame, so a `<session>.json` nothing has rewritten in 48h
+belongs to a session that is gone. Without this, a fleet that recycles its sessions every
+night grows one dead file per session per night, forever. The sweep is amortized, because it
+sits in the render path of your status line: a frame costs one `find` on a single marker file
+(`.tarmac-last-prune`), and the directory itself is swept at most once an hour.
 
-That hourly sweep runs **beside** the frame rather than inside it. The frame starts it, dates
-the marker and goes straight on to your status line; the walk and the unlinks happen in a
-detached child that nothing waits for. So on an install that has never pruned — where the
-first sweep has months of dead snapshots to get through — the frame that triggers it still
-costs about what every other frame costs, and the backlog disappears a moment later.
+That hourly sweep runs beside the frame rather than inside it. The frame starts it, dates the
+marker and goes straight on to your status line; the walk and the unlinks happen in a detached
+child that nothing waits for. So on an install that has never pruned, where the first sweep
+has months of dead snapshots to get through, the frame that triggers it still costs about what
+every other frame costs, and the backlog disappears a moment later.
 
 Three consequences worth knowing. A `ps` during that first sweep shows a stray `find` that
 belongs to tarmac, and it is genuinely on its own: closing Claude Code does not take it with
-it, and neither does a Ctrl-C — the shell has an asynchronous command ignore that. It ends
-when it is done, which is seconds, or with a signal sent to the process group; whatever it had
-not reached waits for the next sweep. The files it removes are gone shortly *after* the frame,
-not by the time the line is drawn. And your own status line, if you chained one that reads the
-same directory, now runs beside that sweep rather than after it, so it can see a snapshot
-older than 48h disappear mid-read.
+it, and neither does a Ctrl-C, because the shell has an asynchronous command ignore that. It
+ends when it is done, which is seconds, or with a signal sent to the process group; whatever
+it had not reached waits for the next sweep. The files it removes are gone shortly *after* the
+frame, not by the time the line is drawn. And your own status line, if you chained one that
+reads the same directory, now runs beside that sweep rather than after it, so it can see a
+snapshot older than 48h disappear mid-read.
 
-It deletes by the same rule as the temp files: **only what it wrote** — and that is one rule,
-not two. A session id is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal; the wrapper
-refuses to file a payload whose `session_id` is anything else, and the sweep unlinks exactly
-that shape at the top level of the snapshots directory `install` made for it, and nothing
-else: not a subdirectory, not a directory or symlink wearing that name, not a dotfile wearing
-it either, and not your `settings.json` or `fleet.json` sitting next to it. (`--snapshots-dir`
-is a *reader's* lens for `list` and `serve` — pointing those at a directory another statusline
-owns deletes nothing, because no reader deletes anything.)
+It deletes by the same rule as the temp files, only what it wrote, and that is one rule, not
+two. A session id is the UUID Claude Code emits, 8-4-4-4-12 hexadecimal; the wrapper refuses
+to file a payload whose `session_id` is anything else, and the sweep unlinks exactly that
+shape at the top level of the snapshots directory `install` made for it, and nothing else: not
+a subdirectory, not a directory or symlink wearing that name, not a dotfile wearing it either,
+and not your `settings.json` or `fleet.json` sitting next to it. (`--snapshots-dir` is a
+*reader's* lens for `list` and `serve`. Pointing those at a directory another statusline owns
+deletes nothing, because no reader deletes anything.)
 
 A session whose id is not a UUID therefore gets no snapshot at all, and `list` shows it as a
-live session with no reading — and says so in those words, rather than telling you to run
-`tarmac install`: for that session the install is already right, the frame is already drawn,
-and the wrapper is declining on purpose. That is the deliberate half of the trade; the
-alternative is a sweep whose reach is every filename of eight characters or more.
+live session with no reading, in those words, rather than telling you to run `tarmac install`.
+For that session the install is already right, the frame is already drawn, and the wrapper is
+declining on purpose. That is the deliberate half of the trade; the alternative is a sweep
+whose reach is every filename of eight characters or more.
 
 Two loose ends, if you ran a version before this one. A snapshot already on disk under a
-non-UUID name is still *read* — the reader takes any `*.json` and keys on the `session_id`
-inside it — but no sweep will ever remove it. And a temp file left by an interrupted frame of
-the older wrapper, `.tarmac-<non-UUID sid>.<pid>.tmp`, is no longer collected at all: the
-reaper now matches only names the current writer can produce, so that is coverage *lost* over
-the existing stock, not merely a sweep that skips it. Neither is worth a migration — the shape
-has never been observed, and these are files of installs that were never published — but both
-are yours to delete by hand. Nothing will write another of either.
+non-UUID name is still *read*, because the reader takes any `*.json` and keys on the
+`session_id` inside it, but no sweep will ever remove it. And a temp file left by an
+interrupted frame of the older wrapper, `.tarmac-<non-UUID sid>.<pid>.tmp`, is no longer
+collected at all: the reaper now matches only names the current writer can produce, so that is
+coverage *lost* over the existing stock, not merely a sweep that skips it. Neither is worth a
+migration, since the shape has never been observed and these are files of installs that were
+never published, but both are yours to delete by hand. Nothing will write another of either.
 
 One consequence worth knowing: a session that is alive but has drawn no status line for 48h
 loses its snapshot too, and `list` then shows it as a session with no reading rather than a
@@ -149,31 +148,31 @@ stale one. The next frame it draws puts the file back.
 Your snapshot files survive `uninstall`; they are your data. Tarmac removes only
 `.tarmac-last-prune`, the housekeeping marker that has no owner once the pruning wrapper
 leaves with it. If the current `statusLine` is foreign, uninstall leaves both the wrapper and
-its marker in place so that command never points at a missing file. And when nothing says
-where that directory is — the wrapper deleted by hand, or still there but no longer carrying
-the path, with `backup.json` left behind, which uninstall still works through — uninstall
+its marker in place so that command never points at a missing file. Sometimes nothing says
+where that directory is: the wrapper deleted by hand, or still there but no longer carrying
+the path, with `backup.json` left behind, which uninstall still works through. Then uninstall
 opens no snapshots directory at all, and the plan prints `snapshots  unknown` rather than a
 path it would only have guessed at.
 
 Two more states leave the marker where it is, and the plan says which one it is looking at
-rather than promising a removal in either. There may be no marker to remove — nothing stamps
-one until the first frame that sweeps, so a home whose status line has never drawn has none at
-all. And what wears that name may not be a regular file: a symlink or a directory there is
-left alone, because `unlink` would take the link and not what it points at.
+rather than promising a removal in either. There may be no marker to remove, since nothing
+stamps one until the first frame that sweeps, so a home whose status line has never drawn has
+none at all. And what wears that name may not be a regular file: a symlink or a directory
+there is left alone, because `unlink` would take the link and not what it points at.
 
 ### Where the snapshots live, and why not in `.claude`
 
 `$XDG_STATE_HOME/tarmac/snapshots/` when that variable is set to an absolute path, and
-`<home>/.local/state/tarmac/snapshots/` otherwise — the XDG default for "state data that
+`<home>/.local/state/tarmac/snapshots/` otherwise, the XDG default for "state data that
 should persist between restarts but is not important enough for the data directory". That is
 what a snapshot is: a reading of one frame, rewritten by the next.
 
 They used to live in `<home>/.claude/tarmac/snapshots/`, and that was a mistake. `.claude` is
-commonly a git repository — dotfiles, config sync — and a file rewritten at every frame of
+commonly a git repository, for dotfiles or config sync, and a file rewritten at every frame of
 every session diffs forever (#20). So:
 
 - **The reader follows the writer.** With nothing configured, `list` and `serve` take the
-  path out of the installed wrapper itself rather than recomputing it — otherwise an
+  path out of the installed wrapper itself rather than recomputing it. Otherwise an
   `XDG_STATE_HOME` set in your shell and absent from a LaunchAgent (or a systemd user unit,
   or cron) would have the wrapper filing into one directory while the reader watched another,
   reporting a healthy, empty fleet. With no install to ask, the default is computed.
@@ -182,24 +181,24 @@ every session diffs forever (#20). So:
   `--home` pointing elsewhere, the default under *that* home is used. A relative value is
   ignored, as the spec asks.
 - **Only an install that can show it was here clears anything.** The old directory is a
-  documented path, and "ours" is a shape — a UUID name, a `.tarmac-` prefix. A first install
+  documented path, and "ours" is a shape: a UUID name, a `.tarmac-` prefix. A first install
   on a home tarmac has never touched leaves it entirely alone; what licenses the purge is the
   statusLine already pointing at us, our marker in the wrapper, or a usable backup.
-- **`install` clears the old directory** — the payloads, the temp files and the prune
-  marker — and removes it. Nothing is copied across: every live session writes a fresh
+- **`install` clears the old directory.** The payloads, the temp files and the prune marker
+  go, and the directory with them. Nothing is copied across: every live session writes a fresh
   snapshot within seconds, and moving them would carry the very files in question into the
   new directory. A file tarmac did not write is never touched, and one is enough for the
   directory to stay. The plan says how many, and where, before you confirm.
 - **If `.claude` is a git repository, the plan says so**, and names the `.gitignore` line
   worth adding.
 
-If you read the snapshots with something other than tarmac, this is a **breaking change of
-path**: `tarmac list --json` reports the effective directory as `health.snapshotsDir`, and
+If you read the snapshots with something other than tarmac, this is a breaking change of
+path: `tarmac list --json` reports the effective directory as `health.snapshotsDir`, and
 `tarmac serve` prints it on startup.
 
 `health.unfilable` is the other field worth reading from that JSON: the number of live
 sessions whose id is not the UUID the wrapper files under, counted among the ones reporting
-no context — never among the covered, because a snapshot an older wrapper filed under a
+no context and never among the covered, because a snapshot an older wrapper filed under a
 non-UUID name is still read. It is what separates "no frame drawn yet", which `tarmac
 install` and one frame fix, from "no frame will ever produce one", which nothing fixes. Both
 renderers say which of the two they are looking at rather than defaulting to install advice.
@@ -213,44 +212,44 @@ tarmac serving http://127.0.0.1:4477
 ```
 
 It binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
-marks as coming from another origin — `Sec-Fetch-Site` anything but `same-origin` or `none` —
-your cwd paths and costs never leave the machine. A client that sends no such header, curl or a
-script, is left alone. A busy **default** port walks up to the next free one and says so; a
-port you chose yourself — flag, environment or config file — refuses instead, because you chose it
-(see [configuration](#configuration)).
+marks as coming from another origin, meaning `Sec-Fetch-Site` anything but `same-origin` or
+`none`. Your cwd paths and costs never leave the machine. A client that sends no such header,
+curl or a script, is left alone. A busy default port walks up to the next free one and says
+so; a port you chose yourself, by flag, environment or config file, refuses instead, because
+you chose it (see [configuration](#configuration)).
 
 ## Staying open
 
 Both live views owe you the same two facts, and neither is allowed to be quiet about them:
-**when the last good reading arrived**, and **whether the last attempt to refresh failed**.
+when the last good reading arrived, and whether the last attempt to refresh failed.
 
 The page asks the server for `/live` every 5 seconds and swaps it in; the header carries an
 age that keeps climbing whether or not the refresh works, so numbers that have stopped moving
 cannot pass for live ones. When a poll fails, a banner names the reason and the table is
-framed off — the data stays, because it is still true of an earlier moment. `list --watch`
+framed off. The data stays, because it is still true of an earlier moment. `list --watch`
 does the same thing in the terminal, and prints `! refresh failing — <reason>` above a table
 it refuses to throw away.
 
 Three failures are handled by name, because each of them can otherwise look like health:
 
-- **A refusal** (`serve` is gone) — the banner names it on the next poll.
+- **A refusal.** `serve` is gone, and the banner names it on the next poll.
 - **An empty answer.** A 200 carrying nothing is not a fleet of nothing. Swapping it in would
   blank the table and stamp it "updated 0s ago" with the dot still green, which is this tool's
   own failure mode wearing its own colours. It counts as a failed refresh.
 - **No answer at all.** `fetch` has no timeout in any browser, so a server that accepts the
-  connection and goes quiet would leave the request pending forever. After 20 seconds — above
-  the collector's own 15s timeout, so a slow-but-healthy fleet always fails server-side first
-  with a real reason — the page gives up on it, says so, and asks again. An answer to a
+  connection and goes quiet would leave the request pending forever. After 20 seconds the page
+  gives up on it, says so, and asks again. That is above the collector's own 15s timeout, so a
+  slow-but-healthy fleet always fails server-side first with a real reason. An answer to a
   request it already gave up on is discarded rather than allowed to overwrite a newer one.
 
 On a terminal `--watch` redraws once a second while it waits, so the age is never more than a
 second out of date and a hung read shows a counter that has visibly stopped. Piped, it writes
-one frame per read — there is no screen to keep current, and a frame a second is just noise.
+one frame per read. There is no screen to keep current, and a frame a second is just noise.
 
 It is a poll and not a meta refresh or SSE, deliberately. A meta refresh cannot render its
 own failure: when `serve` dies the browser throws the page away and shows its own error page,
 taking the one useful fact with it. SSE would hold a socket per tab and drive
-`claude agents --json` from a server-side timer for readers whose laptop is asleep — with a
+`claude agents --json` from a server-side timer for readers whose laptop is asleep. With a
 poll, a hidden tab simply stops asking, and a waking one asks at once.
 
 Everything a reader interprets is rendered on the server. The browser owns two facts and no
