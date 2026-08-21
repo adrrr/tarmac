@@ -76,7 +76,7 @@ views are the same reading in the same fragment, so they can never disagree.
 
 The nodes are grouped by working directory: a frame per directory, labelled with its project,
 the sessions inside it as cards and the agents docked underneath as strips. That is the whole
-of what the frame claims, that these were read in the same directory. It is not a parentage.
+of what the frame claims: these were read in the same directory. It is not a parentage.
 `claude agents --json` publishes nothing that ties an agent to whoever dispatched it, so no
 label, no position and no line inside a frame says one node asked for another. An agent whose
 directory matches no session gets a frame of its own rather than somebody else's.
