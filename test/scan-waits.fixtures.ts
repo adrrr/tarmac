@@ -197,6 +197,11 @@ export const VERDICTS: Verdict[] = [
     caught: false,
     why: 'the limit that outlived the fix: an unpaired bracket in a string closes the call for a counter that cannot read strings, and hides the break again',
   },
+  {
+    source: `await waitFor(pred, 'smile (');`,
+    caught: true,
+    why: 'the other half of the same limit: an unpaired ( in a string invents a split, reporting a single-line call as if it were broken',
+  },
 ];
 
 /** The plainest raw-client import there is, for the test that `bounded.ts` may still hold it. */
