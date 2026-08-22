@@ -970,9 +970,12 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        them. The negative margin gives it the page's own gutters back, so the bar reaches the
        edges of the phone and the rule above it reads as an edge rather than a floating line.
 
-       The sentence saying what the record covers yields while the drag is on: it is prose, and
-       prose in a bar pinned over the map is half the map. The banner at the top of the page is
-       what carries the minute under the hand, and it is sticky too. */
+       The sentence saying what the record covers yields for the whole replay, not for the drag:
+       body.replaying is a session, set when the first minute is drawn and cleared by Back to
+       live. It is prose, and prose in a bar pinned over the map is half the map. It is read
+       before a replay starts, which is when it answers the question it exists for — whether the
+       record is a day or ten minutes — and while one is running the banner overhead carries the
+       exact minute under the hand, which is the more precise answer. */
     body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3;
          background:var(--bg); border-top:1px solid var(--line);
          padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
@@ -1052,7 +1055,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     td[data-label="Project"] .v { order:1; font-weight:600; min-width:0; overflow-wrap:anywhere; }
     td[data-label="Session"] .v { order:2; flex:1 1 0; min-width:0; color:var(--dim);
          white-space:normal; overflow-wrap:anywhere; }
-    td[data-label="State"] .v { order:3; margin-left:auto; }
+    td[data-label="State"] .v { order:3; }
     /* The reason a session is waiting is free text: "permission prompt" fits on a phone and a
        sentence does not. Held nowrap, the pill is one unbreakable item on that first line,
        which is the same scroll bar by the other road. It wraps inside its own border instead,
@@ -1205,12 +1208,21 @@ function pageScript(view: View): string {
   var off = document.getElementById('offline'), why = document.getElementById('why');
   var limits = document.getElementById('limits');
   var last = Date.now(), failing = false, inFlight = false, since = 0, gen = 0;
-  // How many polls in a row have come back with nothing usable. On a phone the page is read on
-  // a radio, and one dropped request is a tunnel rather than an outage — the banner frames the
-  // table off and says the fleet cannot be read, which is the wrong thing to shout five seconds
-  // before the next answer lands. It waits for the second consecutive miss; the age upstairs
-  // keeps counting meanwhile, so nothing on the page is claiming to be fresher than it is.
-  var misses = 0, MISSES_BEFORE_BANNER = 2;
+  // How many polls in a row have come back with nothing usable, and when the last of them was.
+  // On a phone the page is read on a radio, and one dropped request is a tunnel rather than an
+  // outage — the banner frames the table off and says the fleet cannot be read, which is the
+  // wrong thing to shout five seconds before the next answer lands. It waits for the second
+  // consecutive miss; the age upstairs keeps counting meanwhile, so nothing on the page is
+  // claiming to be fresher than it is.
+  //
+  // Consecutive means in a row IN TIME, which is why the stamp is here. A count cleared only by
+  // a successful poll is not the same rule: a hidden tab issues no polls, so a miss from before
+  // the reader locked their phone sat there for an hour, and the wake-up poll — the likeliest
+  // miss of the session, fired while the radio is still reassociating — found it and raised the
+  // banner over one dropped request. A miss further back than a few poll intervals starts the
+  // count again. The window is wide enough that the miss behind a stall stays consecutive with
+  // it: fail() stamps at the moment it gives up, and the next poll is one interval behind.
+  var misses = 0, missAt = 0, MISSES_BEFORE_BANNER = 2, MISS_WINDOW_MS = 3 * ${REFRESH_MS};
 
   function ago(ms) {
     // A clock that steps backwards (an NTP correction, a laptop waking) must not produce
@@ -1228,6 +1240,12 @@ function pageScript(view: View): string {
   function fail(why_) {
     failing = true;
     misses = MISSES_BEFORE_BANNER;
+    missAt = Date.now();
+    // Retired, not merely dropped. Clearing the in-flight flag without moving the generation
+    // left the abandoned request still ours, so the answer that arrived twenty seconds later was
+    // swapped in and stamped "updated 0s ago" — the freshest label on the page over a fleet read
+    // before the stall was declared. The manual has always said such an answer is discarded.
+    gen += 1;
     why.textContent = why_;
     off.hidden = false;
     document.body.classList.toggle('failing', true);
@@ -1293,7 +1311,9 @@ function pageScript(view: View): string {
       });
     }).catch(function (e) {
       if (!mineStill()) return;
+      if (Date.now() - missAt > MISS_WINDOW_MS) misses = 0;
       misses += 1;
+      missAt = Date.now();
       failing = misses >= MISSES_BEFORE_BANNER;
       why.textContent = String((e && e.message) || e).slice(0, 200);
     }).then(function () {

@@ -12,6 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderLive, renderPage } from '../src/render.ts';
+import { mountPage, scriptOf } from './page-dom.ts';
 import { health, row } from './fleet-fixtures.ts';
 import type { Fleet, FleetRow } from '../src/fleet.ts';
 
@@ -167,11 +168,15 @@ test('the summary keeps its timestamp and spends it on a phone', () => {
   assert.match(atMedia('(max-width: 46rem)'), /\.meta \.stamp\s*\{[^}]*display:\s*none/);
 });
 
-// The reason the stamp is affordable at all: the shell counts the age of the reading out loud,
-// on its own, whether or not a poll ever lands. Take that away and the stamp is the only thing
-// on the page dating the fleet.
-test('the freshness the stamp repeats is still said in words', () => {
-  assert.match(renderPage(fleet(), 'map'), /id="age"/);
+// The reason the stamp is affordable at all, executed rather than grepped: the shell counts the
+// age of the reading out loud, on its own clock, whether or not a poll ever lands. Take that
+// away and the stamp is the only thing on the page dating the fleet, and hiding it is a page
+// that has stopped saying how old it is.
+test('the freshness the stamp repeats keeps being said in words, with no answer at all', async () => {
+  const page = mountPage(scriptOf(renderPage(fleet(), 'map')), () => Promise.reject(new Error('gone')));
+  await page.advance(6000);
+  await page.advance(30_000);
+  assert.match(page.el('age').textContent, /updated 36s ago/);
 });
 
 // ── the handle stays under the thumb ─────────────────────────────────────────────────────
@@ -195,7 +200,12 @@ test('while a replay is on, the scrubber pins to the foot of a phone', () => {
 test('the pinned scrubber is opaque and sits above what scrolls under it', () => {
   const rule = STICKY.exec(PHONE())![1];
   assert.match(rule, /background:\s*var\(--bg\)/, 'the map must not read through the handle');
-  assert.match(rule, /z-index:\s*[1-9]/);
+  // Above the banner, not merely above zero: `.replaying-note` is sticky too, at the top of the
+  // same screen, and a bar that only cleared the default layer would be under it wherever the
+  // two meet on a short viewport.
+  const above = Number(/z-index:\s*(-?\d+)/.exec(rule)![1]);
+  const note = Number(declaredEverywhere('.replaying-note:not([hidden])', 'z-index').at(-1)!);
+  assert.ok(above > note, `the pinned bar sits at ${above}, the banner at ${note}`);
 });
 
 // Only while replaying, and only on a phone. A scrubber pinned to the bottom of a live page
@@ -205,12 +215,21 @@ test('nothing pins the scrubber on a live page, or on a laptop', () => {
   assert.doesNotMatch(cssOutsideMedia(), /body\.replaying \.replay[^{]*\{[^}]*position:\s*sticky/, 'not on a laptop');
 });
 
-// The sentence saying what the record covers is rest-reading: it is two lines of prose, and two
-// lines of prose in a bar pinned over the map is half the map. It yields while the drag is on
-// — the banner at the top carries the minute under the hand — and comes back at rest.
-test('the prose under the handle yields its place while the drag is on', () => {
+// The sentence saying what the record covers is rest-reading: two lines of prose, and two lines
+// of prose in a bar pinned over the map is half the map. It yields for the whole replay and not
+// for the drag — `body.replaying` is a session, set when the first minute is drawn and cleared
+// by Back to live — which is the bargain: it is read BEFORE a replay, when it answers the
+// question it exists for, and while one is running the banner overhead carries the exact minute.
+//
+// Scoped to `body.replaying` and to the phone, both asserted: unscoped either way it would take
+// the record's own range off a page that is not replaying at all.
+test('the prose under the handle yields its place for the length of a replay', () => {
   assert.match(PHONE(), /body\.replaying \.replay \.covers\s*\{[^}]*display:\s*none/);
   assert.doesNotMatch(cssOutsideMedia(), /\.covers\s*\{[^}]*display:\s*none/, 'and only on a phone');
+  for (const [, raw, declarations] of PHONE().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/\.covers\b/.test(raw) || !/display:\s*none/.test(declarations)) continue;
+    assert.match(raw.slice(raw.lastIndexOf('}') + 1).trim(), /^body\.replaying\b/, 'a live page keeps its range');
+  }
   assert.match(renderPage(fleet(), 'map'), /id="covers"/, 'the sentence is still rendered');
 });
 
@@ -244,8 +263,14 @@ const columns = (): string[] =>
   [...renderPage(fleet(), 'table').matchAll(/<td data-label="([^"]+)"/g)].map((m) => m[1]);
 
 test('a session on a phone is a row that wraps, not a stack of labelled lines', () => {
-  assert.match(PHONE(), /(?:^|\s)tr\s*\{[^}]*display:\s*flex/);
-  assert.match(PHONE(), /(?:^|\s)tr\s*\{[^}]*flex-wrap:\s*wrap/);
+  const tr = /(?:^|\s)tr\s*\{([^}]*)\}/.exec(PHONE())![1];
+  assert.match(tr, /display:\s*flex/);
+  assert.match(tr, /flex-wrap:\s*wrap/);
+  // The three that make it a strip rather than a run-on line: values that do not touch, lines
+  // that do not double-space, and a shared baseline under type set at two sizes.
+  assert.match(tr, /column-gap:\s*[.\d]/, 'the values would touch');
+  assert.match(tr, /row-gap:\s*[.\d]/, 'the two lines would set their own spacing');
+  assert.match(tr, /align-items:\s*baseline/, 'the second line is smaller type and would float');
   assert.match(PHONE(), /td\s*\{[^}]*display:\s*contents/, 'the cell steps out of the way of its value');
 });
 

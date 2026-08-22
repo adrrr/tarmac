@@ -272,6 +272,12 @@ later. Framing the table off for that shouted an outage at a reader whose fleet 
 banner is for a server that has gone, so a single miss buys nothing but the age upstairs
 climbing five seconds further, which is the truth either way.
 
+In a row means in a row in TIME, not merely in the order polls happened to run. A hidden tab
+asks for nothing, so a miss from before a phone was locked would otherwise still be sitting
+there an hour later, and the poll fired the moment the tab comes back — the likeliest miss of
+the session, since the radio is still reassociating — would meet it and raise the banner over
+one dropped request. A miss further back than a few poll intervals starts the count again.
+
 Three failures are handled by name, because each of them can otherwise look like health:
 
 - **A refusal.** `serve` is gone, and the banner names it once a second poll agrees.
@@ -285,7 +291,9 @@ Three failures are handled by name, because each of them can otherwise look like
   keeps the banner up rather than taking it back down. That is above the collector's own 15s
   timeout, so a slow-but-healthy fleet always fails server-side first with a real reason. An
   answer to a request it already gave up on is discarded rather than allowed to overwrite a
-  newer one.
+  newer one: the request is retired at the moment the page gives up, not when the next one
+  starts, so there is no window in which a twenty-second-old body can arrive and be stamped
+  "updated 0s ago".
 
 On a terminal `--watch` redraws once a second while it waits, so the age is never more than a
 second out of date and a hung read shows a counter that has visibly stopped. Piped, it writes
@@ -617,8 +625,11 @@ already says in words; the stamp stays in the markup, so a wide window and anyth
 HTML still get the exact second.
 
 And while a replay is running, the scrubber pins to the bottom of the viewport, so the hand on
-the handle and the dials the handle moves are on screen together; the sentence saying what the
-record covers steps aside for the duration and comes back when the drag stops.
+the handle and the dials the handle moves are on screen together. The sentence saying what the
+record covers steps aside for the length of that replay, and comes back on `Back to live`: it is
+prose, and two lines of prose in a bar pinned over the map is half the map. It is read before a
+replay, which is when it answers the question it exists for — whether the record is a day or ten
+minutes — and while one is running the banner overhead names the exact minute instead.
 
 Independently of width, wherever the pointer is coarse, every control on the page carries an
 invisible target of at least 44px: the two tabs, `Play`, and the way back out of a replay. The

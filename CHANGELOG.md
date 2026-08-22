@@ -83,7 +83,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   frames the table off and says the fleet cannot be read, which is the wrong thing to shout
   when a radio drops one request for a tunnel or a handover between cells and the next lands
   five seconds later; it now needs two misses in a row, and the age in the header keeps
-  counting meanwhile, so nothing on the page claims to be fresher than it is. A stalled request
+  counting meanwhile, so nothing on the page claims to be fresher than it is. In a row means in
+  a row in TIME: a hidden tab asks for nothing, so a count cleared only by a successful poll
+  would keep a miss from before a phone was locked and spend it on the wake-up poll, which is
+  the likeliest miss of the session. A miss further back than a few poll intervals starts the
+  count again. A stalled request
   is the exception and still speaks at once: twenty seconds of silence from a connection the
   server accepted is not a dropped packet, and a miss after that keeps the banner up rather
   than taking it back down. The rule is the page's at every width, not the phone's. Alongside
@@ -196,6 +200,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   one. (#49)
 
 ### Fixed
+
+- **A request the page gave up on is retired, not merely dropped.** The manual has always said
+  an answer to a request already abandoned is discarded, and it was true only once a newer poll
+  had started. Between the twenty-second stall being declared and the next poll going out, the
+  dead request was still the current one: its answer, when it came, was swapped in and stamped
+  `updated 0s ago` — a body read before the stall wearing the freshest label on the page, which
+  is the confusion the empty-answer rule beside it exists to prevent. The generation moves when
+  the page gives up, so the window is gone.
 
 - **A long name no longer takes the phone's table sideways.** The manual promises that a name
   with no length limit costs a width and never a scroll bar, and the narrow layout had never

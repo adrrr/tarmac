@@ -217,3 +217,71 @@ test('a poll that fails after a stall does not take the banner back down', async
   assert.equal(page.el('offline').hidden, false, 'and a miss after it does not lower it');
   assert.equal(page.body.classes.has('failing'), true);
 });
+
+// Consecutive means "in a row IN TIME", and the count had no notion of time at all: only a
+// successful poll ever cleared it, and a hidden tab issues no polls, so a miss recorded before
+// the reader locked their phone was still sitting there an hour later. The wake-up poll — fired
+// the instant the tab is shown, which is the likeliest miss of the whole session, because the
+// radio is reassociating — found the count at one and raised the banner. Five seconds later the
+// next poll landed and it was gone again: the exact behaviour this rule exists to remove,
+// reached by the path a phone takes every time it is picked up.
+test('a miss an hour after a blip is a first miss, not a second', async () => {
+  let calls = 0;
+  const page = mount(() => {
+    calls += 1;
+    return calls === 2 || calls === 3 ? Promise.reject(new Error('Failed to fetch')) : ok('<div>fleet</div>');
+  });
+  await page.advance(6000);
+  await page.advance(5000);
+  assert.equal(page.el('offline').hidden, true, 'the blip claims nothing');
+  page.hide();
+  await page.advance(3_600_000);
+  assert.equal(page.calls, 2, 'a hidden tab asks for nothing, so nothing can clear the count');
+  await page.show();
+  assert.equal(page.calls, 3, 'and the wake-up poll goes out at once');
+  assert.equal(page.el('offline').hidden, true, 'one dropped request on waking is still one');
+});
+
+
+// A stall is still two misses' worth on its own, and the miss five seconds behind it is
+// consecutive with it — the window may not undo the grace `fail()` spends.
+test('a miss right after a stall is still consecutive with it', async () => {
+  let stalled = false;
+  const page = mount((call) => {
+    if (call === 1) return ok('<div>fleet</div>');
+    if (!stalled) {
+      stalled = true;
+      return new Promise(() => {});
+    }
+    return Promise.reject(new Error('Failed to fetch'));
+  });
+  await page.advance(6000);
+  await page.advance(5000);
+  const stalledCall = page.calls;
+  await page.advance(20_000);
+  for (let i = 0; page.calls === stalledCall && i < 30; i++) await page.advance(1000);
+  assert.equal(page.el('offline').hidden, false, 'the stall raised it and the miss keeps it up');
+});
+
+// `fail()` gave up on the request without retiring it: it cleared the in-flight flag and left
+// the generation alone, so the answer that arrived forty seconds later was still "ours". It was
+// swapped in and stamped "updated 0s ago" — a forty-second-old fleet wearing the freshest label
+// on the page, which is the exact confusion the empty-answer rule next door exists to prevent.
+// The manual has always said an answer to a request already given up on is discarded; now it is.
+test('an answer to a request the page gave up on is never swapped in', async () => {
+  let release: ((v: { ok: boolean; body: string }) => void) | null = null;
+  const page = mount((call) =>
+    call === 1
+      ? ok('<div>the fleet as it was</div>')
+      : new Promise((resolve) => {
+          release = resolve;
+        }));
+  await page.advance(6000);
+  await page.advance(5000);
+  await page.advance(20_000);
+  assert.equal(page.el('offline').hidden, false, 'the stall was declared');
+  release!({ ok: true, body: '<div>a twenty-second-old answer</div>' });
+  await page.advance(1000);
+  assert.equal(page.el('live').innerHTML, '<div>the fleet as it was</div>', 'the dead answer is not the fleet');
+  assert.equal(page.el('offline').hidden, false, 'and it does not clear the banner it never earned');
+});
