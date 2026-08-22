@@ -10,7 +10,8 @@ import { guardVersions } from '../src/schema.ts';
 import { buildFleet } from '../src/fleet.ts';
 import { parseAgents } from '../src/sessions.ts';
 import { health, row } from './fleet-fixtures.ts';
-import { NET_DEADLINE_MS, rawGet } from './bounded.ts';
+import { NET_DEADLINE_MS, rawGet, rawGetText } from './bounded.ts';
+import type { FleetServerDeps } from '../src/server.ts';
 import { HISTORY_CADENCE_MS } from '../src/history.ts';
 import type { HistoryPayload } from '../src/history.ts';
 import type { Fleet, FleetRow } from '../src/fleet.ts';
@@ -552,7 +553,7 @@ test('a reader without JavaScript is told the page will not refresh itself', () 
 async function withServer(
   collect: () => Promise<Fleet>,
   fn: (base: string) => Promise<void>,
-  opts: { sampleEveryMs?: number } = {},
+  opts: Omit<FleetServerDeps, 'collect'> = {},
 ): Promise<void> {
   const server = createFleetServer({ collect, ...opts });
   await new Promise<void>((r) => {
@@ -607,6 +608,114 @@ test('serves a request with a loopback Host and a port', async () => {
     const port = new URL(base).port;
     assert.equal(await rawGet(port, `localhost:${port}`), 200);
   });
+});
+
+// ── the reverse-proxy escape hatch (#105) ─────────────────────────────────────────────
+// A proxy in front of this port — `tailscale serve`, caddy, nginx — forwards the Host the
+// browser typed, and none of them present a loopback one, so every page and every API call
+// was a 403 with no supported answer. `--trust-host` names the ones to let through, one at a
+// time. What follows holds it to exactly that: the names given, nothing around them, and
+// nothing at all when nobody asked.
+
+const TRUSTED = 'proxy.example.ts.net';
+
+test('a named host is served, and the port it arrives with is not part of the name', async () => {
+  await withServer(collectOk, async (base) => {
+    const port = new URL(base).port;
+    assert.equal(await rawGet(port, TRUSTED), 200);
+    assert.equal(await rawGet(port, `${TRUSTED}:8443`), 200, 'the proxy on 8443');
+    assert.equal(await rawGet(port, TRUSTED.toUpperCase()), 200, 'host names are case-insensitive');
+  }, { trustedHosts: [TRUSTED] });
+});
+
+// The whole risk of this flag is that it lets in more than it was told to. Every one of these
+// is a name a DNS-rebinding page could hold while the reader believes only theirs is trusted.
+test('naming one host lets in that host and nothing built around it', async () => {
+  await withServer(collectOk, async (base) => {
+    const port = new URL(base).port;
+    assert.equal(await rawGet(port, 'evil.example.com'), 403, 'an unrelated name');
+    assert.equal(await rawGet(port, `evil-${TRUSTED}`), 403, 'no suffix match');
+    assert.equal(await rawGet(port, `${TRUSTED}.evil.example.com`), 403, 'no prefix match');
+    assert.equal(await rawGet(port, `sub.${TRUSTED}`), 403, 'a subdomain is another host');
+    assert.equal(await rawGet(port, TRUSTED.slice(0, -1)), 403, 'nor a name one character short');
+  }, { trustedHosts: [TRUSTED] });
+});
+
+test('every host named is trusted, on every route loopback reaches', async () => {
+  await withServer(collectOk, async (base) => {
+    const port = new URL(base).port;
+    assert.equal(await rawGet(port, 'one.example', '/'), 200);
+    assert.equal(await rawGet(port, 'two.example', '/live'), 200);
+    assert.equal(await rawGet(port, 'two.example', '/api/history'), 200);
+    assert.equal(await rawGet(port, `localhost:${port}`), 200, 'and loopback is still loopback');
+  }, { trustedHosts: ['one.example', 'two.example'] });
+});
+
+// The two checks are answers to two different attacks, and the second one does not move: a
+// page on another origin is refused whatever Host it managed to put on the request.
+test('a trusted host does not get past the cross-site check', async () => {
+  await withServer(collectOk, async (base) => {
+    const port = new URL(base).port;
+    assert.equal(await rawGet(port, TRUSTED, '/api/fleet', { 'sec-fetch-site': 'cross-site' }), 403);
+    assert.equal(await rawGet(port, TRUSTED, '/api/fleet', { 'sec-fetch-site': 'same-origin' }), 200);
+  }, { trustedHosts: [TRUSTED] });
+});
+
+// The default is the product, and this is what proves it byte for byte: with no host named,
+// the refusal is the sentence it has always been.
+test('with nothing trusted, a foreign Host meets the refusal it always met', async () => {
+  await withServer(collectOk, async (base) => {
+    const answer = await rawGetText(new URL(base).port, 'evil.example.com');
+    assert.equal(answer.status, 403);
+    assert.equal(answer.body, 'tarmac serves loopback hosts only\n');
+  });
+});
+
+// And when hosts ARE named, that same sentence would read as a flag that never took. The
+// refusal says which rule refused; it does not quote the Host back, which is the one string
+// on the request the caller wrote.
+test('a serve that trusts a host says so when it refuses another', async () => {
+  await withServer(collectOk, async (base) => {
+    const answer = await rawGetText(new URL(base).port, 'evil.example.com');
+    assert.equal(answer.status, 403);
+    assert.equal(answer.body, 'tarmac serves loopback and trusted hosts only\n');
+    assert.doesNotMatch(answer.body, /evil\.example\.com/, 'and never repeats what it was sent');
+  }, { trustedHosts: [TRUSTED] });
+});
+
+// The guard normalises what it is handed rather than trusting a caller to have done it: it
+// is the last thing standing between a foreign origin and the fleet's cwd paths.
+test('a host named with a port, in capitals, or padded, is the name it will match', async () => {
+  await withServer(collectOk, async (base) => {
+    assert.equal(await rawGet(new URL(base).port, TRUSTED), 200);
+  }, { trustedHosts: [`  ${TRUSTED.toUpperCase()}:8443  `] });
+});
+
+// The same emptiness on the REQUEST side, and it is reachable: node only requires a `Host` of
+// an HTTP/1.1 request, so one arrives carrying none. It has no name to match, so it is refused
+// by the guard's first line rather than waved past a list that is set — the case a serve with
+// hosts named would otherwise open, having been closed all along with none.
+test('a request that carries no Host is refused by a serve that trusts one', async () => {
+  await withServer(collectOk, async (base) => {
+    assert.equal(await rawGet(new URL(base).port, ''), 403);
+  }, { trustedHosts: [TRUSTED] });
+});
+
+// The guard owns the VALIDITY of its list too, not just its spelling. A name that normalises
+// to nothing would otherwise be a name every Host that normalises to nothing matches — `:8443`
+// and a lone bracket among them — and the guard would be wide open on a list that looks set.
+// `parseTrustHost` refuses an empty host at every rung, so nothing reachable from a command
+// line arrives here; this is the guard refusing to depend on that.
+test('an empty name in the list is not a name every empty Host matches', async () => {
+  // Named rather than written at the call: the suite's static guard counts brackets, and one
+  // inside a string reads to it as a call left open — the limit its own comments write down.
+  const loneBracket = '[';
+  await withServer(collectOk, async (base) => {
+    const port = new URL(base).port;
+    assert.equal(await rawGet(port, ':8443'), 403, 'a Host that is nothing but a port');
+    assert.equal(await rawGet(port, loneBracket), 403);
+    assert.equal(await rawGet(port, TRUSTED), 200, 'and the real name still gets in');
+  }, { trustedHosts: ['', '   ', TRUSTED] });
 });
 
 // What the open page asks for every few seconds. It must be the fragment and nothing else:

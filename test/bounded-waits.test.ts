@@ -19,7 +19,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { NET_DEADLINE_MS, netDeadlineFrom, rawGet, silentServer, waitForOutput } from './bounded.ts';
+import { dyingServer, NET_DEADLINE_MS, netDeadlineFrom, rawGet, rawGetText, silentServer, waitForOutput } from './bounded.ts';
 import { unboundedWaits } from './scan-waits.ts';
 import { DEADLINE_UNDER_TEST_CALL, HAND_TYPED_DEFAULT_DEFINITION, RAW_CLIENT_IMPORT, SPLIT_WAIT_CALL, VERDICTS } from './scan-waits.fixtures.ts';
 
@@ -250,5 +250,31 @@ test('a request nobody answers is a rejection, not a wait forever', async () => 
     // the destroy from `rawGet` — without this line the file ran past five minutes.
     silent.closeAllConnections();
     await new Promise<void>((r) => silent.close(() => r()));
+  }
+});
+
+// The other way an answer stops: one that STARTS and then dies. It is not the silent server
+// with a shorter fuse — the response has already begun, so node puts the failure on the
+// RESPONSE, not on the request that `rawGet` listens to, and the socket is gone, so the
+// inactivity timeout that saves the silent case never fires. Reading bodies (#105) is what
+// made this shape reachable at all, and it went straight past both of the bounds above.
+test('an answer that dies mid-body is a rejection, not a wait forever', async () => {
+  const dying = dyingServer();
+  await new Promise<void>((r) => dying.listen(0, '127.0.0.1', () => r()));
+  const port = String((dying.address() as AddressInfo).port);
+  try {
+    // Raced like the test above, and for the same reason: the failure here is a promise that
+    // never settles, which without the race is a file that never reports.
+    const outcome = await Promise.race([
+      rawGetText(port, `localhost:${port}`, '/api/fleet', {}, 500).then(
+        (answer) => `answered ${answer.status}`,
+        (e: Error) => `rejected: ${e.message}`,
+      ),
+      new Promise<string>((r) => setTimeout(() => r('still pending'), 5000).unref()),
+    ]);
+    assert.match(outcome, /^rejected: /, outcome);
+  } finally {
+    dying.closeAllConnections();
+    await new Promise<void>((r) => dying.close(() => r()));
   }
 });

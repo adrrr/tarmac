@@ -155,10 +155,49 @@ export function rawGet(
   extra: Record<string, string> = {},
   timeoutMs = NET_DEADLINE_MS,
 ): Promise<number | undefined> {
+  return rawGetText(port, host, path, extra, timeoutMs).then((answer) => answer.status);
+}
+
+/** What such a request came back with, when the words of the answer are the subject. */
+export interface RawAnswer {
+  status: number | undefined;
+  body: string;
+}
+
+/**
+ * The same request, kept whole. `rawGet` is the common case and stays the short spelling; a
+ * refusal whose WORDS are what a test is about — the Host guard's, which has to be the same
+ * sentence it always was — needs the body, and one implementation is what keeps the deadline
+ * above from being written twice and bounded once.
+ */
+export function rawGetText(
+  port: string,
+  host: string,
+  path = '/api/fleet',
+  extra: Record<string, string> = {},
+  timeoutMs = NET_DEADLINE_MS,
+): Promise<RawAnswer> {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path, headers: { Host: host, ...extra }, timeout: timeoutMs }, (res) => {
-      res.resume();
-      resolve(res.statusCode);
+    // `setHost` off for the empty one, and only for it: node reads a `Host` of `''` as no Host
+    // given and writes its OWN — `127.0.0.1:port`, which is loopback, which is the one answer
+    // that would make an empty Host look served. A test that asks for nothing has to get it.
+    const options = { host: '127.0.0.1', port, path, headers: { Host: host, ...extra }, timeout: timeoutMs };
+    const req = http.request(host === '' ? { ...options, setHost: false } : options, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+      // The one bound the other two do not cover, and it is why settling on `'end'` needs a
+      // listener of its own: once the answer has BEGUN, node reports the death of the socket
+      // on the response, `req` gets no `'error'`, and a destroyed socket never goes inactive,
+      // so `'timeout'` never fires either. Without this the wait is unbounded — proved by the
+      // test that watched it stay pending past five seconds.
+      //
+      // `'error'` and not `'aborted'`: both fire on this, one is enough, and the other has
+      // been the deprecated spelling of it since node 17.
+      res.on('error', reject);
     });
     req.on('timeout', () => req.destroy(new Error(`no answer from ${path} in ${timeoutMs}ms`)));
     req.on('error', reject);
@@ -174,3 +213,19 @@ export function rawGet(
  * proves the bound" would be the hole the rule is about.
  */
 export const silentServer = (): http.Server => http.createServer(() => {});
+
+/**
+ * A server that BEGINS an answer and then dies: headers, one byte of a body it promised more
+ * of, then the socket destroyed under the caller.
+ *
+ * The other shape, and the one reading bodies made reachable. A response that has started puts
+ * its failure on the RESPONSE object rather than on the request, and a destroyed socket never
+ * goes inactive — so neither of the two bounds that catch {@link silentServer} catches this,
+ * and a client that settles on `'end'` waits for an `'end'` that is never coming.
+ */
+export const dyingServer = (): http.Server =>
+  http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'content-length': '100' });
+    res.write('half');
+    setTimeout(() => req.socket.destroy(), 20).unref();
+  });

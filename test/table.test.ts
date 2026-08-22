@@ -221,6 +221,7 @@ test('the settings block states each effective value and where it came from', ()
       staleAfterMs: { value: 90_000, source: 'flag' },
       port: { value: 8080, source: 'file' },
       snapshotsDir: { value: '/x/snaps', source: 'env' },
+      trustHosts: { value: [], source: 'default' },
     },
     '/x/.claude/tarmac/config.json',
   );
@@ -238,6 +239,7 @@ test('a long snapshots path does not push the sources off the screen', () => {
       staleAfterMs: { value: 600_000, source: 'default' },
       port: { value: 4477, source: 'default' },
       snapshotsDir: { value: `/Users/someone/${'nested/'.repeat(12)}snapshots`, source: 'file' },
+      trustHosts: { value: [], source: 'default' },
     },
     '/x/.claude/tarmac/config.json',
   );
@@ -252,10 +254,30 @@ test('the settings block spells out the precedence it applied', () => {
       staleAfterMs: { value: 600_000, source: 'default' },
       port: { value: 4477, source: 'default' },
       snapshotsDir: { value: '/x/snaps', source: 'default' },
+      trustHosts: { value: [], source: 'default' },
     },
     '/x/.claude/tarmac/config.json',
   );
   assert.match(out, /flag.*env.*file.*default/, 'the order, not just the winner');
+});
+
+// The one setting that widens who may read this port, so the run that has it says so in its
+// first three lines — and the run that does not says nothing, because an empty list was
+// chosen by nobody and there is no source to attribute it to.
+test('the settings block names the hosts trusted beyond loopback, and only when there are any', () => {
+  const settings = (trustHosts: { value: string[]; source: 'flag' | 'default' }): string =>
+    renderSettings(
+      {
+        staleAfterMs: { value: 600_000, source: 'default' },
+        port: { value: 4477, source: 'default' },
+        snapshotsDir: { value: '/x/snaps', source: 'default' },
+        trustHosts,
+      },
+      '/x/.claude/tarmac/config.json',
+    );
+  assert.doesNotMatch(settings({ value: [], source: 'default' }), /trusted/i, 'nothing to attribute');
+  const out = settings({ value: ['one.example', 'two.example'], source: 'flag' });
+  assert.match(out, /trusted.*one\.example.*two\.example.*flag/, 'every name, and who let them in');
 });
 
 // M4: two files claiming the same session id. The freshest is kept — and the reader is told

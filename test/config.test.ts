@@ -12,8 +12,10 @@ import {
   DEFAULT_PORT,
   DEFAULT_STALE_AFTER_MS,
   formatDuration,
+  hostName,
   parseDuration,
   parsePort,
+  parseTrustHost,
   readConfigFile,
   resolveConfig,
 } from '../src/config.ts';
@@ -78,13 +80,59 @@ test('a port is a port number, and anything else is refused by name', () => {
   assert.throws(() => parsePort('80.5', '--port'), /--port/);
 });
 
+// A host `serve` will answer to besides loopback, read the way a `Host` header carries one.
+// The port is dropped on purpose and the dropping is VISIBLE — `serve` prints the name it
+// kept — because a proxy presents `:8443` on one setup and nothing at all on 443, and a list
+// that matched the port would refuse half the setups it was typed for. The port is no barrier
+// anyway: whoever can reach the socket picks the port they connect to.
+test('a trusted host is read as the name a Host header carries, port and all dropped', () => {
+  assert.equal(parseTrustHost('example.ts.net', '--trust-host'), 'example.ts.net');
+  assert.equal(parseTrustHost('example.ts.net:8443', '--trust-host'), 'example.ts.net');
+  assert.equal(parseTrustHost('  example.ts.net  ', '--trust-host'), 'example.ts.net');
+  // Host names are case-insensitive and browsers send them lowered; a 403 over a capital
+  // would be a setting that was typed, accepted, and never matched anything.
+  assert.equal(parseTrustHost('Example.TS.net', '--trust-host'), 'example.ts.net');
+});
+
+// Every one of these would otherwise be a trusted host that can never match a Host header:
+// accepted at the command line, printed on startup, and refusing every request all day.
+test('a trusted host that is not a host name is refused rather than left never to match', () => {
+  assert.throws(() => parseTrustHost('*.ts.net', '--trust-host'), /--trust-host.*\*\.ts\.net/s);
+  assert.throws(() => parseTrustHost('https://example.ts.net', '--trust-host'), /--trust-host/);
+  assert.throws(() => parseTrustHost('example.ts.net/api', '--trust-host'), /--trust-host/);
+  assert.throws(() => parseTrustHost('two hosts', '--trust-host'), /--trust-host/);
+  assert.throws(() => parseTrustHost('   ', 'TARMAC_TRUST_HOST'), /TARMAC_TRUST_HOST/);
+  // An IPv6 literal is refused by name rather than mangled: `[fd00::1]` has to survive the
+  // port-stripping to mean anything, and a proxy that presents one is not a case anybody has.
+  assert.throws(() => parseTrustHost('[fd00::1]', '--trust-host'), /--trust-host/);
+  // The ends of the name are where a host name stops being one, and the manual promises it:
+  // `example.ts.net.`, with the trailing dot a browser keeps when you type one, is a DIFFERENT
+  // host — so it is refused here rather than accepted as a name nothing will ever match.
+  assert.throws(() => parseTrustHost('example.ts.net.', '--trust-host'), /--trust-host/);
+  assert.throws(() => parseTrustHost('.evil', '--trust-host'), /--trust-host/);
+});
+
+// The port that is dropped is a PORT: a colon with no digits behind it is part of the name and
+// stays on it. This normaliser is shared with the default guard, so a rule loosened here to cut
+// a bare colon would let `Host: localhost:` through as loopback on a serve that named nobody.
+test('a colon with no port behind it is part of the name, not a port to drop', () => {
+  assert.equal(hostName('localhost:'), 'localhost:');
+});
+
 test('no config file is not an error — it is the zero-config contract', () => {
   assert.deepEqual(readConfigFile(path.join(tmpdir(), 'nothing-here.json')), {});
 });
 
-test('a config file sets the three settings it is allowed to set', () => {
-  const file = writeConfig({ staleAfterMs: 90_000, port: 8080, snapshotsDir: '/tmp/snaps' });
-  assert.deepEqual(readConfigFile(file), { staleAfterMs: 90_000, port: 8080, snapshotsDir: '/tmp/snaps' });
+test('a config file sets the settings it is allowed to set', () => {
+  const file = writeConfig({ staleAfterMs: 90_000, port: 8080, snapshotsDir: '/tmp/snaps', trustHosts: ['example.ts.net:8443'] });
+  assert.deepEqual(readConfigFile(file), {
+    staleAfterMs: 90_000,
+    port: 8080,
+    snapshotsDir: '/tmp/snaps',
+    // Read through the same parser the flag and the environment go through, so a host is
+    // refused — and kept — in the same words wherever it was set.
+    trustHosts: ['example.ts.net'],
+  });
 });
 
 test('a config file that is not JSON is reported, with its path', () => {
@@ -120,6 +168,9 @@ test('a known key of the wrong type is refused rather than coerced', () => {
   assert.throws(() => readConfigFile(writeConfig({ port: 70000 })), /port.*70000/s);
   assert.throws(() => readConfigFile(writeConfig({ snapshotsDir: 7 })), /snapshotsDir/);
   assert.throws(() => readConfigFile(writeConfig({ snapshotsDir: '' })), /snapshotsDir/);
+  assert.throws(() => readConfigFile(writeConfig({ trustHosts: 'example.ts.net' })), /trustHosts/);
+  assert.throws(() => readConfigFile(writeConfig({ trustHosts: [7] })), /trustHosts/);
+  assert.throws(() => readConfigFile(writeConfig({ trustHosts: ['*.ts.net'] })), /trustHosts.*\*\.ts\.net/s);
 });
 
 test('a refusal shows an empty value as something the eye can catch', () => {
@@ -135,36 +186,51 @@ test('with nothing set anywhere, the numbers are the ones that were baked into t
   assert.deepEqual(c.staleAfterMs, { value: 600_000, source: 'default' });
   assert.deepEqual(c.port, { value: 4477, source: 'default' });
   assert.deepEqual(c.snapshotsDir, { value: '/default/snaps', source: 'default' });
+  // The default is the whole of the privacy stance: loopback, and nothing else, unless a
+  // reader says otherwise in writing.
+  assert.deepEqual(c.trustHosts, { value: [], source: 'default' });
   assert.equal(DEFAULT_STALE_AFTER_MS, 600_000, 'the constant issue #4 quotes');
   assert.equal(DEFAULT_PORT, 4477);
 });
 
 test('a config file beats the default', () => {
-  const c = resolve({ file: { staleAfterMs: 90_000, port: 8080, snapshotsDir: '/from/file' } });
+  const c = resolve({ file: { staleAfterMs: 90_000, port: 8080, snapshotsDir: '/from/file', trustHosts: ['file.example'] } });
   assert.deepEqual(c.staleAfterMs, { value: 90_000, source: 'file' });
   assert.deepEqual(c.port, { value: 8080, source: 'file' });
   assert.deepEqual(c.snapshotsDir, { value: '/from/file', source: 'file' });
+  assert.deepEqual(c.trustHosts, { value: ['file.example'], source: 'file' });
 });
 
 test('the environment beats the config file', () => {
   const c = resolve({
-    file: { staleAfterMs: 90_000, port: 8080, snapshotsDir: '/from/file' },
-    env: { TARMAC_STALE_AFTER: '2h', TARMAC_PORT: '9000', TARMAC_SNAPSHOTS_DIR: '/from/env' },
+    file: { staleAfterMs: 90_000, port: 8080, snapshotsDir: '/from/file', trustHosts: ['file.example'] },
+    env: { TARMAC_STALE_AFTER: '2h', TARMAC_PORT: '9000', TARMAC_SNAPSHOTS_DIR: '/from/env', TARMAC_TRUST_HOST: 'env.example' },
   });
   assert.deepEqual(c.staleAfterMs, { value: 7_200_000, source: 'env' });
   assert.deepEqual(c.port, { value: 9000, source: 'env' });
   assert.deepEqual(c.snapshotsDir, { value: '/from/env', source: 'env' });
+  assert.deepEqual(c.trustHosts, { value: ['env.example'], source: 'env' });
 });
 
 test('a flag beats the environment', () => {
   const c = resolve({
-    file: { staleAfterMs: 90_000, port: 8080, snapshotsDir: '/from/file' },
-    env: { TARMAC_STALE_AFTER: '2h', TARMAC_PORT: '9000', TARMAC_SNAPSHOTS_DIR: '/from/env' },
-    flags: { staleAfter: '30s', port: 1234, snapshotsDir: '/from/flag' },
+    file: { staleAfterMs: 90_000, port: 8080, snapshotsDir: '/from/file', trustHosts: ['file.example'] },
+    env: { TARMAC_STALE_AFTER: '2h', TARMAC_PORT: '9000', TARMAC_SNAPSHOTS_DIR: '/from/env', TARMAC_TRUST_HOST: 'env.example' },
+    flags: { staleAfter: '30s', port: 1234, snapshotsDir: '/from/flag', trustHosts: ['flag.example'] },
   });
   assert.deepEqual(c.staleAfterMs, { value: 30_000, source: 'flag' });
   assert.deepEqual(c.port, { value: 1234, source: 'flag' });
   assert.deepEqual(c.snapshotsDir, { value: '/from/flag', source: 'flag' });
+  // The winning rung is the WHOLE list. Merging the four would leave a reader unable to
+  // narrow, from the command line, a list a config file had widened.
+  assert.deepEqual(c.trustHosts, { value: ['flag.example'], source: 'flag' });
+});
+
+// One flag per host, and the list is what they add up to — the shape every reverse proxy
+// setup needs, since the name on 443 and the name on 8443 are two different Host headers.
+test('the environment carries several trusted hosts the way several flags would', () => {
+  const c = resolve({ env: { TARMAC_TRUST_HOST: 'one.example, two.example:8443' } });
+  assert.deepEqual(c.trustHosts, { value: ['one.example', 'two.example'], source: 'env' });
 });
 
 test('precedence is settled per setting, not per source', () => {
@@ -179,6 +245,7 @@ test('precedence is settled per setting, not per source', () => {
 test('a bad value in the environment is refused by the name the user would export', () => {
   assert.throws(() => resolve({ env: { TARMAC_STALE_AFTER: 'soon' } }), /TARMAC_STALE_AFTER.*soon/s);
   assert.throws(() => resolve({ env: { TARMAC_PORT: 'eighty' } }), /TARMAC_PORT.*eighty/s);
+  assert.throws(() => resolve({ env: { TARMAC_TRUST_HOST: '*.ts.net' } }), /TARMAC_TRUST_HOST.*\*\.ts\.net/s);
 });
 
 // The config file validates every key it finds, whoever ends up winning. The environment
@@ -189,6 +256,10 @@ test('a bad value is refused even when something beats it', () => {
   assert.throws(() => resolve({ env: { TARMAC_STALE_AFTER: 'soon' }, flags: { staleAfter: '5m' } }), /TARMAC_STALE_AFTER/);
   assert.throws(() => resolve({ env: { TARMAC_PORT: 'eighty' }, flags: { port: 1234 } }), /TARMAC_PORT/);
   assert.throws(
+    () => resolve({ env: { TARMAC_TRUST_HOST: '*.ts.net' }, flags: { trustHosts: ['flag.example'] } }),
+    /TARMAC_TRUST_HOST/,
+  );
+  assert.throws(
     () => resolve({ env: { TARMAC_STALE_AFTER: 'soon' }, file: { staleAfterMs: 90_000 } }),
     /TARMAC_STALE_AFTER/,
     'and when the file is what it loses to',
@@ -198,20 +269,21 @@ test('a bad value is refused even when something beats it', () => {
 test('an empty environment variable is unset, not an empty value', () => {
   // `TARMAC_PORT= tarmac serve` is how a shell wrapper says "never mind" — erroring there
   // would make the tool unusable from a script that clears its own variables.
-  const c = resolve({ env: { TARMAC_STALE_AFTER: '', TARMAC_PORT: '', TARMAC_SNAPSHOTS_DIR: '' } });
+  const c = resolve({ env: { TARMAC_STALE_AFTER: '', TARMAC_PORT: '', TARMAC_SNAPSHOTS_DIR: '', TARMAC_TRUST_HOST: '' } });
   assert.equal(c.port.source, 'default');
   assert.equal(c.staleAfterMs.source, 'default');
   assert.equal(c.snapshotsDir.source, 'default');
+  assert.equal(c.trustHosts.source, 'default');
 });
 
 /** `resolveConfig` with everything defaulted, so each test states only what it is about. */
 function resolve(input: {
-  flags?: { staleAfter?: string | null; port?: number | null; snapshotsDir?: string | null };
+  flags?: { staleAfter?: string | null; port?: number | null; snapshotsDir?: string | null; trustHosts?: string[] };
   env?: Record<string, string | undefined>;
   file?: FileConfig;
 }) {
   return resolveConfig({
-    flags: { staleAfter: null, port: null, snapshotsDir: null, ...(input.flags ?? {}) },
+    flags: { staleAfter: null, port: null, snapshotsDir: null, trustHosts: [], ...(input.flags ?? {}) },
     env: input.env ?? {},
     file: input.file ?? {},
     defaultSnapshotsDir: '/default/snaps',

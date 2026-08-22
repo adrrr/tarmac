@@ -17,7 +17,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { NET_DEADLINE_MS, waitForOutput } from './bounded.ts';
+import { NET_DEADLINE_MS, rawGet, waitForOutput } from './bounded.ts';
 import { tempDir } from './sandbox.ts';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
@@ -272,6 +272,69 @@ test('/api/fleet is judged by the configured threshold, not by the default', asy
   }
 });
 
+// The unit suite proves the guard; this proves the flag REACHES it. A settings block printing
+// `trusted proxy.example.ts.net` over a server still answering 403 to that very Host is the
+// exact shape this file exists to catch, and from the outside it reads as a feature that works.
+test('a host trusted on the command line is one serve really answers to', async () => {
+  const h = fakeHome();
+  fs.writeFileSync(h.config, JSON.stringify({ port: 0 }));
+  const { child, out } = await serve(h, {}, ['--trust-host', 'proxy.example.ts.net']);
+  try {
+    const port = /127\.0\.0\.1:(\d+)/.exec(out)?.[1];
+    assert.ok(port, `no port in: ${out}`);
+    assert.match(out, /trusted +proxy\.example\.ts\.net +\(flag\)/, 'and the run says whose decision it was');
+    assert.equal(await rawGet(port, 'proxy.example.ts.net'), 200, 'the name given, as a proxy would forward it');
+    assert.equal(await rawGet(port, 'proxy.example.ts.net:8443'), 200, 'and on whatever port it arrives');
+    assert.equal(await rawGet(port, 'other.example'), 403, 'and nothing else was let in with it');
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+// Same rung, from the environment, because the resolver and the wiring are two different
+// places to drop a setting — and this one is how a systemd unit or a launchd plist sets it.
+test('a host trusted in the environment is one serve really answers to', async () => {
+  const h = fakeHome();
+  fs.writeFileSync(h.config, JSON.stringify({ port: 0 }));
+  const { child, out } = await serve(h, { TARMAC_TRUST_HOST: 'proxy.example.ts.net' });
+  try {
+    const port = /127\.0\.0\.1:(\d+)/.exec(out)?.[1];
+    assert.ok(port, `no port in: ${out}`);
+    assert.match(out, /trusted +proxy\.example\.ts\.net +\(env\)/);
+    assert.equal(await rawGet(port, 'proxy.example.ts.net'), 200);
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+// The default is the product: a serve nobody configured says nothing about trusted hosts and
+// refuses every one of them.
+test('with no host named, serve says nothing about trust and lets nothing in', async () => {
+  const h = fakeHome();
+  fs.writeFileSync(h.config, JSON.stringify({ port: 0 }));
+  const { child, out } = await serve(h);
+  try {
+    const port = /127\.0\.0\.1:(\d+)/.exec(out)?.[1];
+    assert.ok(port, `no port in: ${out}`);
+    assert.equal(/trusted/.test(out), false, 'nothing was chosen, so there is nothing to report');
+    assert.equal(await rawGet(port, 'proxy.example.ts.net'), 403);
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+// A host that could never match a Host header is refused where every other bad value is: at
+// the start of the run, in one line, naming the knob — never accepted and quietly ineffective.
+test('a --trust-host nothing could match stops the run and names the flag', () => {
+  const r = spawnSync(process.execPath, [CLI, 'serve', '--home', fakeHome().home, '--trust-host', '*.ts.net'], {
+    encoding: 'utf8',
+    timeout: 20000,
+    env: childEnv(),
+  });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /--trust-host must be a host name like example\.ts\.net.*no wildcard.*\*\.ts\.net/s);
+});
+
 // The settings block is PRINTED text and the URL is whatever the server happened to pick:
 // with `--port 0` both follow the socket, so neither notices if the resolved port never
 // reaches `listen`. Only a port asked for by number and found again on the socket does.
@@ -336,8 +399,8 @@ function freePort(): Promise<number> {
  * the output that did — not a file that stops reporting. That marker is a contract now, and
  * a mutation of it used to hang this file rather than turn it red.
  */
-async function serve(h: Home, env: Record<string, string> = {}): Promise<{ child: ChildProcess; out: string }> {
-  const child = spawn(process.execPath, [CLI, 'serve', '--home', h.home, '--claude-bin', h.bin], {
+async function serve(h: Home, env: Record<string, string> = {}, flags: string[] = []): Promise<{ child: ChildProcess; out: string }> {
+  const child = spawn(process.execPath, [CLI, 'serve', '--home', h.home, '--claude-bin', h.bin, ...flags], {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: childEnv(env),
   });
