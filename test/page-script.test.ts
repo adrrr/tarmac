@@ -206,9 +206,14 @@ test('a poll that fails after a stall does not take the banner back down', async
     return Promise.reject(new Error('Failed to fetch'));
   });
   await page.advance(6000);
-  await page.advance(60_000);
-  assert.equal(page.el('offline').hidden, false, 'the stall raised it');
   await page.advance(5000);
+  const stalledCall = page.calls;
+  await page.advance(20_000);
+  assert.equal(page.el('offline').hidden, false, 'the stall raised it');
+  // Exactly ONE poll past the stall, and no further: a second miss would raise the banner on
+  // its own and the test would pass against a page that had dropped it in between.
+  for (let i = 0; page.calls === stalledCall && i < 30; i++) await page.advance(1000);
+  assert.equal(page.calls, stalledCall + 1, 'one poll past the stall, and one only');
   assert.equal(page.el('offline').hidden, false, 'and a miss after it does not lower it');
   assert.equal(page.body.classes.has('failing'), true);
 });
