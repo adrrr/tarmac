@@ -276,15 +276,21 @@ test('the cards of a berth come before its strips, in the markup as on the scree
     ]),
   );
   assert.ok(html.indexOf('harbor-3f') < html.indexOf('sweep-01'), 'the card first, whatever order they arrived in');
-  // `order` moves a flex item past its siblings, and nothing this view draws may be moved. It
-  // is scoped to those elements rather than refused across the whole sheet, because the table's
-  // phone strip declares it too — to wedge a line break between the state and the first number,
-  // never to reorder, which `phone-view` pins against the columns `renderRow` emits.
+  // `order` moves a flex item past its siblings, and nothing this view draws may be moved.
+  //
+  // The sheet is allowed exactly one declarer of it, and it is not this view: the table's phone
+  // strip, which uses it to wedge a line break between the state and the first number and never
+  // to reorder (`phone-view` pins that against the columns the table emits). Listing what MAY
+  // declare it rather than what may not, because a node is an `<article>` and a berth is a
+  // `<section>` — a rule written on the element name would walk past a list of class names.
+  let declarers = 0;
   for (const [, raw, declarations] of mapCss().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (!/(?:^|;)\s*order\s*:/.test(declarations)) continue;
+    declarers++;
     const selector = raw.slice(raw.lastIndexOf('}') + 1).trim();
-    assert.doesNotMatch(selector, /\.map\b|\.berth|\.node\b|\.strip\b/, `${selector} moves a node past its siblings`);
+    assert.match(selector, /^td\[data-label="[A-Za-z]+"\] \.v$|^tr::after$/, `${selector} may not reorder anything`);
   }
+  assert.ok(declarers > 0, 'the rule this is about was found at all');
   assert.doesNotMatch(mapCss(), /flex-direction:\s*\w+-reverse/);
   // `wrap-reverse` reverses the ROWS: the berths keep their order along each line and the
   // lines stack upwards, so the fleet's first frame ends up at the bottom of the page.
