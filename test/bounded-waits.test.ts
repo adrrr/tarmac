@@ -21,7 +21,7 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { NET_DEADLINE_MS, netDeadlineFrom, rawGet, silentServer, waitForOutput } from './bounded.ts';
 import { unboundedWaits } from './scan-waits.ts';
-import { DEADLINE_UNDER_TEST_CALL, HAND_TYPED_DEFAULT_DEFINITION, RAW_CLIENT_IMPORT, VERDICTS } from './scan-waits.fixtures.ts';
+import { DEADLINE_UNDER_TEST_CALL, HAND_TYPED_DEFAULT_DEFINITION, RAW_CLIENT_IMPORT, SPLIT_WAIT_CALL, VERDICTS } from './scan-waits.fixtures.ts';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,8 +39,8 @@ test('no test waits on the network without a deadline', () => {
 // stays green, which is the blind spot the `rmdir` line had in #18. So the rules are also run
 // against lines whose verdict is written down, in `scan-waits.fixtures.ts`.
 test('the guard catches what it claims to, and nothing it does not', () => {
-  const wrong = VERDICTS.filter(({ line, caught }) => unboundedWaits('watch.test.ts', line).length > 0 !== caught).map(
-    ({ line, caught, why }) => `${caught ? 'MISSED' : 'FALSE POSITIVE'}: ${why} — ${line}`,
+  const wrong = VERDICTS.filter(({ source, caught }) => unboundedWaits('watch.test.ts', source).length > 0 !== caught).map(
+    ({ source, caught, why }) => `${caught ? 'MISSED' : 'FALSE POSITIVE'}: ${why} — ${source}`,
   );
   assert.deepEqual(wrong, []);
 });
@@ -52,6 +52,23 @@ test('a literal default is one finding, and it is the one that names the default
   const found = unboundedWaits('watch.test.ts', HAND_TYPED_DEFAULT_DEFINITION);
   assert.equal(found.length, 1, `a definition is not also a call: ${found.join(' / ')}`);
   assert.match(found[0]!, /must default to NET_DEADLINE_MS/);
+});
+
+// The rule the comment used to be: a wait is written on one line, or its deadline is not where
+// the reader is. Two things worth saying that a boolean verdict cannot — the finding points at
+// the line that OPENS the call, and it holds in the file excused from picking deadlines, because
+// being allowed to choose one is not being allowed to put it out of sight.
+test('a wait split over several lines is reported where it opens, in every file', () => {
+  const found = unboundedWaits('watch.test.ts', SPLIT_WAIT_CALL);
+  assert.equal(found.length, 1, `one finding, on the line that opens the call: ${found.join(' / ')}`);
+  assert.match(found[0]!, /^watch\.test\.ts:1 /);
+  assert.match(found[0]!, /on one line/);
+  assert.equal(unboundedWaits('bounded-waits.test.ts', SPLIT_WAIT_CALL).length, 1, 'the deadline exemption is not one from writing it where it reads');
+  // Every call on the line, not the first one with something to say: a closed call handing a
+  // number used to end the reading, and in the file excused from numbers that left nothing.
+  const after = "await rawGet(p, h, '/x', {}, 500).then(() => waitFor(\n  () => done,\n));";
+  assert.equal(unboundedWaits('bounded-waits.test.ts', after).length, 1, 'a split call after an excused one is still read');
+  assert.equal(unboundedWaits('watch.test.ts', after).length, 2, 'and both offences are reported where neither is excused');
 });
 
 test('the one home may hold the raw client the others may not', () => {

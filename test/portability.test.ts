@@ -201,10 +201,7 @@ for (const shell of SHELLS) {
     // Silent on the sweeping frame too — the one that runs the most code, and whose `find`
     // is a child holding this frame's stderr unless the redirections say otherwise.
     assert.equal(swept.stderr, '', 'and the frame that sweeps says nothing either');
-    await waitFor(
-      () => !fs.existsSync(path.join(swept.snapDir, `${DEAD}.json`)),
-      `the sweep ${shell.label} detached to remove the dead session`,
-    );
+    await waitFor(() => !fs.existsSync(path.join(swept.snapDir, `${DEAD}.json`)), `the sweep ${shell.label} detached to remove the dead session`);
     assert.deepEqual(
       listSnapshots(swept.snapDir),
       [`${QUIET}.json`, `${SID}.json`].sort(),
