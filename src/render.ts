@@ -989,7 +989,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     tr { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:.4rem; row-gap:.05rem;
          border:1px solid var(--line); border-left-width:3px; border-radius:8px;
          padding:.5rem .75rem .55rem; margin-bottom:.55rem; }
-    td { display:contents; }
+    /* white-space on the CELL, and not on the row: the desktop rule being undone is
+       td { white-space:nowrap }, and an explicit declaration on the cell beats anything the row
+       passes down — display:contents takes the cell out of the layout, not out of the cascade.
+       Put on the row instead, it read correctly and left the project name 128px past the phone. */
+    td { display:contents; white-space:normal; }
     /* The line break, as an item: zero-height, full-width, wedged between the state and the
        first number. Without it the strip is a paragraph that reflows per session, and a column
        of cards whose second line starts somewhere different each time cannot be scanned. */
@@ -1021,15 +1025,23 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        card is a dashboard announcing what its agents were told to do, in the largest type on
        the page. It also has no length limit, so it is the one value here allowed to wrap: the
        page is content-box at this width and .wrap has given up its overflow-x, so a line
-       that refuses to break takes the whole document sideways. */
-    td[data-label="Project"] .v { order:1; font-weight:600; }
+       that refuses to break takes the whole document sideways.
+
+       The row gives back the white-space:normal the desktop table takes: td is nowrap up
+       there and white-space is INHERITED, so a cell that steps out of the layout hands its
+       nowrap to the value inside it regardless. And these two are the values that can arrive
+       as ONE long token — a project is a directory's basename — which normal cannot break. */
+    td[data-label="Project"] .v { order:1; font-weight:600; min-width:0; overflow-wrap:anywhere; }
     td[data-label="Session"] .v { order:2; flex:1 1 0; min-width:0; color:var(--dim);
          white-space:normal; overflow-wrap:anywhere; }
     td[data-label="State"] .v { order:3; margin-left:auto; }
     /* The reason a session is waiting is free text: "permission prompt" fits on a phone and a
        sentence does not. Held nowrap, the pill is one unbreakable item on that first line,
-       which is the same scroll bar by the other road. It wraps inside its own border instead. */
-    .pill { white-space:normal; }
+       which is the same scroll bar by the other road. It wraps inside its own border instead,
+       and the border stops being a capsule once it has three lines to go round: 99px on a box
+       that tall is an ellipse whose curve crosses the words. Under half a single line's height,
+       the radius is still clamped to a capsule on one line and merely rounded on three. */
+    .pill { white-space:normal; border-radius:.9rem; }
     /* Line two: the numbers, each wearing a name of its own. "65%" alone under a line of prompt
        reads as how much of the prompt is done, which is the mistake the map's strip already had
        to fix; "$20.79" and "Opus 5" say what they are without help. */

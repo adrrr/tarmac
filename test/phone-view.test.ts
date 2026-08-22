@@ -314,6 +314,11 @@ test('a prompt with no length limit wraps rather than taking the page sideways',
 // item on the strip's first line, which is the same scroll bar by another road.
 test('the reason a session is waiting wraps inside its pill rather than past the phone', () => {
   assert.match(PHONE(), /\.pill\s*\{[^}]*white-space:\s*normal/);
+  // And the border stops being a capsule once it has three lines to go round. A 99px radius on
+  // a one-line pill is a pill; on a wrapped one it is an ellipse, and its curve crosses the
+  // words at the top and bottom of the box. A radius under half the height of a single line is
+  // still clamped to a capsule there, and merely rounded once the box grows.
+  assert.match(PHONE(), /\.pill\s*\{[^}]*border-radius:\s*\.9rem/);
   assert.match(
     renderPage(fleet([row({ busy: null, status: 'waiting', waitingFor: 'permission prompt' })]), 'table'),
     /waiting · permission prompt/,
@@ -333,4 +338,32 @@ test("a background session's prompt is never promoted to the strip's title", () 
   assert.match(session, /color:\s*var\(--dim\)/);
   const html = renderPage(fleet([row({ kind: 'background', name: AGENT })]), 'table');
   assert.match(html, new RegExp(`data-label="Session"[^>]*><span class="v">${AGENT}`), 'still printed in full');
+});
+
+// Found by laying the page out in a real engine rather than by reading the sheet: the strip
+// overflowed a 390px phone by 49px on a fleet whose project name was long. `td` is `nowrap` on
+// the desktop table and `white-space` is INHERITED, so a cell that steps out of the layout with
+// `display:contents` hands its nowrap to the value inside it all the same. The card layout this
+// replaced said `white-space:normal` on the cell and that is what went missing with it.
+//
+// Two rules, because they answer two different strings: `normal` breaks a sentence at its
+// spaces, and `anywhere` breaks the two values that can arrive as one long token — a project is
+// a directory's basename and a background session's name is a prompt.
+test('nothing in the strip keeps the desktop table\'s nowrap', () => {
+  // On `td` and nowhere else: the desktop rule that has to be undone is `td { white-space:
+  // nowrap }`, and an explicit declaration on the cell beats anything the ROW passes down. Set
+  // on `tr` instead — which is where it was first put, and which passed a sheet-reading test
+  // while the engine still laid the project name out 128px past the phone — the value inside
+  // the cell goes on inheriting nowrap from the cell.
+  assert.ok(
+    declaredEverywhere('td', 'white-space', PHONE()).includes('normal'),
+    'the cell never gives the desktop nowrap back',
+  );
+  for (const label of ['Project', 'Session']) {
+    const decls = /\{([^}]*)\}/.exec(
+      new RegExp(`td\\[data-label="${label}"\\] \\.v\\s*\\{[^}]*\\}`).exec(PHONE())![0],
+    )![1];
+    assert.match(decls, /overflow-wrap:\s*anywhere/, `${label} may hold one long token`);
+    assert.match(decls, /min-width:\s*0/, `${label} may be narrower than its text`);
+  }
 });
