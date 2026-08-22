@@ -340,11 +340,12 @@ snapshot it came from, while the countdown beside it is recomputed on every five
 re-render. An undated pair would put a frozen number next to a visibly moving one and let both
 read as now. In the terminal every reading is dated, as the AS OF column dates one, with the
 `!` of a reading past the freshness threshold: `as of 40m !`. A fleet no snapshot carried rate
-limits for has no reading and therefore no age — that is the one case with nothing after the
-two windows, and it is what tells it apart from a snapshot that carried a window whose number
-had not been taken yet. On the page, where a fresh reading is not dated anywhere, only a stale
-one is: `! 40m ago`. Once for the two either way, because both windows come out of the same
-snapshot.
+limits for has no reading and therefore no age — that is a case with nothing after the two
+windows, as is a fleet whose only such snapshot is dated after the clock that read it, refused
+rather than believed and left to the skew warning to name. Either way the missing age is what
+tells the pair apart from a snapshot that carried a window whose number had not been taken
+yet. On the page, where a fresh reading is not dated anywhere, only a stale one is:
+`! 40m ago`. Once for the two either way, because both windows come out of the same snapshot.
 
 On replay the gauges come down from the header and sit with the fleet they belong to, under
 the banner that dates it: the account of that minute, not of this one. Their reset is counted
