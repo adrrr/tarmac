@@ -1027,10 +1027,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        page is content-box at this width and .wrap has given up its overflow-x, so a line
        that refuses to break takes the whole document sideways.
 
-       The row gives back the white-space:normal the desktop table takes: td is nowrap up
-       there and white-space is INHERITED, so a cell that steps out of the layout hands its
-       nowrap to the value inside it regardless. And these two are the values that can arrive
-       as ONE long token — a project is a directory's basename — which normal cannot break. */
+       The cell above hands back the white-space the desktop table takes; these two need the
+       other half of it, because both can arrive as ONE long token — a project is a directory's
+       basename, a background session's name is a prompt — and normal has nowhere to break a
+       word. min-width:0 for the same reason the berths carry it: a flex item's automatic
+       minimum is its min-content width, which without this is the whole unbroken string. */
     td[data-label="Project"] .v { order:1; font-weight:600; min-width:0; overflow-wrap:anywhere; }
     td[data-label="Session"] .v { order:2; flex:1 1 0; min-width:0; color:var(--dim);
          white-space:normal; overflow-wrap:anywhere; }
