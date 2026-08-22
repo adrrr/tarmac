@@ -261,22 +261,39 @@ when the last good reading arrived, and whether the last attempt to refresh fail
 
 The page asks the server for `/live` every 5 seconds and swaps it in; the header carries an
 age that keeps climbing whether or not the refresh works, so numbers that have stopped moving
-cannot pass for live ones. When a poll fails, a banner names the reason and the table is
-framed off. The data stays, because it is still true of an earlier moment. `list --watch`
-does the same thing in the terminal, and prints `! refresh failing — <reason>` above a table
-it refuses to throw away.
+cannot pass for live ones. When two polls in a row fail, a banner names the reason and the
+table is framed off. The data stays, because it is still true of an earlier moment. `list
+--watch` does the same thing in the terminal, and prints `! refresh failing — <reason>` above
+a table it refuses to throw away.
+
+Two in a row, not one. The page is read on a phone as often as on a laptop, and a radio drops
+a request for a tunnel, a lift, a handover between cells — the next one lands five seconds
+later. Framing the table off for that shouted an outage at a reader whose fleet was fine. The
+banner is for a server that has gone, so a single miss buys nothing but the age upstairs
+climbing five seconds further, which is the truth either way.
+
+In a row means in a row in TIME, not merely in the order polls happened to run. A hidden tab
+asks for nothing, so a miss from before a phone was locked would otherwise still be sitting
+there an hour later, and the poll fired the moment the tab comes back — the likeliest miss of
+the session, since the radio is still reassociating — would meet it and raise the banner over
+one dropped request. A miss further back than a few poll intervals starts the count again.
 
 Three failures are handled by name, because each of them can otherwise look like health:
 
-- **A refusal.** `serve` is gone, and the banner names it on the next poll.
+- **A refusal.** `serve` is gone, and the banner names it once a second poll agrees.
 - **An empty answer.** A 200 carrying nothing is not a fleet of nothing. Swapping it in would
   blank the table and stamp it "updated 0s ago" with the dot still green, which is this tool's
   own failure mode wearing its own colours. It counts as a failed refresh.
 - **No answer at all.** `fetch` has no timeout in any browser, so a server that accepts the
   connection and goes quiet would leave the request pending forever. After 20 seconds the page
-  gives up on it, says so, and asks again. That is above the collector's own 15s timeout, so a
-  slow-but-healthy fleet always fails server-side first with a real reason. An answer to a
-  request it already gave up on is discarded rather than allowed to overwrite a newer one.
+  gives up on it, says so at once rather than waiting for a second miss — twenty seconds of
+  silence from a live connection is not a dropped packet — and asks again. A miss after that
+  keeps the banner up rather than taking it back down. That is above the collector's own 15s
+  timeout, so a slow-but-healthy fleet always fails server-side first with a real reason. An
+  answer to a request it already gave up on is discarded rather than allowed to overwrite a
+  newer one: the request is retired at the moment the page gives up, not when the next one
+  starts, so there is no window in which a twenty-second-old body can arrive and be stamped
+  "updated 0s ago".
 
 On a terminal `--watch` redraws once a second while it waits, so the age is never more than a
 second out of date and a hung read shows a counter that has visibly stopped. Piped, it writes
@@ -516,20 +533,25 @@ never invisible.
 after what they were asked to do, and tarmac carries the name as it came: onto the node, into
 the table's `Session` column, and verbatim into `GET /api/fleet` and `list --json`. A
 screenshot of a real fleet is therefore a screenshot of what its agents were told. A long name
-is ellipsised on a node to fit its column, which is a width, not a redaction: the whole string
-is still in the markup and in both JSON surfaces, and the first half of a prompt is usually
-the half that gives it away. Worth knowing before the screen, or the payload, goes anywhere.
+is ellipsised on a node to fit its column, and wrapped rather than ellipsised in the table's
+phone strip, where it has a line to itself and nothing to be cut to; both are widths, not
+redactions. The whole string is still in the markup and in both JSON surfaces, and the first
+half of a prompt is usually the half that gives it away. What neither does is push the page
+sideways: a name with no length limit costs lines, never a horizontal scroll bar. Worth knowing
+before the screen, or the payload, goes anywhere.
 The one surface it never reaches is the retained record. See
 [what the serve remembers](#what-the-serve-remembers).
 
 ### Replaying the day
 
-Under the map is a scrubber, and it is the one place on this page where a node is not the
-fleet as of the reading in the header. Drag it and the dials render the fleet as the serve
-recorded it at that minute; the play button walks the readings, one every 100ms, and stops at
-the end rather than looping. The record is asked for when the page loads, and again when a tab
-that has been away comes back, never per position, so a drag is a lookup in samples the page
-already holds. A scrubber that asked per position would spawn a `claude agents --json` for
+Under the map is a scrubber, with `REPLAY` written above it, and it is the one place on this
+page where a node is not the fleet as of the reading in the header. The word says what the pair is and
+never how much of the day it holds: a serve ten minutes old has seen ten minutes, and the
+sentence under the handle is what states the range. Drag it and the dials render the fleet as
+the serve recorded it at that minute; the play button walks the readings, one every 100ms, and
+stops at the end rather than looping. The record is asked for when the page loads, and again
+when a tab that has been away comes back, never per position, so a drag is a lookup in samples
+the page already holds. A scrubber that asked per position would spawn a `claude agents --json` for
 every pixel of it. It is asked for on `/map` only: the table has no scrubber, and a full ring
 is megabytes.
 
@@ -575,6 +597,47 @@ nothing can drive. Under `prefers-reduced-motion: reduce` play still plays, one 
 second instead of ten.
 
 What the *serve* remembers, and hands the scrubber, is below.
+
+### On a phone
+
+The dashboard is read on a phone as often as on a laptop, and three things change under about
+46rem.
+
+The table stops being a stack of labelled lines and becomes a two-line strip per session: who
+and in what state, then `ctx 65% · Opus 5 · medium · $20.79 · up 15h`. That second line is the
+one the map has always printed under a docked agent, and it is the whole reason the fold is
+affordable — the labels that go are the ones whose values wear their own name, a `$`, a `%`, a
+model, a state that is a word. Nothing is dropped and nothing moves: the columns appear in the
+order the table emits them, and every `data-label` a desktop reads is still on the cell. A
+session costs 63px of phone instead of 234, so eight of them fit one screen rather than two and
+a half.
+
+What the fold costs, said plainly: the column names are on the screen at every other width and
+not at this one, and no pseudo-element hides them for a screen reader — both ways of doing that
+were measured against a browser's accessibility tree and neither reads in the right place. What
+a phone reads out is the strip itself, `beacon, beacon-8c, waiting · permission prompt, ctx 65%,
+Opus 5, medium, $20.79, up 15h`: named for five of the eight, unnamed for the project, the
+session and the model. The desktop table names all eight in its header row, and so do
+`GET /api/fleet` and `list --json`.
+
+The summary line drops its ISO stamp, which is the widest thing on it and says what the header
+already says in words; the stamp stays in the markup, so a wide window and anything reading the
+HTML still get the exact second.
+
+And while a replay is running, the scrubber pins to the bottom of the viewport, so the hand on
+the handle and the dials the handle moves are on screen together. The sentence under it comes
+with it: two of the three things it says are properties of the record rather than of its range —
+that nothing replayed is dated, and that the past is drawn ungrouped — and a phone replaying is
+exactly when a reader is looking at an ungrouped map.
+
+Independently of width, wherever the pointer is coarse, the four pills carry an invisible target
+of at least 44px: the two tabs, `Play`, and the way back out of a replay. The scrubber itself is
+not one of them — it is a range input, dragged by a thumb the browser sizes, and it is left
+alone. The overlay is drawn nowhere, so it moves nothing: laid out at 1280px the table comes out
+box for box where it was, to two decimals, and the one node the page gained is a span wrapped
+round text already drawn in that place. What a desktop reader does see change is the scrubber's
+`REPLAY`, which is written above it at every width and not only on a phone — see
+[replaying the day](#replaying-the-day).
 
 ## What the serve remembers
 

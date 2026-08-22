@@ -87,3 +87,44 @@ test('a replaying page hides the whole live fragment, not just its map', () => {
   assert.match(html, /body\.replaying #live \{ display:none/);
   assert.match(html, /body\[data-view="table"\] #replay(-view)?[^{]*\{ display:none/);
 });
+
+// ── the handle says what it is ────────────────────────────────────────────────────────────
+//
+// A button reading "Play" and a slider at the foot of the page, under a map, with nothing
+// naming them: on a phone that is the whole of what fits on screen, and the first question it
+// gets asked is what it plays. The name is the answer, and it costs one line at every width —
+// a control nobody dares touch is a control that is not there.
+test('the scrubber carries its own name', () => {
+  const html = page();
+  assert.match(html, /<span class="replay-name">Replay<\/span>/);
+  assert.ok(html.indexOf('<span class="replay-name">') < html.indexOf('id="play"'), 'above the controls it names');
+});
+
+// "The last 24 hours" is the size of the RING, not of the record: a serve ten minutes old has
+// seen ten minutes, and `coversText` is built around refusing to say otherwise. A title naming
+// a duration would be the one line on this surface claiming a day nobody recorded — and the
+// only line still on screen once a phone folds the prose away mid-drag.
+test('the name says what the control is, never how much of the day it holds', () => {
+  const name = /<span class="replay-name">([^<]*)<\/span>/.exec(page())![1];
+  assert.doesNotMatch(name, /\d/, name);
+  assert.doesNotMatch(name, /\b(day|hours?|h|minutes?)\b/i, name);
+});
+
+// It sits inside the container the script raises, so a page with no script shows no title over
+// a scrubber that is not there — the same bargain the handle itself is under.
+test('the name goes up and down with the controls, and never rides in the fragment', () => {
+  const html = page();
+  const container = html.indexOf('<div class="replay" id="replay" hidden>');
+  assert.notEqual(container, -1, 'the container ships hidden');
+  const name = html.indexOf('<span class="replay-name">');
+  assert.ok(name > container, 'the name is inside it, not above it');
+  assert.ok(name < html.indexOf('</div>', container), 'and closes with it');
+  assert.doesNotMatch(renderLive(fleet()), /replay-name/);
+});
+
+// Its own line, above the row: dropped into the flex line beside Play it would read as a label
+// for the button rather than for the pair, and take width from the slider to do it.
+test('the name takes a line of its own rather than width from the slider', () => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(page())![1];
+  assert.match(css, /\.replay \.replay-name\s*\{[^}]*flex-basis:\s*100%/);
+});

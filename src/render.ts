@@ -463,7 +463,7 @@ export function renderLive(fleet: Fleet): string {
 <div class="view view-map" role="group" aria-label="fleet map" aria-describedby="fleet-notes">${renderMap(fleet)}</div>`;
 
   return `<div id="limits-src" hidden>${renderLimits(fleet)}</div>
-<div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>
+<div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)}<span class="stamp"> · ${esc(new Date(health.generatedAt).toISOString())}</span></div>
 ${warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}
 ${body}
 <div id="fleet-notes">${notes.map((n) => `<div class="note">${esc(n)}</div>`).join('')}</div>`;
@@ -702,6 +702,28 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   nav a { color:var(--dim); text-decoration:none; font-size:.8rem; font-weight:600; text-transform:uppercase;
           letter-spacing:.06em; padding:.15rem .55rem; border-radius:99px; border:1px solid transparent; }
   nav a[aria-current="page"] { color:var(--fg); border-color:var(--line); }
+  /* A finger is not a cursor. Every control on this page is a pill sized for a pointer that
+     lands on a single pixel — about 26px of box against the 44 a thumb is asked to hit — and
+     the fix cannot be more padding: that would redraw the page for everyone to solve a problem
+     only a touchscreen has. So the TAPPABLE box grows and the drawn one does not, through an
+     invisible overlay that exists only where the pointer is coarse.
+
+     Two rules rather than one: the inset is what is LEFT to reach 44 once the pill's own line
+     box and padding are counted, and the way out of a replay is set in smaller type than the
+     tabs. Sized as one number for all three, it came out at 41px. The border is NOT part of that
+     sum: the overlay's containing block is the control's padding box, so the border sits inside
+     the rectangle rather than adding to it. Counting it read 45.2px for a target Chrome laid out
+     at 43.2 — the whole feature short of the threshold it exists for, in both rules at once.
+
+     Vertical only. Every control here is already wider than 44px on its own text (the narrowest,
+     Map, is 50), so a horizontal inset buys nothing — and at .3rem against a .15rem gap between
+     the tabs it made their two overlays overlap by 7px, where a tap meant for Table landed on
+     Map because Map's pseudo paints later. */
+  nav a, .replay button, .replaying-note button { position:relative; }
+  @media (pointer: coarse) {
+    nav a::after, .replay button::after { content:''; position:absolute; inset:-.7rem 0; }
+    .replaying-note button::after { content:''; position:absolute; inset:-.85rem 0; }
+  }
   body[data-view="table"] .view-map { display:none; }
   body[data-view="map"] .view-table { display:none; }
 
@@ -752,6 +774,12 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      beats it: unguarded, this page came up announcing a replay nobody had asked for. */
   .replay:not([hidden]) { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-top:1rem;
             padding-top:.7rem; border-top:1px solid var(--line); }
+  /* The pair gets a name. A button reading "Play" and a slider under a map, with nothing
+     saying what they move, is a control nobody dares touch — which on a phone is most of what
+     is on screen. Its own line above them, because dropped into the row it would read as a
+     label for the button rather than for the pair, and take width from the slider to do it. */
+  .replay .replay-name { flex-basis:100%; font-size:.7rem; font-weight:700; letter-spacing:.07em;
+            text-transform:uppercase; color:var(--dim); }
   .replay button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent;
             border:1px solid var(--line); border-radius:99px; padding:.15rem .8rem; cursor:pointer; }
   .replay input[type="range"] { flex:1; min-width:10rem; accent-color:var(--dim); }
@@ -923,17 +951,75 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .asof.stale { color:var(--warn); font-weight:600; }
   @media (max-width: 30rem) { .map.flat { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); } .map { gap:.6rem; } }
 
-  /* Below this the table stops being a table: one card per session, every value keeping the
-     name of the column it came from. Nothing is dropped — a phone that hides the context
-     column would be a phone that renders "not measured" as nothing at all. */
+  /* Below this the table stops being a table. What replaces it is the strip described down at
+     the tr rule: two lines per session rather than one card of eight labelled ones. Nothing is
+     dropped — a phone that hid the context column would be a phone that rendered "not measured"
+     as nothing at all — and the labels that go are the ones whose value says what it is on its
+     own, with the exceptions named where they are given a word back. */
   @media (max-width: 46rem) {
     body { padding:1.25rem .75rem; }
+    /* The summary's ISO stamp, spent. It is the widest thing on that line and the header two
+       lines above already says the same fact in the words a reader uses — "updated 3s ago",
+       counted by the shell whether or not a poll ever lands. Hidden rather than dropped: the
+       fragment still carries the exact second for anyone who goes looking for it. */
+    .meta .stamp { display:none; }
+    /* The handle, pinned under the thumb. The scrubber sits at the FOOT of the map and a map on
+       a phone is several screens tall: dragging it means the dials it moves are above the fold,
+       so the reader scrubs blind, lets go, scrolls up to see what changed and scrolls back. Held
+       at the bottom of the viewport, the hand and the thing it is changing are on screen at once.
+
+       Opaque and above what passes under it, or the dials scroll through the slider dragging
+       them. The negative margin gives it the page's own gutters back, so the bar reaches the
+       edges of the phone and the rule above it reads as an edge rather than a floating line.
+
+       The sentence under the handle stays. Hiding it for the length of a replay was the obvious
+       way to keep the bar short, and it silently undid a fix this file argues for forty lines
+       into coversText: two of its three parts are standing properties of the RECORD, not the
+       range — nothing replayed here is dated, and the past is drawn ungrouped — and they were
+       put in the reader's view precisely because they had lived "nowhere the reader can see it"
+       and an ungrouped map reads as a rendering that broke. A phone replaying is exactly when a
+       reader is staring at one. The bar is taller for it. */
+    body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3;
+         background:var(--bg); border-top:1px solid var(--line);
+         padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
     .wrap { overflow-x:visible; }
-    table, tbody, tr, td { display:block; }
+    table, tbody { display:block; }
     table { min-width:0; }
     thead { display:none; }
-    tr { border:1px solid var(--line); border-left-width:3px; border-radius:8px;
-         padding:.35rem .7rem; margin-bottom:.6rem; }
+    /* The card stops being eight labelled lines and becomes the strip the map already speaks.
+       Eight lines is 234px of phone: two and a half sessions fill the screen, and "is anything
+       waiting on me" costs four screens of scrolling. Two lines instead — who and in what
+       state, then the numbers, "ctx 65% · Opus 5 · medium · $20.79 · up 15h", which is the
+       line a docked agent has always printed on the map next door.
+
+       Nothing is dropped. The labels that go are the ones whose values wear their own name: a
+       "$", "%", a model, a state that is a word. The two that do not get one back below, in
+       the strip's own words rather than as a column heading.
+
+       The cell steps out of the layout entirely, with display:contents, so the row is the flex
+       container and every VALUE is one of its items. Anything else puts a box between the row
+       and the thing being placed, and the order below would have nothing to order. */
+    tr { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:.4rem; row-gap:.05rem;
+         border:1px solid var(--line); border-left-width:3px; border-radius:8px;
+         padding:.5rem .75rem .55rem; margin-bottom:.55rem; }
+    /* white-space on the CELL, and not on the row: the desktop rule being undone is
+       td { white-space:nowrap }, and an explicit declaration on the cell beats anything the row
+       passes down — display:contents takes the cell out of the layout, not out of the cascade.
+       Put on the row instead, it read correctly and left the project name 128px past the phone. */
+    td { display:contents; white-space:normal; }
+    /* The column names are gone from this width, and there is no pseudo-element hiding them for
+       a screen reader: both ways of trying were measured against Chrome's accessibility tree and
+       neither works. Out of flow (the .sr recipe) the eight labels are read as ONE block after
+       the whole table, detached from every value they name — worse than silence. In flow at zero
+       size they are pruned from the tree entirely, and they still move the strip. What a reader
+       hears is the strip itself: "beacon, beacon-8c, waiting · permission prompt, ctx 65%, Opus
+       5, medium, $20.79, up 15h" — named for five of the eight, and unnamed for the project, the
+       session and the model. The desktop table names all eight in its thead, and so does every
+       JSON surface. Naming them here needs markup, and markup is not what this change is. */
+    /* The line break, as an item: zero-height, full-width, wedged between the state and the
+       first number. Without it the strip is a paragraph that reflows per session, and a column
+       of cards whose second line starts somewhere different each time cannot be scanned. */
+    tr::after { content:''; order:4; flex-basis:100%; height:0; }
     tr[data-state="busy"] { border-left-color:var(--busy); }
     tr[data-state="waiting"] { border-left-color:var(--wait); }
     tr[data-state="unknown"] { border-left-color:var(--warn); }
@@ -955,11 +1041,70 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        away. It spans the row instead, like the cells below it. The berth docks its own strips
        full width at every size, so what this rule is left covering is the REPLAY's flat grid. */
     .node[data-role="agent"] { grid-column:1 / -1; }
-    td, td:first-child { border:0; padding:.2rem 0; white-space:normal;
-         display:flex; justify-content:space-between; align-items:baseline; gap:1rem; }
-    td::before { content:attr(data-label); color:var(--dim); font-size:.72rem; font-weight:600;
-         text-transform:uppercase; letter-spacing:.06em; flex:none; }
-    .v { text-align:right; }
+    /* Line one: who, and in what state. The project leads and carries the weight; the session
+       name travels beside it in the page's grey. That order is deliberate and it is a red line
+       — a background session is NAMED AFTER ITS PROMPT, and a prompt set as the heading of a
+       card is a dashboard announcing what its agents were told to do, in the largest type on
+       the page. It also has no length limit, so it is the one value here allowed to wrap: the
+       page is content-box at this width and .wrap has given up its overflow-x, so a line
+       that refuses to break takes the whole document sideways.
+
+       The cell above hands back the white-space the desktop table takes; these two need the
+       other half of it, because both can arrive as ONE long token — a project is a directory's
+       basename, a background session's name is a prompt — and normal has nowhere to break a
+       word. min-width:0 for the same reason the berths carry it: a flex item's automatic
+       minimum is its min-content width, which without this is the whole unbroken string. */
+    td[data-label="Project"] .v { order:1; font-weight:600; min-width:0; overflow-wrap:anywhere; }
+    td[data-label="Session"] .v { order:2; flex:1 1 0; min-width:0; color:var(--dim);
+         white-space:normal; overflow-wrap:anywhere; }
+    /* The third value that can arrive as one unbroken token, and the one the two rules above
+       missed: a waiting reason is FREE TEXT, so "permission prompt: /Users/…/foo.ts" is a path
+       with no space to break at. Wrapping inside the pill (below) breaks a sentence and does
+       nothing for a path — at 320px an 84-character token laid the document out at 483px, 455 of
+       them this cell, which is the scroll bar the fix beside it had just closed. */
+    td[data-label="State"] .v { order:3; min-width:0; overflow-wrap:anywhere; }
+    /* The reason a session is waiting is free text: "permission prompt" fits on a phone and a
+       sentence does not. Held nowrap, the pill is one unbreakable item on that first line,
+       which is the same scroll bar by the other road. It wraps inside its own border instead,
+       and the border stops being a capsule once it has three lines to go round: 99px on a box
+       that tall is an ellipse whose curve crosses the words. Under half a single line's height,
+       the radius is still clamped to a capsule on one line and merely rounded on three. */
+    .pill { white-space:normal; border-radius:.9rem; }
+    /* Line two: the numbers, each wearing a name of its own. "65%" alone under a line of prompt
+       reads as how much of the prompt is done, which is the mistake the map's strip already had
+       to fix; "$20.79" and "Opus 5" say what they are without help. */
+    td[data-label="Context"] .v, td[data-label="Model"] .v, td[data-label="Effort"] .v,
+    td[data-label="Cost"] .v, td[data-label="Uptime"] .v { font-size:.82rem; }
+    td[data-label="Context"] .v { order:5; font-variant-numeric:tabular-nums; font-weight:600; }
+    td[data-label="Context"] .v::before { content:'ctx '; color:var(--dim); font-weight:400; }
+    /* The weight above is for a percentage. A session with no reading renders this same cell as
+       "— not chained", and in the number's weight a missing measurement reads like a
+       measurement — heavier here than the same words are on the desktop table. */
+    td[data-label="Context"] .v .dim { font-weight:400; }
+    /* Same two rules again, and the same argument: a model and an effort are not tarmac's own
+       words. They are model.display_name and the effort out of a statusline payload, copied
+       through verbatim and capped nowhere — a 120-character model laid the document out at
+       814px. The three numbers below are ours (a percentage, a dollar sign, a duration), so
+       deliberately not on this list: a guard for a case that cannot arise is prose that lies. */
+    td[data-label="Model"] .v { order:6; min-width:0; overflow-wrap:anywhere; }
+    td[data-label="Effort"] .v { order:7; color:var(--dim); min-width:0; overflow-wrap:anywhere; }
+    td[data-label="Cost"] .v { order:8; font-variant-numeric:tabular-nums; }
+    td[data-label="Uptime"] .v { order:9; color:var(--dim); font-variant-numeric:tabular-nums; }
+    td[data-label="Model"] .v::before, td[data-label="Effort"] .v::before,
+    td[data-label="Cost"] .v::before { content:'· '; color:var(--dim); font-weight:400; }
+    td[data-label="Uptime"] .v::before { content:'· up '; color:var(--dim); font-weight:400; }
+    /* A dash is not a value that wears its own name, and a session with no snapshot behind it
+       has four of them at once: the percentage, the model, the effort and the cost all come out
+       of one statusline frame, so they go missing together. That is not the corner case — it is
+       every session until the status line has been chained and each one has drawn a frame, the
+       state the page prints a warning about. As a strip it read "ctx — not chained · — · — · —",
+       three anonymous dashes in a row, and the same happens one at a time for a session that
+       reports no cost. Those three get their column word back; the other two already have one.
+       The hook is the markup's own — a missing value is a .dim inside the cell's .v, and a
+       present one never puts one there. */
+    td[data-label="Model"] .v:has(.dim)::before { content:'· model '; }
+    td[data-label="Effort"] .v:has(.dim)::before { content:'· effort '; }
+    td[data-label="Cost"] .v:has(.dim)::before { content:'· cost '; }
     .bar { display:none; }
   }
 </style>
@@ -1017,6 +1162,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
 <!-- A dead handle is worse than no handle: this is revealed once the record is in hand, and
      what it says it covers is whatever the record answered with. -->
 <div class="replay" id="replay" hidden>
+  <!-- "Replay", and nothing about how much of the day it holds: the range is the record's to
+       state, in the sentence below, which is built around never calling ten minutes a day. -->
+  <span class="replay-name">Replay</span>
   <button type="button" id="play">Play</button>
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
@@ -1084,6 +1232,22 @@ function pageScript(view: View): string {
   var off = document.getElementById('offline'), why = document.getElementById('why');
   var limits = document.getElementById('limits');
   var last = Date.now(), failing = false, inFlight = false, since = 0, gen = 0;
+  // How many polls in a row have come back with nothing usable, and when the last of them was.
+  // On a phone the page is read on a radio, and one dropped request is a tunnel rather than an
+  // outage — the banner frames the table off and says the fleet cannot be read, which is the
+  // wrong thing to shout five seconds before the next answer lands. It waits for the second
+  // consecutive miss; the age upstairs keeps counting meanwhile, so nothing on the page is
+  // claiming to be fresher than it is.
+  //
+  // Consecutive means in a row IN TIME, which is why the stamp is here. A count cleared only by
+  // a successful poll is not the same rule: a hidden tab issues no polls, so a miss from before
+  // the reader locked their phone sat there for an hour, and the wake-up poll — the likeliest
+  // miss of the session, fired while the radio is still reassociating — found it and raised the
+  // banner over one dropped request. A miss further back than a few poll intervals starts the
+  // count again. The window is bounded at both ends and neither end is arbitrary: below one
+  // poll interval two real misses in a row would never meet, and above five a locked phone
+  // comes back to a miss from minutes ago being called consecutive with this one.
+  var misses = 0, missAt = 0, MISSES_BEFORE_BANNER = 2, MISS_WINDOW_MS = 3 * ${REFRESH_MS};
 
   function ago(ms) {
     // A clock that steps backwards (an NTP correction, a laptop waking) must not produce
@@ -1094,8 +1258,18 @@ function pageScript(view: View): string {
     return m < 60 ? m + 'm' : Math.round(m / 60) + 'h';
   }
 
+  // Called for the one failure that is NOT a missed poll: a request the server accepted and
+  // never answered. Twenty seconds of silence from a live connection is not a dropped packet,
+  // so it says so at once, without the second miss the count is there to wait for. It does not
+  // touch the count: a miss cannot take this banner back down, because a miss never assigns the
+  // failing flag anything but true, and only an ANSWER puts it back to false.
   function fail(why_) {
     failing = true;
+    // Retired, not merely dropped. Clearing the in-flight flag without moving the generation
+    // left the abandoned request still ours, so the answer that arrived twenty seconds later was
+    // swapped in and stamped "updated 0s ago" — the freshest label on the page over a fleet read
+    // before the stall was declared. The manual has always said such an answer is discarded.
+    gen += 1;
     why.textContent = why_;
     off.hidden = false;
     document.body.classList.toggle('failing', true);
@@ -1155,10 +1329,20 @@ function pageScript(view: View): string {
         if (src) limits.innerHTML = src.innerHTML;
         last = Date.now();
         failing = false;
+        // Consecutive, not cumulative: two blips an hour apart are two blips, and a count that
+        // never went back to zero would turn the second one into a permanent banner.
+        misses = 0;
       });
     }).catch(function (e) {
       if (!mineStill()) return;
-      failing = true;
+      if (Date.now() - missAt > MISS_WINDOW_MS) misses = 0;
+      misses += 1;
+      missAt = Date.now();
+      // Raised here, never lowered here. Only an ANSWER says the server came back, so this
+      // assigns true or nothing at all — derived both ways, the window that starts a fresh count
+      // also cleared the alarm, and a reader who locked their phone for ten minutes while the
+      // server was down unlocked onto a green page over a fleet nobody could read.
+      if (misses >= MISSES_BEFORE_BANNER) failing = true;
       why.textContent = String((e && e.message) || e).slice(0, 200);
     }).then(function () {
       // Not ours to unlock: a request we were given up on must not clear a flag that a newer
@@ -1552,11 +1736,12 @@ function pageScript(view: View): string {
 function renderRow(r: FleetRow): string {
   const state = stateOf(r);
   const word = stateLabel(state, r);
-  // `data-label` is not decoration: below ~46rem the columns stack, the header row is gone,
-  // and a value whose column has no name is a bare "—" that could mean anything.
-  // Every cell holds exactly ONE element. Stacked on a phone the label sits left and the
-  // value right, and two sibling nodes in one cell get pushed to opposite ends of the card —
-  // which is how "63%" once ended up stranded in the middle of a row, under the wrong label.
+  // `data-label` is not decoration, and no longer for the reason it was: below ~46rem nothing
+  // draws the column names at all, and what the attribute does instead is CARRY THE LAYOUT —
+  // every rule in the narrow block selects `td[data-label="…"] .v`, which is where the strip's
+  // order, its `ctx ` and `· ` prefixes and its wrapping all come from. One element per cell for
+  // the same reason: `td` is `display:contents` there, so the `.v` is the ROW's flex item, and a
+  // second sibling in one cell would be a second item placed on an `order` of its own.
   return `<tr data-state="${state}">
     <td data-label="Project" class="project"><span class="v">${esc(r.project)}</span></td>
     <td data-label="Session" class="dim"><span class="v">${esc(r.name)}</span></td>

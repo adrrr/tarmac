@@ -78,6 +78,67 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The offline banner waits for a second consecutive missed poll, and every control carries a
+  44px target on a touchscreen.** From a UX audit of the dashboard read on a phone. The banner
+  frames the table off and says the fleet cannot be read, which is the wrong thing to shout
+  when a radio drops one request for a tunnel or a handover between cells and the next lands
+  five seconds later; it now needs two misses in a row, and the age in the header keeps
+  counting meanwhile, so nothing on the page claims to be fresher than it is. In a row means in
+  a row in TIME: a hidden tab asks for nothing, so a count cleared only by a successful poll
+  would keep a miss from before a phone was locked and spend it on the wake-up poll, which is
+  the likeliest miss of the session. A miss further back than a few poll intervals starts the
+  count again. A stalled request
+  is the exception and still speaks at once: twenty seconds of silence from a connection the
+  server accepted is not a dropped packet, and a miss after that keeps the banner up rather
+  than taking it back down. The rule is the page's at every width, not the phone's. Alongside
+  it, the tabs, `Play` and the way back out of a replay grow an invisible tappable box of at
+  least 44px wherever `pointer: coarse` matches, computed per control rather than copied — one
+  inset for all three left the way out of a replay at 41px, and the arithmetic that chose them
+  was wrong by the border until the pseudo-elements were measured in a browser: an overlay's
+  containing block is its ancestor's padding box, so all four targets were laid out at 43.2px
+  while the sum read 45.2. The overlay is drawn nowhere and moves nothing anywhere: on the table
+  at 1280px, all 81 boxes on the page come out at the position and size they had before, to two
+  decimals, and the only difference is one node that was not there — a span around the ISO stamp,
+  wrapped round text already drawn in that exact place. The scrubber is the exception and it is
+  meant: `REPLAY` is written above it at EVERY width, not only on a phone, so a desktop `/map`
+  gains 26.3px of replay bar (47.8 to 74.1 with the bar showing). A control nobody could name was
+  the defect being fixed, and naming it for a finger and not for a mouse would have been two
+  different pages.
+
+- **On a phone a session is a two-line strip, not a card of eight labelled lines.** Same audit.
+  A card was 234px, so two and a half sessions filled a phone and "is anything waiting on me"
+  cost four screens of scrolling — on the surface whose whole point is being read from a pocket.
+  Under 46rem the row now folds into the line the map has always printed under a docked agent:
+  who and in what state, then `ctx 65% · Opus 5 · medium · $20.79 · up 15h`, about 63px a
+  session. Nothing is dropped. The labels that go are the ones whose values wear their own name,
+  a `$`, a `%`, a model, a state that is a word; the two that do not get one back in the strip's
+  own words. Nothing is reordered either — the columns are placed in the order `renderRow`
+  emits them, and the one `order` that is not a column is the zero-height break that keeps the
+  numbers on a line of their own. CSS and nothing else: every `data-label` is still on the cell,
+  the markup a desktop reads is untouched, and so is every JSON surface. What the fold costs is
+  in the manual beside it: at this width the column names are off the screen and no pseudo-element
+  hides them for a screen reader — both ways of doing that were measured against a browser's
+  accessibility tree and neither reads in the right place — so a phone reads the strip as
+  `beacon, beacon-8c, waiting · permission prompt, ctx 65%, Opus 5, medium, $20.79, up 15h`,
+  named for five values of eight. A background session's
+  name is its prompt, so it wraps rather than being cut, and it stays beside the project in the
+  page's grey rather than becoming the strip's title.
+
+- **The scrubber has a name, and on a phone it stays under the thumb.** A button reading `Play`
+  and a slider at the foot of a map, with nothing saying what they move, is a control nobody
+  touches; it now carries a visible `REPLAY` above it. The word says what the pair is and never
+  how much of the day it holds — a serve ten minutes old has seen ten minutes, and the sentence under the
+  handle is what states the range. Under 46rem, while a replay is running, the scrubber pins to
+  the bottom of the viewport: the map is several screens tall on a phone, so dragging the
+  handle at its foot meant scrubbing blind and scrolling up to see what changed. The sentence
+  under it is pinned with it rather than folded away — two of the three things it says are
+  properties of the record and not of its range, and one of them is that the past is drawn
+  ungrouped, which a phone replaying is exactly the moment to be told. The summary line drops
+  its ISO
+  timestamp at the same width, which the header already says in words as `updated 3s ago`; the
+  stamp stays in the markup, so a wide window and anything reading the HTML keep the exact
+  second.
+
 - **The wait guard now reads the two shapes it was written to catch and did not.** `#84` moved
   twenty-two hand-typed deadlines onto one derived constant, but the guard it left behind polices
   `fetch` lines and a shadowed `NET_DEADLINE_MS` only, so the very forms two of those defects
@@ -151,6 +212,25 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   one. (#49)
 
 ### Fixed
+
+- **A request the page gave up on is retired, not merely dropped.** The manual has always said
+  an answer to a request already abandoned is discarded, and it was true only once a newer poll
+  had started. Between the twenty-second stall being declared and the next poll going out, the
+  dead request was still the current one: its answer, when it came, was swapped in and stamped
+  `updated 0s ago` — a body read before the stall wearing the freshest label on the page, which
+  is the confusion the empty-answer rule beside it exists to prevent. The generation moves when
+  the page gives up, so the window is gone.
+
+- **A long name no longer takes the phone's table sideways.** The manual promises that a name
+  with no length limit costs a width and never a scroll bar, and the narrow layout had never
+  held it: laid out at 320, 360, 390 and 430px against a fleet whose project name was 51
+  characters, the document came out 830px wide at every one of them — a table you scroll
+  sideways to read the left edge of, on the surface that exists to be read from a pocket. Both
+  values that can arrive as one unbroken token, a project (a directory's basename) and a
+  background session's name (a prompt), now break where they have to, and the waiting reason
+  inside the state pill wraps rather than holding one unbreakable line. Measured in a browser
+  rather than read off the stylesheet, which is how it was missed: nothing in the sheet looked
+  wrong.
 
 - **The suite's deadlines are the runner's, not a number typed next to each wait.** Every wait
   under `test/` on a socket or on a child's output carried one of its own: 4000ms written out
