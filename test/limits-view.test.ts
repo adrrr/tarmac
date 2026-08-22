@@ -24,6 +24,16 @@ const fleet = (rateLimits: Record<string, any> | null = limits(), snapshotAgeMs 
   health: health(),
 });
 
+/** Two sessions, each with a reading of its own — the shape an account arrives in. */
+const twoReadings = (other: Record<string, any>): Fleet => ({
+  rows: [row({ rateLimits: limits(), snapshotAgeMs: 1200 }), row({ sessionId: 's2', rateLimits: other, snapshotAgeMs: 90_000 })],
+  health: health({ sessions: 2 }),
+});
+const headerOf = (f: Fleet): string => {
+  const html = renderPage(f);
+  return html.slice(html.indexOf('<header>'), html.indexOf('</header>'));
+};
+
 const page = (rateLimits: Record<string, any> | null = limits()): string => renderPage(fleet(rateLimits));
 /** The header alone — the stylesheet above it has widths and percentages of its own. */
 const header = (rateLimits: Record<string, any> | null = limits(), ageMs?: number): string => {
@@ -195,4 +205,30 @@ test('the replayed account is drawn with the replayed fleet, under the banner th
   const view = html.slice(html.indexOf('id="replay-view"'), html.indexOf('id="replay-map"'));
   assert.match(view, /id="replay-limits"/, 'inside the surface the past is drawn on');
   assert.ok(html.indexOf('id="replaying"') < html.indexOf('id="replay-limits"'), 'and after the banner');
+});
+
+// ── readings that are not about the same window ─────────────────────────────────────────
+//
+// One number is drawn out of as many readings as there are sessions, and the freshest wins.
+// That rule holds while the readings are one allowance seen at several moments — and says
+// nothing at all when they are not: a fleet spanning two logins, or a snapshot from before the
+// window rolled over, hands the header a winner picked from a set nobody was told about.
+
+test('the header says when the readings behind it are not all about the same window', () => {
+  const html = headerOf(twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 }, seven_day: { used_percentage: 42, resets_at: NOW / 1000 + 300_000 } }));
+  assert.match(html, /the 5h window is read differently by 1 of the 2 snapshots that carry rate limits/);
+  assert.match(html, /the freshest is the one shown/, 'and what the number beside it therefore is');
+  assert.match(html, /17%/, 'which is still drawn — there is nothing better to draw');
+});
+
+test('readings that name the same windows are the ordinary fleet, and go unremarked', () => {
+  assert.doesNotMatch(headerOf(twoReadings(limits())), /read differently/);
+});
+
+// The mark is a warning, in the same ink as the one that dates a stale reading: what it says
+// is that the number beside it may not be the account this fleet is spending from.
+test('the mark carries the warning weight, rather than reading as chrome', () => {
+  const html = headerOf(twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 } }));
+  assert.match(html, /class="mixed"/);
+  assert.match(renderPage(fleet()), /\.stale, \.mixed \{/, 'the two marks share one rule, so neither can lose its hue alone');
 });

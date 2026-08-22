@@ -479,7 +479,17 @@ export function renderLimits({ rows, health }: Fleet): string {
   // fact said twice is noise. The replay has no equivalent — the ring keeps each reading and
   // never how old it was, which is why nothing replayed on this page is dated.
   const stale = account !== null && account.ageMs > health.staleAfterMs;
-  return gauges + (stale ? `<span class="stale">! ${esc(asOfAge(account!.ageMs))} ago</span>` : '');
+  // The other thing that can be wrong with this pair, and the one the age cannot say: the
+  // number was picked out of several readings, and they were not all about the same window.
+  // Beside the number rather than in a box below the fleet, because what it qualifies is the
+  // number — and it says the whole sentence, since a mark whose reason is elsewhere is a mark
+  // the reader cannot argue with.
+  const split = accountSplit(account);
+  return (
+    gauges +
+    (stale ? `<span class="stale">! ${esc(asOfAge(account!.ageMs))} ago</span>` : '') +
+    (split === null ? '' : `<span class="mixed">! ${esc(split)}</span>`)
+  );
 }
 
 /**
@@ -631,7 +641,10 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      reading, the payload shapes nobody has captured yet. It reads as chrome to someone
      scanning their sessions and as an answer to someone who came looking for it. */
   .note { color:var(--dim); font-size:.75rem; line-height:1.5; margin:.9rem 0 0; max-width:95ch; }
-  .stale { color:var(--warn); font-weight:600; }
+  /* Two marks, one weight: a reading that has gone cold, and a reading picked out of several
+     that were not about the same window. Both say the number beside them may not be what the
+     reader takes it for, so neither may end up quieter than the other. */
+  .stale, .mixed { color:var(--warn); font-weight:600; }
   .wrap { overflow-x:auto; }
   table { border-collapse:collapse; width:100%; min-width:44rem; }
   th { text-align:left; font-weight:600; font-size:.75rem; text-transform:uppercase; letter-spacing:.06em;
