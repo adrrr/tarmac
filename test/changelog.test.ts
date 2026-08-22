@@ -29,6 +29,13 @@
 // `0.1.0`, `0.1.1` and `0.1.2` shipped before this repository tagged anything, and they are the
 // one thing here nothing can vouch for: there is no record of what they said. They sit below the
 // floor, deliberately and in writing, rather than being quietly skipped.
+//
+// One limit of WHEN it runs, since the merge is the moment the damage is done: on a pull request
+// CI reads the merge ref — main with the branch folded in, which is the tree that would land — so
+// a bullet parked in a published section is caught before it lands rather than after. What is not
+// caught there is a merge nothing ran on: the resolution is then judged on main's push, red after
+// the fact. Never later than that, though — `prepublishOnly` runs this suite again, so no tarball
+// leaves with a rewritten section behind it.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -101,6 +108,11 @@ function scan(changelog: string): { lines: string[]; isHeading: boolean[]; fence
  * property of its neighbour, not of the release, and it changes whenever a new version is
  * added above. Every real artefact — a bullet added, removed, reworded, a date moved — survives
  * that trim.
+ *
+ * `findIndex` takes the FIRST heading a version owns, so a second copy of one — what a botched
+ * merge or a revert leaves behind — is never read, and an edit sitting in it never compared.
+ * Nothing here closes that; the duplicate-heading assertion in the second test below is what
+ * does. Weaken that one and this reader silently gets its blind spot back.
  */
 function section(changelog: string, version: string): string | null {
   const { lines, isHeading } = scan(changelog);
@@ -152,7 +164,15 @@ function taggedReleases(): { tag: string; version: string }[] {
     .filter((r): r is { tag: string; version: string } => r.version !== undefined);
 }
 
-/** The first line at which two sections part company, for a message that points at the edit. */
+/**
+ * The first line at which two sections part company, for a message that points at the edit.
+ *
+ * The walk runs to the LONGER of the two, so a section that was simply truncated parts company
+ * where the shorter one ends — `undefined` against a line, reported as `(section ends)`. There
+ * is therefore no "same, only shorter" case for the loop to fall through on, whatever the older
+ * message below used to claim: what reaches the last line is two sections that are equal, and
+ * every caller has already ruled that out before asking.
+ */
 function firstDifference(tagged: string, current: string): string {
   const a = tagged.split('\n');
   const b = current.split('\n');
@@ -161,7 +181,7 @@ function firstDifference(tagged: string, current: string): string {
       return `line ${i + 1}\n    tagged:  ${a[i] ?? '(section ends)'}\n    current: ${b[i] ?? '(section ends)'}`;
     }
   }
-  return '(no differing line — the sections differ only in length)';
+  return '(no differing line — the sections are identical)';
 }
 
 test('every published CHANGELOG section still says what it said when it was tagged', () => {
@@ -221,7 +241,9 @@ test('every dated section since tagging began carries the tag that published it'
 
   // A duplicated heading is broken for a reader whatever this file thinks, and it also splits a
   // version in two, of which only the first is ever compared — a merge or a revert can leave
-  // exactly that, with the pristine copy on top and the rewritten one below.
+  // exactly that, with the pristine copy on top and the rewritten one below. This assertion is
+  // the only thing standing in front of that: `section()` reads the first heading and stops, so
+  // weakening the line below hands the test above a blind spot rather than a failure.
   const counted = new Map<string, number>();
   for (const v of dated) counted.set(v, (counted.get(v) ?? 0) + 1);
   const duplicated = [...counted].filter(([, n]) => n > 1).map(([v]) => v);
@@ -263,6 +285,11 @@ test('CI fetches the tags the guards above read', () => {
   const blocks = jobs.split(/^ {2}(?=[A-Za-z_])/m).slice(1);
   assert.ok(blocks.length > 0, 'no CI jobs matched — the assertion that follows would pass on nothing');
 
+  // `- run: npm test` on one line is how this workflow spells it, and the only spelling read: a
+  // block scalar (`run: |`, the command on the next line) is invisible here — the shape the same
+  // workflow already uses for its longer steps. Narrow rather than broken today, because ONE job
+  // runs the suite: rewrite that one and the assertion below fires. A SECOND job, added in block
+  // form, is what would slip past the fetch-depth check in silence.
   const running = blocks.filter((b) => /run: npm (run )?test\b/.test(b));
   assert.ok(running.length > 0, 'no CI job runs the suite — the guards above never run in CI');
 
@@ -285,4 +312,20 @@ test('CI fetches the tags the guards above read', () => {
     [],
     `CI jobs running the suite whose \`actions/checkout\` step has no \`fetch-depth: 0\`: ${shallow.join(', ')} — with no tags fetched, the CHANGELOG guard compares nothing and passes`,
   );
+});
+
+// The one line a reader of the first failure is given. `ok` prints the message and nothing else,
+// so a line number that points at the wrong place sends them through fifty lines of prose by
+// hand — and a truncated section is the case where that is easiest to get wrong: walking to the
+// SHORTER of the two finds no difference at all and reports the two as parting company nowhere.
+test('the first difference names the line, and a section that stops early ends there', () => {
+  const tagged = '## [9.9.9] — 2026-01-01\n- a bullet\n- another';
+
+  assert.match(firstDifference(tagged, '## [9.9.9] — 2026-01-01\n- a BULLET\n- another'), /^line 2\n/);
+  assert.match(firstDifference(tagged, '## [9.9.9] — 2026-01-02\n- a bullet\n- another'), /^line 1\n/);
+
+  const lost = firstDifference(tagged, '## [9.9.9] — 2026-01-01\n- a bullet');
+  assert.match(lost, /^line 3\n/);
+  assert.match(lost, /current: \(section ends\)/);
+  assert.match(firstDifference('## [9.9.9] — 2026-01-01\n- a bullet', tagged), /tagged: {2}\(section ends\)/);
 });
