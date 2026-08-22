@@ -8,7 +8,7 @@ the test suite. None of it is aspiration.
 | Command | What it does | Options |
 |---|---|---|
 | `tarmac list` | one-shot fleet table, and the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
-| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin` |
+| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host` |
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
@@ -218,6 +218,36 @@ marks as coming from another origin, meaning `Sec-Fetch-Site` anything but `same
 curl or a script, is left alone. A busy default port walks up to the next free one and says
 so; a port you chose yourself, by flag, environment or config file, refuses instead, because
 you chose it (see [configuration](#configuration)).
+
+### Putting it behind a reverse proxy
+
+A proxy — `tailscale serve`, caddy, nginx — forwards the `Host` the browser typed, and none of
+them present a loopback one, so a dashboard reached that way met a 403 on every page and every
+API call. `--trust-host` names a host to answer besides loopback, once per host:
+
+```bash
+tarmac serve --trust-host laptop.tailnet.ts.net
+```
+
+Read what that agrees to twice, because it is the one setting here that widens who may read
+this port: anyone who can make a browser send that `Host` — anyone on that tailnet, anyone the
+proxy lets through — reads this fleet's working directories, session ids and costs. tarmac
+cannot tell them from you, and there is no second check behind this one.
+
+So the name is matched whole, and nothing else is. No wildcard is accepted, and a name is never
+read as a prefix or a suffix: `--trust-host example.ts.net` admits neither `sub.example.ts.net`
+nor `example.ts.net.somewhere-else.com`. The port is not part of the name — a proxy presents
+`:8443` on one setup and nothing at all on 443, and the port in a `Host` header is chosen by
+whoever sends it, so matching on it would refuse half the setups this exists for and bar
+nobody. Case is not part of it either. A value that could never match a `Host` header at all —
+a wildcard, a URL, an IPv6 literal — stops the run rather than sitting in the list refusing
+everything all day.
+
+Everything else stands where it was. With no host named — the default, and what every `serve`
+that never asked for this still does — the refusal is the sentence it has always been; with one
+named, it says which rule refused (`tarmac serves loopback and trusted hosts only`). Neither
+quotes the `Host` back. And `Sec-Fetch-Site` does not move: a trusted `Host` does not make a
+cross-site page same-origin.
 
 ## Staying open
 
@@ -603,14 +633,17 @@ never reads the fleet to answer: it serves what was already read.
 
 ## Configuration
 
-Three of tarmac's numbers are opinions rather than truths, so all three are yours to set.
-Nothing else is configurable, and every one of them keeps working with no configuration at all.
+Three of tarmac's numbers are opinions rather than truths, so all three are yours to set. The
+hosts `serve` answers to are the fourth setting and the only one that is not a number: it has
+a default nobody should have to change, and a documented reason to change it. Nothing else is
+configurable, and every one of them keeps working with no configuration at all.
 
 | Setting | What it decides | Default |
 |---|---|---|
 | freshness threshold | how old a reading may be before it is marked `!` | `10m` |
 | port | where `serve` listens | `4477` |
 | snapshots directory | where `list` and `serve` **read** payloads from | the path frozen into the installed wrapper, so the reader follows the writer; with no install to ask, `$XDG_STATE_HOME/tarmac/snapshots`, else `<home>/.local/state/tarmac/snapshots` |
+| trusted hosts | which `Host` values `serve` answers to besides loopback — see [putting it behind a reverse proxy](#putting-it-behind-a-reverse-proxy) | none |
 
 Flag beats environment beats config file beats default, settled per setting. A port pinned in
 the file and a threshold tightened for one run is the normal case.
@@ -620,10 +653,15 @@ the file and a threshold tightened for one run is the normal case.
 | freshness | `--stale-after 90s` \| `15m` \| `2h` | `TARMAC_STALE_AFTER` (same spelling) | `"staleAfterMs": 90000` |
 | port | `--port 8080` | `TARMAC_PORT` | `"port": 8080` |
 | snapshots | `--snapshots-dir DIR` | `TARMAC_SNAPSHOTS_DIR` | `"snapshotsDir": "DIR"` |
+| trusted hosts | `--trust-host HOST`, once per host | `TARMAC_TRUST_HOST`, comma-separated | `"trustHosts": ["HOST"]` |
 
 ```json
 { "staleAfterMs": 900000, "port": 8080 }
 ```
+
+The trusted hosts are a list, and the rung that wins carries the whole of it: a `--trust-host`
+on the command line replaces what `config.json` says rather than adding to it, so a list
+widened in a file can be narrowed again for one run.
 
 `tarmac serve` opens by printing each effective value and which of the four sources it came
 from. The freshness threshold is named wherever a `!` is put on a reading: beside the marks

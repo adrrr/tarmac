@@ -65,8 +65,10 @@ not something quietly ignored. Every command, flag and route:
 climbing, and a banner the moment a refresh fails instead of a table quietly going stale. It
 binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
 marks as coming from another origin, so your cwd paths and costs never leave the machine. A
-client that sends no such mark, curl or a script, is left alone. The listening rules:
-[the manual](docs/MANUAL.md#what-serve-listens-on).
+client that sends no such mark, curl or a script, is left alone. Behind a reverse proxy, which
+presents a `Host` of its own, `--trust-host <name>` names the one to let through and says who
+that lets in: [the manual](docs/MANUAL.md#putting-it-behind-a-reverse-proxy). The listening
+rules: [the manual](docs/MANUAL.md#what-serve-listens-on).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/map-dark.png">
