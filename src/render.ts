@@ -994,6 +994,15 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        passes down — display:contents takes the cell out of the layout, not out of the cascade.
        Put on the row instead, it read correctly and left the project name 128px past the phone. */
     td { display:contents; white-space:normal; }
+    /* The column names are gone from this width, and there is no pseudo-element hiding them for
+       a screen reader: both ways of trying were measured against Chrome's accessibility tree and
+       neither works. Out of flow (the .sr recipe) the eight labels are read as ONE block after
+       the whole table, detached from every value they name — worse than silence. In flow at zero
+       size they are pruned from the tree entirely, and they still move the strip. What a reader
+       hears is the strip itself: "beacon, beacon-8c, waiting · permission prompt, ctx 65%, Opus
+       5, medium, $20.79, up 15h" — named for five of the eight, and unnamed for the project, the
+       session and the model. The desktop table names all eight in its thead, and so does every
+       JSON surface. Naming them here needs markup, and markup is not what this change is. */
     /* The line break, as an item: zero-height, full-width, wedged between the state and the
        first number. Without it the strip is a paragraph that reflows per session, and a column
        of cards whose second line starts somewhere different each time cannot be scanned. */

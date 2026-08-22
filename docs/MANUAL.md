@@ -604,6 +604,14 @@ order the table emits them, and every `data-label` a desktop reads is still on t
 session costs 63px of phone instead of 234, so eight of them fit one screen rather than two and
 a half.
 
+What the fold costs, said plainly: the column names are on the screen at every other width and
+not at this one, and no pseudo-element hides them for a screen reader — both ways of doing that
+were measured against a browser's accessibility tree and neither reads in the right place. What
+a phone reads out is the strip itself, `beacon, beacon-8c, waiting · permission prompt, ctx 65%,
+Opus 5, medium, $20.79, up 15h`: named for five of the eight, unnamed for the project, the
+session and the model. The desktop table names all eight in its header row, and so do
+`GET /api/fleet` and `list --json`.
+
 The summary line drops its ISO stamp, which is the widest thing on it and says what the header
 already says in words; the stamp stays in the markup, so a wide window and anything reading the
 HTML still get the exact second.

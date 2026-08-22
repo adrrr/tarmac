@@ -102,7 +102,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   own words. Nothing is reordered either — the columns are placed in the order `renderRow`
   emits them, and the one `order` that is not a column is the zero-height break that keeps the
   numbers on a line of their own. CSS and nothing else: every `data-label` is still on the cell,
-  the markup a desktop reads is untouched, and so is every JSON surface. A background session's
+  the markup a desktop reads is untouched, and so is every JSON surface. What the fold costs is
+  in the manual beside it: at this width the column names are off the screen and no pseudo-element
+  hides them for a screen reader — both ways of doing that were measured against a browser's
+  accessibility tree and neither reads in the right place — so a phone reads the strip as
+  `beacon, beacon-8c, waiting · permission prompt, ctx 65%, Opus 5, medium, $20.79, up 15h`,
+  named for five values of eight. A background session's
   name is its prompt, so it wraps rather than being cut, and it stays beside the project in the
   page's grey rather than becoming the strip's title.
 

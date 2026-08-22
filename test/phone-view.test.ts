@@ -294,10 +294,18 @@ test('a context nobody measured is not set in the weight of a number', () => {
   );
 });
 
-// The old layout printed the column names with `content:attr(data-label)`. That rule is gone,
-// and the attribute is not: it is what the strip hangs every one of its rules on, and it is
-// what `GET /` still carries for anything reading the markup.
-test('the column names leave the screen and stay in the markup', () => {
+// The column names leave the screen, and nothing hides them for a screen reader either.
+//
+// Both ways of trying were measured against Chrome's accessibility tree. Out of flow, in the
+// `.sr` recipe, the eight labels are read as ONE block after the whole table, detached from
+// every value they name; in flow at zero size they are pruned from the tree and still move the
+// strip. So the pseudo is gone rather than half-there — and this test is what says so, because
+// a pseudo-label that reads in the wrong place is the kind of thing that gets added back by
+// someone reading the sheet and thinking it was an oversight.
+//
+// The attribute stays: it is what every rule in the strip hangs on, and what `GET /` carries
+// for anything reading the markup.
+test('the strip generates no pseudo-label, and keeps every attribute it hangs on', () => {
   assert.doesNotMatch(sheet(), /content:\s*attr\(data-label\)/);
   for (const label of columns()) {
     assert.match(renderPage(fleet(), 'table'), new RegExp(`data-label="${label}"`), label);
