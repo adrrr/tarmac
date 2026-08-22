@@ -1057,7 +1057,12 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     td[data-label="Project"] .v { order:1; font-weight:600; min-width:0; overflow-wrap:anywhere; }
     td[data-label="Session"] .v { order:2; flex:1 1 0; min-width:0; color:var(--dim);
          white-space:normal; overflow-wrap:anywhere; }
-    td[data-label="State"] .v { order:3; }
+    /* The third value that can arrive as one unbroken token, and the one the two rules above
+       missed: a waiting reason is FREE TEXT, so "permission prompt: /Users/…/foo.ts" is a path
+       with no space to break at. Wrapping inside the pill (below) breaks a sentence and does
+       nothing for a path — at 320px an 84-character token laid the document out at 483px, 455 of
+       them this cell, which is the scroll bar the fix beside it had just closed. */
+    td[data-label="State"] .v { order:3; min-width:0; overflow-wrap:anywhere; }
     /* The reason a session is waiting is free text: "permission prompt" fits on a phone and a
        sentence does not. Held nowrap, the pill is one unbreakable item on that first line,
        which is the same scroll bar by the other road. It wraps inside its own border instead,
@@ -1076,8 +1081,13 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        "— not chained", and in the number's weight a missing measurement reads like a
        measurement — heavier here than the same words are on the desktop table. */
     td[data-label="Context"] .v .dim { font-weight:400; }
-    td[data-label="Model"] .v { order:6; }
-    td[data-label="Effort"] .v { order:7; color:var(--dim); }
+    /* Same two rules again, and the same argument: a model and an effort are not tarmac's own
+       words. They are model.display_name and the effort out of a statusline payload, copied
+       through verbatim and capped nowhere — a 120-character model laid the document out at
+       814px. The three numbers below are ours (a percentage, a dollar sign, a duration), so
+       deliberately not on this list: a guard for a case that cannot arise is prose that lies. */
+    td[data-label="Model"] .v { order:6; min-width:0; overflow-wrap:anywhere; }
+    td[data-label="Effort"] .v { order:7; color:var(--dim); min-width:0; overflow-wrap:anywhere; }
     td[data-label="Cost"] .v { order:8; font-variant-numeric:tabular-nums; }
     td[data-label="Uptime"] .v { order:9; color:var(--dim); font-variant-numeric:tabular-nums; }
     td[data-label="Model"] .v::before, td[data-label="Effort"] .v::before,

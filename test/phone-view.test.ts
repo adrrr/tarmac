@@ -536,3 +536,29 @@ test('nothing in the strip keeps the desktop table\'s nowrap', () => {
     assert.match(decls, /min-width:\s*0/, `${label} may be narrower than its text`);
   }
 });
+
+// The same defect, half-closed: the two rules above went onto the two values whose prose said
+// "unbroken token", and the reason a session is WAITING is free text as well. Laid out at 320px
+// against a session waiting on `permission prompt: /Users/jane/alpha/packages/core/src/…/
+// session-repository.ts` — 103 characters, longest token 84 — the document came out 483px wide,
+// 163 past the viewport, and the state value alone was 455 of them. `.pill { white-space:
+// normal }` breaks a sentence at its spaces; a path has none, so wrapping inside the border
+// bought nothing and the strip went sideways again by the road the fix beside it had just
+// closed. With `min-width:0; overflow-wrap:anywhere` on the state value the same page lays out
+// at exactly 320.
+//
+// Model and effort are the same argument reaching one surface further: both arrive verbatim out
+// of a statusline payload — `model.display_name` is whatever Claude Code writes there — and a
+// 120-character model laid the document out at 814px until these two rules went on it. Context,
+// cost and uptime are NOT in this list and must not be: a percentage, a `$` and a duration are
+// tarmac's own arithmetic over numbers, and a rule guarding a case that cannot arise is prose
+// that lies.
+test('no value that arrives as free text can take the strip sideways', () => {
+  for (const label of ['State', 'Model', 'Effort']) {
+    const decls = /\{([^}]*)\}/.exec(
+      new RegExp(`td\\[data-label="${label}"\\] \\.v\\s*\\{[^}]*\\}`).exec(PHONE())![0],
+    )![1];
+    assert.match(decls, /overflow-wrap:\s*anywhere/, `${label} arrives uncapped and must break`);
+    assert.match(decls, /min-width:\s*0/, `${label} may be narrower than its longest token`);
+  }
+});
