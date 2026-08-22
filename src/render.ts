@@ -1314,7 +1314,11 @@ function pageScript(view: View): string {
       if (Date.now() - missAt > MISS_WINDOW_MS) misses = 0;
       misses += 1;
       missAt = Date.now();
-      failing = misses >= MISSES_BEFORE_BANNER;
+      // Raised here, never lowered here. Only an ANSWER says the server came back, so this
+      // assigns true or nothing at all — derived both ways, the window that starts a fresh count
+      // also cleared the alarm, and a reader who locked their phone for ten minutes while the
+      // server was down unlocked onto a green page over a fleet nobody could read.
+      if (misses >= MISSES_BEFORE_BANNER) failing = true;
       why.textContent = String((e && e.message) || e).slice(0, 200);
     }).then(function () {
       // Not ours to unlock: a request we were given up on must not clear a flag that a newer

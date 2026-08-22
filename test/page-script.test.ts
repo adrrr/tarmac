@@ -285,3 +285,36 @@ test('an answer to a request the page gave up on is never swapped in', async () 
   assert.equal(page.el('live').innerHTML, '<div>the fleet as it was</div>', 'the dead answer is not the fleet');
   assert.equal(page.el('offline').hidden, false, 'and it does not clear the banner it never earned');
 });
+
+// The other direction of the same rule, and the one that matters more: a MISS may never take
+// the banner down. Deriving `failing` from the count on every miss meant the window that starts
+// a fresh count also cleared the alarm — so a reader who locked their phone for ten minutes
+// while the server was down unlocked onto a green page, no banner, no dashed frame, over a
+// fleet nobody had been able to read the whole time. It came back five seconds later. Any tab
+// switch longer than the window did it, and a sleeping laptop reaches it with no
+// `visibilitychange` at all. Only an ANSWER says the server came back.
+test('a miss never takes the banner down, however long the page was away', async () => {
+  const page = mount((call) => (call === 1 ? ok('<div>fleet</div>') : Promise.reject(new Error('gone'))));
+  await page.advance(6000);
+  await page.advance(5000);
+  await page.advance(5000);
+  assert.equal(page.el('offline').hidden, false, 'two in a row raised it');
+  page.hide();
+  await page.advance(600_000);
+  await page.show();
+  assert.equal(page.el('offline').hidden, false, 'and coming back to the same dead server keeps it up');
+  assert.equal(page.body.classes.has('failing'), true);
+});
+
+// The shorter version of the same path, with nothing hidden: the window is three poll intervals,
+// so a tab switch just past it used to be enough.
+test('a miss one window later keeps the banner it did not raise', async () => {
+  const page = mount((call) => (call === 1 ? ok('<div>fleet</div>') : Promise.reject(new Error('gone'))));
+  await page.advance(6000);
+  await page.advance(5000);
+  await page.advance(5000);
+  page.hide();
+  await page.advance(20_000);
+  await page.show();
+  assert.equal(page.el('offline').hidden, false);
+});
