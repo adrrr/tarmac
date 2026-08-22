@@ -80,14 +80,53 @@ function checkPort(n: unknown, label: string, shown: unknown = n): number {
   return n;
 }
 
+/**
+ * The name out of a `Host` header, or out of a setting that has to match one: the port
+ * dropped, the brackets of an IPv6 literal dropped with it.
+ *
+ * Shared with the server's guard so that BOTH sides of that comparison are cut the same way.
+ * A normaliser written twice is a guard with two definitions of the same name.
+ */
+export const hostName = (host: string): string => host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+
+/**
+ * A host `serve` will answer to besides loopback. Refuses everything that is not a name a
+ * `Host` header can carry — a scheme, a path, a wildcard, an IPv6 literal, an empty string —
+ * because each of those is accepted at the command line, printed on startup, and then matches
+ * nothing at all: a setting the tool appears to have taken and silently never applies.
+ *
+ * The port is DROPPED rather than refused, and the drop is visible in what `serve` prints. A
+ * proxy presents `name:8443` on one setup and a bare `name` on 443, and a list that matched
+ * the port would refuse half the setups it was typed for. It costs nothing: the port in a
+ * `Host` header is chosen by whoever sends it, so it never barred anybody.
+ *
+ * @param label how the source spells this setting, so the refusal names the knob to turn
+ */
+export function parseTrustHost(text: string, label: string): string {
+  // Lowered because host names are case-insensitive and browsers send them lowered — a 403
+  // over a capital would be a setting typed, accepted, and never matched. It gives nothing
+  // away: the name still has to be the one the reader wrote down, character for character.
+  const name = hostName(text.trim()).toLowerCase();
+  if (!HOST_NAME.test(name)) {
+    throw new Error(
+      `${label} must be a host name like example.ts.net — no scheme, no path, no wildcard, got: ${format(text)}`,
+    );
+  }
+  return name;
+}
+
+/** Letters, digits, dots and dashes, starting and ending on one that is not a dash or a dot. */
+const HOST_NAME = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
+
 /** The settings a config file is allowed to carry. Every one of them is optional. */
 export interface FileConfig {
   staleAfterMs?: number;
   port?: number;
   snapshotsDir?: string;
+  trustHosts?: string[];
 }
 
-const KNOWN_KEYS = ['staleAfterMs', 'port', 'snapshotsDir'] as const;
+const KNOWN_KEYS = ['staleAfterMs', 'port', 'snapshotsDir', 'trustHosts'] as const;
 
 /**
  * `~/.claude/tarmac/config.json`, if there is one.
@@ -142,6 +181,20 @@ export function readConfigFile(file: string): FileConfig {
     }
     out.snapshotsDir = v;
   }
+  if ('trustHosts' in body) {
+    const v = body.trustHosts;
+    if (!Array.isArray(v)) {
+      throw new Error(`${where('trustHosts')} must be an array of host names, got: ${format(v)}`);
+    }
+    out.trustHosts = v.map((h) => {
+      if (typeof h !== 'string') {
+        throw new Error(`${where('trustHosts')} must be an array of host names, got: ${format(h)}`);
+      }
+      // The same parser the flag and the environment go through: a host is refused, and kept,
+      // in the same words wherever it was written down.
+      return parseTrustHost(h, where('trustHosts'));
+    });
+  }
   return out;
 }
 
@@ -167,11 +220,17 @@ export interface Config {
   staleAfterMs: Resolved<number>;
   port: Resolved<number>;
   snapshotsDir: Resolved<string>;
+  /** Empty is the default and the product: loopback, and nothing else. */
+  trustHosts: Resolved<string[]>;
 }
 
 export interface ResolveInput {
-  /** What the command line said. `null` means the flag was not passed at all. */
-  flags: { staleAfter: string | null; port: number | null; snapshotsDir: string | null };
+  /**
+   * What the command line said. `null` means the flag was not passed at all — except for
+   * the repeatable one, where an empty list says it and no value can be confused with it:
+   * `--trust-host` cannot be typed to mean "none".
+   */
+  flags: { staleAfter: string | null; port: number | null; snapshotsDir: string | null; trustHosts: string[] };
   env: Record<string, string | undefined>;
   file: FileConfig;
   /**
@@ -196,6 +255,11 @@ export function resolveConfig({ flags, env, file, defaultSnapshotsDir }: Resolve
   const staleAfterEnv = parseIfSet(env.TARMAC_STALE_AFTER, (v) => parseDuration(v, 'TARMAC_STALE_AFTER'));
   const portEnv = parseIfSet(env.TARMAC_PORT, (v) => parsePort(v, 'TARMAC_PORT'));
   const dirEnv = read(env.TARMAC_SNAPSHOTS_DIR);
+  // Comma-separated, which a host name cannot contain — so the list needs no quoting rule of
+  // its own, and an empty item between two commas is refused rather than skipped.
+  const trustEnv = parseIfSet(env.TARMAC_TRUST_HOST, (v) =>
+    v.split(',').map((h) => parseTrustHost(h, 'TARMAC_TRUST_HOST')),
+  );
 
   return {
     staleAfterMs:
@@ -222,6 +286,17 @@ export function resolveConfig({ flags, env, file, defaultSnapshotsDir }: Resolve
           : file.snapshotsDir !== undefined
             ? { value: file.snapshotsDir, source: 'file' }
             : { value: defaultSnapshotsDir, source: 'default' },
+    // The winning rung is the WHOLE list, like every other setting here. Adding the four
+    // together would leave nobody able to narrow, for one run, a list a config file widened —
+    // and this is the one setting where widening is the whole of the risk.
+    trustHosts:
+      flags.trustHosts.length > 0
+        ? { value: flags.trustHosts, source: 'flag' }
+        : trustEnv !== null
+          ? { value: trustEnv, source: 'env' }
+          : file.trustHosts !== undefined
+            ? { value: file.trustHosts, source: 'file' }
+            : { value: [], source: 'default' },
   };
 }
 

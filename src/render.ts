@@ -152,6 +152,12 @@ export function renderSettings(config: Config, configFile: string): string {
     ['port', String(config.port.value), config.port.source],
     ['snapshots', config.snapshotsDir.value, config.snapshotsDir.source],
   ];
+  // Only when there are any. An empty list is what every other run has, chosen by nobody —
+  // a `(default)` line saying "none" on every serve is noise, and this line has to read as
+  // what it is: the one setting that widened who may read this port.
+  if (config.trustHosts.value.length > 0) {
+    rows.push(['trusted', config.trustHosts.value.join(', '), config.trustHosts.source]);
+  }
   // Only the LABEL column is padded. Padding the values aligned the sources against the
   // snapshots path, which is absolute — pushing the one word that says where a value came
   // from past the edge of an 80-column terminal.

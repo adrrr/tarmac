@@ -111,7 +111,7 @@ try {
         `tarmac: ${p.wrapper} is ours but does not say where it writes — falling back to ${p.snapshots}`,
       );
     const config = resolveConfig({
-      flags: { staleAfter: args.staleAfter, port: args.port, snapshotsDir: args.snapshotsDir },
+      flags: { staleAfter: args.staleAfter, port: args.port, snapshotsDir: args.snapshotsDir, trustHosts: args.trustHost },
       env: process.env,
       file: readConfigFile(p.config),
       // The installed wrapper's own path, when there is one: the default is where the

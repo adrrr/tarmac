@@ -4,7 +4,7 @@
 // Unknown options and unknown commands are ERRORS. A typo silently ignored is how someone
 // ends up believing they pointed tarmac at a directory it never read.
 
-import { parsePort } from './config.ts';
+import { parsePort, parseTrustHost } from './config.ts';
 
 export type Command = 'list' | 'serve' | 'install' | 'uninstall' | 'help';
 
@@ -19,6 +19,12 @@ export interface Options {
   /** Verbatim, e.g. `90s` — one parser owns what a duration means, and it is not this one. */
   staleAfter: string | null;
   snapshotsDir: string | null;
+  /**
+   * The hosts `serve` answers to besides loopback, one `--trust-host` each. A list rather
+   * than a `null`, and the only option here that repeats: no value can be typed to mean
+   * "none", so empty says "not passed" without ambiguity.
+   */
+  trustHost: string[];
   home: string | null;
   claudeBin: string;
   json: boolean;
@@ -32,6 +38,7 @@ export interface Options {
 type OptionKey = Exclude<keyof Options, 'command'>;
 type FlagKey = 'json' | 'watch' | 'yes' | 'help';
 type StringKey = 'staleAfter' | 'snapshotsDir' | 'home' | 'claudeBin';
+type ListKey = 'trustHost';
 
 const COMMANDS = new Set<string>(['list', 'serve', 'install', 'uninstall', 'help']);
 
@@ -42,6 +49,7 @@ const OPTIONS: Record<string, OptionKey | undefined> = {
   '--port': 'port',
   '--stale-after': 'staleAfter',
   '--snapshots-dir': 'snapshotsDir',
+  '--trust-host': 'trustHost',
   '--home': 'home',
   '--claude-bin': 'claudeBin',
   '--json': 'json',
@@ -50,6 +58,8 @@ const OPTIONS: Record<string, OptionKey | undefined> = {
   '--help': 'help',
 };
 const FLAGS = new Set<OptionKey>(['json', 'watch', 'yes', 'help']);
+/** Options that ACCUMULATE rather than overwrite — passed twice, both values are kept. */
+const LISTS = new Set<OptionKey>(['trustHost']);
 
 /**
  * Which options each command really reads. The doc-comment above refuses a flag nobody
@@ -61,7 +71,7 @@ const FLAGS = new Set<OptionKey>(['json', 'watch', 'yes', 'help']);
  */
 const ACCEPTS: Record<Command, ReadonlySet<OptionKey>> = {
   list: new Set<OptionKey>(['staleAfter', 'snapshotsDir', 'home', 'claudeBin', 'json', 'watch', 'help']),
-  serve: new Set<OptionKey>(['port', 'staleAfter', 'snapshotsDir', 'home', 'claudeBin', 'help']),
+  serve: new Set<OptionKey>(['port', 'staleAfter', 'snapshotsDir', 'trustHost', 'home', 'claudeBin', 'help']),
   install: new Set<OptionKey>(['home', 'yes', 'help']),
   uninstall: new Set<OptionKey>(['home', 'yes', 'help']),
   help: new Set<OptionKey>(['help']),
@@ -86,7 +96,7 @@ export function accepts(command: Command, flag: string): boolean {
 }
 
 export function parseArgs(argv: string[]): Options {
-  const out: Options = { command: 'list', port: null, staleAfter: null, snapshotsDir: null, home: null, claudeBin: 'claude', json: false, watch: false, yes: false, help: false };
+  const out: Options = { command: 'list', port: null, staleAfter: null, snapshotsDir: null, trustHost: [], home: null, claudeBin: 'claude', json: false, watch: false, yes: false, help: false };
   let i = 0;
 
   if (argv[0] && !argv[0].startsWith('-')) {
@@ -114,6 +124,10 @@ export function parseArgs(argv: string[]): Options {
       // Same validator the environment and the config file go through, so a port is refused
       // in the same words wherever it was set.
       out.port = parsePort(value, '--port');
+    } else if (LISTS.has(key)) {
+      // Same rule, for the same reason — and the value is kept as the guard will compare it,
+      // so what `serve` prints on startup is what it will actually match against.
+      out[key as ListKey].push(parseTrustHost(value, flag));
     } else {
       out[key as StringKey] = value;
     }
