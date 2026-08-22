@@ -13,6 +13,7 @@
 
 import path from 'node:path';
 import { DEFAULT_STALE_AFTER_MS } from './config.ts';
+import { windowsApart } from './limits.ts';
 import { guardVersions } from './schema.ts';
 import { isWaiting } from './sessions.ts';
 import { SID_NAME } from './wrapper.ts';
@@ -258,15 +259,37 @@ export interface AccountReading {
    * every five seconds is the page contradicting itself in one line.
    */
   ageMs: number;
+  /**
+   * How many readings the fleet carried, this one included — the denominator `apart` is read
+   * against, and the answer to "how much of the fleet stands behind this number".
+   */
+  readings: number;
+  /**
+   * How many of the others describe a window this one does not. Zero is the ordinary fleet:
+   * one account, read at as many moments as there are sessions.
+   */
+  apart: number;
+  /**
+   * Which windows they are apart on, by payload key, as a set — one window two sessions
+   * disagree about is one fact. Unordered on purpose: the renderers walk their own vocabulary
+   * and keep the order they print the gauges in.
+   */
+  apartWindows: string[];
 }
 
 /**
  * The account's rate limits, as this fleet's sessions report them.
  *
  * They belong to the ACCOUNT and not to any one session, but they arrive per snapshot — so the
- * rows do not carry contradicting numbers, they carry the same number at different ages, and
- * the youngest is the one still true. Same rule as everything else in this module: the freshest
- * reading wins.
+ * rows normally do not carry contradicting numbers, they carry the same number at different
+ * ages, and the youngest is the one still true. Same rule as everything else in this module:
+ * the freshest reading wins.
+ *
+ * "Normally", because one thing can make that rule wrong, and it is why the count travels with
+ * the winner: readings that name different resets are not one allowance seen twice (see
+ * `windowsApart`). The freshest is still what gets drawn — there is nothing better to draw —
+ * but how many readings it speaks for, and how many describe some other window, go out with it
+ * so that no surface can present a picked winner as the fleet's one account.
  *
  * A snapshot dated AFTER the clock that read it is refused rather than believed, which is the
  * verdict `map.ts` reaches on the same value: an NTP correction or a mount whose time runs
@@ -278,14 +301,28 @@ export interface AccountReading {
  * account the day either one is touched.
  */
 export function accountLimits(rows: FleetRow[]): AccountReading | null {
-  let freshest: AccountReading | null = null;
-  for (const r of rows) {
-    if (r.rateLimits === null || r.snapshotAgeMs === null || r.snapshotAgeMs < 0) continue;
-    if (freshest === null || r.snapshotAgeMs < freshest.ageMs) {
-      freshest = { rateLimits: r.rateLimits, ageMs: r.snapshotAgeMs };
-    }
+  // Dated readings only, and the same two exclusions on both sides of the question: a reading
+  // nothing can date cannot win on freshness, so it does not get to disagree either — it would
+  // put a number in the denominator that no surface is allowed to show.
+  const readings = rows
+    .filter((r) => r.rateLimits !== null && r.snapshotAgeMs !== null && r.snapshotAgeMs >= 0)
+    .map((r) => ({ rateLimits: r.rateLimits as Record<string, any>, ageMs: r.snapshotAgeMs as number }));
+  if (readings.length === 0) return null;
+
+  let freshest = readings[0];
+  for (const r of readings) if (r.ageMs < freshest.ageMs) freshest = r;
+
+  const apartWindows = new Set<string>();
+  let apart = 0;
+  for (const r of readings) {
+    if (r === freshest) continue;
+    const windows = windowsApart(freshest.rateLimits, r.rateLimits);
+    if (windows.length === 0) continue;
+    apart += 1;
+    for (const w of windows) apartWindows.add(w);
   }
-  return freshest;
+
+  return { ...freshest, readings: readings.length, apart, apartWindows: [...apartWindows] };
 }
 
 // Blocked on a human first, then busy, then unknown (it might be busy), then idle.

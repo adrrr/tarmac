@@ -388,6 +388,71 @@ test('a row with no snapshot age cannot be the freshest reading', () => {
   assert.equal(limits!.rateLimits.five_hour.used_percentage, 88);
 });
 
+// Which reading was drawn is half the story; the other half is whether the ones behind it
+// were about the same windows. A percentage that moved between two frames is not a
+// disagreement — a reset epoch that differs is, and it is the shape both a different account
+// and a rolled-over window arrive in. Silently keeping the youngest was this function's whole
+// contract, and it is what the header would have gone on doing over two accounts.
+test('readings that name the same windows are one account read twice, and nothing is apart', () => {
+  const rl = (pct: number): Record<string, any> => ({
+    five_hour: { used_percentage: pct, resets_at: 1786212000 },
+    seven_day: { used_percentage: 42, resets_at: 1786500000 },
+  });
+  const limits = accountLimits([
+    row({ snapshotAgeMs: 90_000, rateLimits: rl(17) }),
+    row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: rl(61) }),
+  ]);
+  assert.equal(limits!.apart, 0);
+  assert.deepEqual(limits!.apartWindows, []);
+  assert.equal(limits!.readings, 2, 'and it says how many readings stood behind the one shown');
+});
+
+test('a reading that names another window is counted apart, and the window is named', () => {
+  const limits = accountLimits([
+    row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17, resets_at: 1786230000 } } }),
+    row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 61, resets_at: 1786212000 } } }),
+  ]);
+  assert.equal(limits!.rateLimits.five_hour.used_percentage, 61, 'the freshest is still the one shown');
+  assert.equal(limits!.apart, 1);
+  assert.deepEqual(limits!.apartWindows, ['five_hour']);
+  assert.equal(limits!.readings, 2);
+});
+
+// One window named differently by two sessions is one fact, not two — the count is of
+// READINGS, and the windows they are apart on are a set.
+test('two readings apart on one window are two readings, and the window is said once', () => {
+  const other = { five_hour: { used_percentage: 17, resets_at: 1786230000 } };
+  const limits = accountLimits([
+    row({ snapshotAgeMs: 90_000, rateLimits: other }),
+    row({ sessionId: 's2', snapshotAgeMs: 80_000, rateLimits: other }),
+    row({ sessionId: 's3', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 61, resets_at: 1786212000 } } }),
+  ]);
+  assert.equal(limits!.apart, 2);
+  assert.deepEqual(limits!.apartWindows, ['five_hour']);
+  assert.equal(limits!.readings, 3);
+});
+
+// The reading shown is one of the readings. A fleet of one session is not a fleet with
+// nothing behind its number, and "0 of 1" is not what the surfaces should have to say.
+test('a lone reading counts itself, and is apart from nothing', () => {
+  const limits = accountLimits([row({ snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 17, resets_at: 1786212000 } } })]);
+  assert.equal(limits!.readings, 1);
+  assert.equal(limits!.apart, 0);
+});
+
+// The same two exclusions the winner is picked under. A snapshot dated after the clock that
+// read it, or one with no age at all, cannot win on freshness — so it cannot lose on
+// disagreement either, or the page would count a reading it refuses to date.
+test('readings nothing can date are counted neither among the readings nor among the apart', () => {
+  const limits = accountLimits([
+    row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3, resets_at: 1786230000 } } }),
+    row({ sessionId: 's2', snapshotAgeMs: null, rateLimits: { five_hour: { used_percentage: 5, resets_at: 1786240000 } } }),
+    row({ sessionId: 's3', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91, resets_at: 1786212000 } } }),
+  ]);
+  assert.equal(limits!.readings, 1);
+  assert.equal(limits!.apart, 0);
+});
+
 // ── the fleet-wide freshness verdict ──────────────────────────────────────────────────
 //
 // #53: a statusline is only written when a terminal draws a frame, so on a fleet that mostly
