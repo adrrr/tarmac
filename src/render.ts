@@ -709,12 +709,20 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      invisible overlay that exists only where the pointer is coarse.
 
      Two rules rather than one: the inset is what is LEFT to reach 44 once the pill's own line
-     box, padding and border are counted, and the way out of a replay is set in smaller type
-     than the tabs. Sized as one number for all three, it came out at 41px. */
+     box and padding are counted, and the way out of a replay is set in smaller type than the
+     tabs. Sized as one number for all three, it came out at 41px. The border is NOT part of that
+     sum: the overlay's containing block is the control's padding box, so the border sits inside
+     the rectangle rather than adding to it. Counting it read 45.2px for a target Chrome laid out
+     at 43.2 — the whole feature short of the threshold it exists for, in both rules at once.
+
+     Vertical only. Every control here is already wider than 44px on its own text (the narrowest,
+     Map, is 50), so a horizontal inset buys nothing — and at .3rem against a .15rem gap between
+     the tabs it made their two overlays overlap by 7px, where a tap meant for Table landed on
+     Map because Map's pseudo paints later. */
   nav a, .replay button, .replaying-note button { position:relative; }
   @media (pointer: coarse) {
-    nav a::after, .replay button::after { content:''; position:absolute; inset:-.6rem -.3rem; }
-    .replaying-note button::after { content:''; position:absolute; inset:-.75rem -.3rem; }
+    nav a::after, .replay button::after { content:''; position:absolute; inset:-.7rem 0; }
+    .replaying-note button::after { content:''; position:absolute; inset:-.85rem 0; }
   }
   body[data-view="table"] .view-map { display:none; }
   body[data-view="map"] .view-table { display:none; }

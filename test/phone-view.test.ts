@@ -83,21 +83,25 @@ const px = (value: string): number =>
 const shorthandY = (value: string): number => px(value.trim().split(/\s+/)[0]);
 
 /**
- * The height of the box a finger has to hit, in CSS pixels at a 16px root: the control's own
- * line box, its padding and its border, plus whatever the coarse overlay adds above and below.
+ * The height of the box a finger has to hit, in CSS pixels at a 16px root.
  *
- * Computed rather than asserted as a literal, because the number that matters is the SUM. A
- * pill whose padding is trimmed by a tenth of a rem, or an overlay copied onto a control with a
- * smaller font, both leave every individual declaration looking reasonable and the target under
- * the threshold — which is how the way out of a replay came to be 41px.
+ * The overlay is absolutely positioned inside a `position: relative` control, so its containing
+ * block is the control's PADDING box — not its border box. With `top` and `bottom` both set and
+ * `height` auto, its height resolves to the padding box plus the two insets, and the border sits
+ * INSIDE that rectangle rather than adding to it. Counting the border made every control read
+ * 2px taller than the browser lays it out, which put all four of them over a threshold they were
+ * under: measured against Chrome, `nav a` was 43.2 while this said 45.2.
+ *
+ * Computed rather than asserted as a literal, because the number that matters is the SUM. A pill
+ * whose padding is trimmed by a tenth of a rem, or an overlay copied onto a control set in
+ * smaller type, both leave every individual declaration looking reasonable and the target short.
  */
 function tapHeight(selector: string): number {
   const fontSize = px(declaredEverywhere(selector, 'font-size').at(-1)!);
   const padding = shorthandY(declaredEverywhere(selector, 'padding').at(-1)!);
-  const border = px(declaredEverywhere(selector, 'border').at(-1)!.split(/\s+/)[0]);
   const coarse = atMedia('(pointer: coarse)');
   const inset = shorthandY(declaredEverywhere(`${selector}::after`, 'inset', coarse).at(-1)!);
-  return fontSize * LINE_HEIGHT + 2 * padding + 2 * border + 2 * Math.abs(inset);
+  return fontSize * LINE_HEIGHT + 2 * padding + 2 * Math.abs(inset);
 }
 
 const CONTROLS = ['nav a', '.replay button', '.replaying-note button'];
@@ -120,16 +124,26 @@ test('each of those controls anchors its own overlay, at every viewport', () => 
 // The whole point of doing this with an invisible overlay rather than more padding: a mouse
 // never meets any of it. A declaration in this block that is not on a `::after` is a
 // declaration that moves something a desktop reader can see.
+//
+// And each rule has to actually BUILD a target. Asserting only the selector left the feature
+// open to being deleted a declaration at a time and staying green — a pseudo-element with no
+// `content` is never generated at all, so dropping that one word takes every overlay on the
+// page with it and leaves the whole suite passing. `pointer-events: none` and a `display` are
+// the same deletion by other spellings: the box exists and nothing can be tapped on it.
 test('the coarse-pointer block adds targets and moves nothing that is drawn', () => {
   const coarse = atMedia('(pointer: coarse)');
   let rules = 0;
-  for (const [, raw] of coarse.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+  for (const [, raw, declarations] of coarse.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selectors = raw.slice(raw.lastIndexOf('}') + 1).split(',').map((s) => s.trim()).filter(Boolean);
     if (selectors.length === 0) continue;
     rules++;
     for (const selector of selectors) {
       assert.match(selector, /::after$/, `${selector} changes something the page draws`);
     }
+    assert.match(declarations, /(?:^|;)\s*content:\s*''/, `${selectors.join(', ')} generates no box at all`);
+    assert.match(declarations, /(?:^|;)\s*position:\s*absolute/, `${selectors.join(', ')} is not laid over its control`);
+    assert.doesNotMatch(declarations, /pointer-events\s*:\s*none|display\s*:\s*none|visibility\s*:\s*hidden/,
+      `${selectors.join(', ')} builds a target nothing can tap`);
   }
   assert.ok(rules > 0, 'the block this is about was found at all');
 });
