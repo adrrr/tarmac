@@ -12,6 +12,7 @@ import {
   DEFAULT_PORT,
   DEFAULT_STALE_AFTER_MS,
   formatDuration,
+  hostName,
   parseDuration,
   parsePort,
   parseTrustHost,
@@ -104,6 +105,18 @@ test('a trusted host that is not a host name is refused rather than left never t
   // An IPv6 literal is refused by name rather than mangled: `[fd00::1]` has to survive the
   // port-stripping to mean anything, and a proxy that presents one is not a case anybody has.
   assert.throws(() => parseTrustHost('[fd00::1]', '--trust-host'), /--trust-host/);
+  // The ends of the name are where a host name stops being one, and the manual promises it:
+  // `example.ts.net.`, with the trailing dot a browser keeps when you type one, is a DIFFERENT
+  // host — so it is refused here rather than accepted as a name nothing will ever match.
+  assert.throws(() => parseTrustHost('example.ts.net.', '--trust-host'), /--trust-host/);
+  assert.throws(() => parseTrustHost('.evil', '--trust-host'), /--trust-host/);
+});
+
+// The port that is dropped is a PORT: a colon with no digits behind it is part of the name and
+// stays on it. This normaliser is shared with the default guard, so a rule loosened here to cut
+// a bare colon would let `Host: localhost:` through as loopback on a serve that named nobody.
+test('a colon with no port behind it is part of the name, not a port to drop', () => {
+  assert.equal(hostName('localhost:'), 'localhost:');
 });
 
 test('no config file is not an error — it is the zero-config contract', () => {

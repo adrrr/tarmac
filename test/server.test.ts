@@ -691,6 +691,16 @@ test('a host named with a port, in capitals, or padded, is the name it will matc
   }, { trustedHosts: [`  ${TRUSTED.toUpperCase()}:8443  `] });
 });
 
+// The same emptiness on the REQUEST side, and it is reachable: node only requires a `Host` of
+// an HTTP/1.1 request, so one arrives carrying none. It has no name to match, so it is refused
+// by the guard's first line rather than waved past a list that is set — the case a serve with
+// hosts named would otherwise open, having been closed all along with none.
+test('a request that carries no Host is refused by a serve that trusts one', async () => {
+  await withServer(collectOk, async (base) => {
+    assert.equal(await rawGet(new URL(base).port, ''), 403);
+  }, { trustedHosts: [TRUSTED] });
+});
+
 // The guard owns the VALIDITY of its list too, not just its spelling. A name that normalises
 // to nothing would otherwise be a name every Host that normalises to nothing matches — `:8443`
 // and a lone bracket among them — and the guard would be wide open on a list that looks set.

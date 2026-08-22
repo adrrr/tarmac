@@ -178,7 +178,11 @@ export function rawGetText(
   timeoutMs = NET_DEADLINE_MS,
 ): Promise<RawAnswer> {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path, headers: { Host: host, ...extra }, timeout: timeoutMs }, (res) => {
+    // `setHost` off for the empty one, and only for it: node reads a `Host` of `''` as no Host
+    // given and writes its OWN — `127.0.0.1:port`, which is loopback, which is the one answer
+    // that would make an empty Host look served. A test that asks for nothing has to get it.
+    const options = { host: '127.0.0.1', port, path, headers: { Host: host, ...extra }, timeout: timeoutMs };
+    const req = http.request(host === '' ? { ...options, setHost: false } : options, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk: string) => {
