@@ -242,12 +242,13 @@ test('a miss an hour after a blip is a first miss, not a second', async () => {
   assert.equal(page.el('offline').hidden, true, 'one dropped request on waking is still one');
 });
 
-// The window had a floor and no ceiling. `a miss right after a stall is still consecutive with
-// it` pins it above one poll interval, and nothing pinned it below anything: widened from three
-// intervals to a hundred (500s) the whole suite stays green, because the only test of a gap uses
-// an hour, and an hour clears any window anyone would type. At 500s a phone locked for eight
-// minutes over a dead radio comes back to the banner raised on one dropped request — the exact
-// regression the rule above exists to remove, reached by a mutation the suite cannot see.
+// The window had a floor and no ceiling. `one missed poll is weather` pins it above one poll
+// interval — narrower than that and two real misses five seconds apart would never meet — and
+// nothing pinned it below anything: widened from three intervals to a hundred (500s) the whole
+// suite stays green, because the only test of a gap uses an hour, and an hour clears any window
+// anyone would type. At 500s a phone locked for eight minutes over a dead radio comes back to
+// the banner raised on one dropped request — the exact regression the rule above exists to
+// remove, reached by a mutation the suite could not see.
 //
 // Five poll intervals is the outside edge of "in a row in time": past that, a miss is weather
 // again and the count starts over.
@@ -270,9 +271,11 @@ test('a miss five poll intervals after a blip is a first miss, not a second', as
 });
 
 
-// A stall is still two misses' worth on its own, and the miss five seconds behind it is
-// consecutive with it — the window may not undo the grace `fail()` spends.
-test('a miss right after a stall is still consecutive with it', async () => {
+// The same guarantee reached the other way round, and the reason it does not rest on the count
+// at all: `fail()` raises the banner and leaves the miss counter alone, so whether the poll five
+// seconds behind it is the first miss or the second changes nothing. Only an ANSWER lowers the
+// flag, so the window's width can move without this ever moving with it.
+test('a miss right after a stall keeps the banner up whatever the count says', async () => {
   let stalled = false;
   const page = mount((call) => {
     if (call === 1) return ok('<div>fleet</div>');

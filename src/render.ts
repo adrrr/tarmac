@@ -1244,8 +1244,9 @@ function pageScript(view: View): string {
   // the reader locked their phone sat there for an hour, and the wake-up poll — the likeliest
   // miss of the session, fired while the radio is still reassociating — found it and raised the
   // banner over one dropped request. A miss further back than a few poll intervals starts the
-  // count again. The window is wide enough that the miss behind a stall stays consecutive with
-  // it: fail() stamps at the moment it gives up, and the next poll is one interval behind.
+  // count again. The window is bounded at both ends and neither end is arbitrary: below one
+  // poll interval two real misses in a row would never meet, and above five a locked phone
+  // comes back to a miss from minutes ago being called consecutive with this one.
   var misses = 0, missAt = 0, MISSES_BEFORE_BANNER = 2, MISS_WINDOW_MS = 3 * ${REFRESH_MS};
 
   function ago(ms) {
@@ -1259,12 +1260,11 @@ function pageScript(view: View): string {
 
   // Called for the one failure that is NOT a missed poll: a request the server accepted and
   // never answered. Twenty seconds of silence from a live connection is not a dropped packet,
-  // so it says so at once — and it spends the grace as it goes, or the next miss would find the
-  // count at one and take the banner back down while the server was still gone.
+  // so it says so at once, without the second miss the count is there to wait for. It does not
+  // touch the count: a miss cannot take this banner back down, because a miss never assigns the
+  // failing flag anything but true, and only an ANSWER puts it back to false.
   function fail(why_) {
     failing = true;
-    misses = MISSES_BEFORE_BANNER;
-    missAt = Date.now();
     // Retired, not merely dropped. Clearing the in-flight flag without moving the generation
     // left the abandoned request still ours, so the answer that arrived twenty seconds later was
     // swapped in and stamped "updated 0s ago" — the freshest label on the page over a fleet read
