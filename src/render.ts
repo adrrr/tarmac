@@ -951,9 +951,11 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   .asof.stale { color:var(--warn); font-weight:600; }
   @media (max-width: 30rem) { .map.flat { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); } .map { gap:.6rem; } }
 
-  /* Below this the table stops being a table: one card per session, every value keeping the
-     name of the column it came from. Nothing is dropped — a phone that hides the context
-     column would be a phone that renders "not measured" as nothing at all. */
+  /* Below this the table stops being a table. What replaces it is the strip described down at
+     the tr rule: two lines per session rather than one card of eight labelled ones. Nothing is
+     dropped — a phone that hid the context column would be a phone that rendered "not measured"
+     as nothing at all — and the labels that go are the ones whose value says what it is on its
+     own, with the exceptions named where they are given a word back. */
   @media (max-width: 46rem) {
     body { padding:1.25rem .75rem; }
     /* The summary's ISO stamp, spent. It is the widest thing on that line and the header two
@@ -1081,6 +1083,18 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     td[data-label="Model"] .v::before, td[data-label="Effort"] .v::before,
     td[data-label="Cost"] .v::before { content:'· '; color:var(--dim); font-weight:400; }
     td[data-label="Uptime"] .v::before { content:'· up '; color:var(--dim); font-weight:400; }
+    /* A dash is not a value that wears its own name, and a session with no snapshot behind it
+       has four of them at once: the percentage, the model, the effort and the cost all come out
+       of one statusline frame, so they go missing together. That is not the corner case — it is
+       every session until the status line has been chained and each one has drawn a frame, the
+       state the page prints a warning about. As a strip it read "ctx — not chained · — · — · —",
+       three anonymous dashes in a row, and the same happens one at a time for a session that
+       reports no cost. Those three get their column word back; the other two already have one.
+       The hook is the markup's own — a missing value is a .dim inside the cell's .v, and a
+       present one never puts one there. */
+    td[data-label="Model"] .v:has(.dim)::before { content:'· model '; }
+    td[data-label="Effort"] .v:has(.dim)::before { content:'· effort '; }
+    td[data-label="Cost"] .v:has(.dim)::before { content:'· cost '; }
     .bar { display:none; }
   }
 </style>

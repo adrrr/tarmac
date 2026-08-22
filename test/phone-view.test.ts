@@ -346,6 +346,32 @@ test('the values that shed their column name wear one of their own', () => {
   assert.match(PHONE(), /td\[data-label="Uptime"\] \.v::before\s*\{[^}]*content:\s*'· up '/);
 });
 
+// "Nothing is dropped" holds for a value that says what it is. A DASH does not, and a session
+// with no snapshot behind it has four of them at once — `model`, `effort`, `costUsd` and the
+// percentage all come from the same statusline frame, so they go missing together. That is not
+// a corner case: it is every session until `tarmac install` has run and each one has drawn a
+// TUI frame, which is the state the page prints a warning about. Read as a strip it came out
+// `ctx — not chained · — · — · — · up —`, three anonymous dashes in a row. The same happens one
+// at a time for a session that reports no cost.
+//
+// So a value that is only a dash gets its column word back. The hook is the markup's own: a
+// missing value is rendered as `<span class="dim">—</span>` inside the cell's `.v`, and a
+// present one never puts a `.dim` there.
+test('a value that is only a dash says which column it is a dash for', () => {
+  for (const [label, word] of [['Model', 'model'], ['Effort', 'effort'], ['Cost', 'cost']] as const) {
+    assert.match(
+      PHONE(),
+      new RegExp(`td\\[data-label="${label}"\\] \\.v:has\\(\\.dim\\)::before\\s*\\{[^}]*content:\\s*'· ${word} '`),
+      `a missing ${label} is an anonymous dash`,
+    );
+  }
+  // The hook, against the markup rather than against a belief about it.
+  const missing = renderPage(fleet([row({ model: null, effort: null, costUsd: null })]), 'table');
+  assert.match(missing, /data-label="Model"><span class="v"><span class="dim">—<\/span>/);
+  const present = renderPage(fleet(), 'table');
+  assert.match(present, /data-label="Model"><span class="v">Fable 5<\/span>/, 'a real model brings no .dim with it');
+});
+
 // The weight on the context value is for a PERCENTAGE. A session with no reading renders the
 // same cell as `— not chained`, and set in the number's weight a missing measurement reads
 // like a measurement — heavier on a phone than the same words are on the desktop table, which
