@@ -88,18 +88,27 @@ const WAIT_CALL = /\b(?:wait[A-Za-z]*|[A-Za-z]+Until|rawGet)\s*\(/g;
 const TRAILING_NUMBER = /,\s*\d[\d_]*\s*$/;
 
 /**
- * The one shape that opens such a bracket without calling anything: the helper's own signature,
- * split because it is too long for a line — `export function rawGet(` in `bounded.ts` and
- * `async function historyUntil(` in `server.test.ts` are both exactly that. What a signature
- * does wrong is a DEFAULT, and `HAND_TYPED_DEFAULT` reads it on whichever of its lines it lands.
- * The arrow form needs no exemption: `const waitFor = (` puts an `=` where the rule wants a
- * bracket, so it never matches in the first place.
+ * What opens such a bracket without calling anything: the helper's own signature, split because
+ * it is too long for a line — `export function rawGet(` in `bounded.ts` and `async function
+ * historyUntil(` in `server.test.ts` are both exactly that. What a signature does wrong is a
+ * DEFAULT, and `HAND_TYPED_DEFAULT` reads it on whichever of its lines it lands.
+ *
+ * Read as the KEYWORD before the name, so a method declares as plainly as a function does. Every
+ * word here is one no call can be preceded by — `async waitFor(` is a declaration, `await
+ * waitFor(` is a call, and no operator spells either. The arrow form needs no word at all:
+ * `const waitFor = (` puts an `=` where `WAIT_CALL` wants a bracket, so it never matches.
+ *
+ * One shape stays reported, and it is a decision rather than an oversight: a member written with
+ * no modifier — `waitFor(` alone on an interface line — is indistinguishable from a call at the
+ * start of a statement, which is the #93 defect with its `await` dropped. Reporting a rare
+ * declaration is the side to be wrong on; excusing it would hand the hole back.
  */
-const DECLARES = /\bfunction\s+$/;
+const DECLARES = /\b(?:function|async|static|abstract|declare|public|private|protected)\s+$/;
 
 /**
- * What `line` does to a wait helper, if anything: hands it a number of its own, or opens a call
- * it does not close.
+ * What `line` does to the wait helpers on it: hands one a number of its own, opens one it does
+ * not close, or both — every call is read, because stopping at the first offence let a closed
+ * call swallow a split one after it on the same line.
  *
  * The brackets are counted rather than matched, because both ways of writing it past a regex are
  * ordinary here: `waitFor(() => cold(r.dir) === 0, what, 60_000)` closes a bracket the deadline
@@ -113,11 +122,19 @@ const DECLARES = /\bfunction\s+$/;
  * documented exit (#93). So the split IS the offence now, which is the whole of the fix: a rule
  * that walked on to find the number would have to read a second grammar to say the same thing,
  * and would still leave the deadline off the line the reader is on. Line-based judgement is what
- * this module is; the wait goes on one line, as the `fetch` next to it already had to.
+ * this module is; the wait goes on one line, as the `fetch` next to it already had to. The price
+ * is paid by the bounded wait inside a `map` or a `Promise.all`, which now has one long line to
+ * be written on: a rule that reads one line cannot spare it without reading two.
  *
- * One limit left, unchanged: a bracket inside a string literal is counted like any other.
+ * The limit that survives, and it cuts both ways now: the counter reads a bracket inside a
+ * string, a regex or a comment like any other. An unpaired `)` there closes the call for it —
+ * `waitFor(pred, ':)',` over two lines is the #93 hole again, one character narrower — and an
+ * unpaired `(` opens one that never closes, reporting a line that is already a single line.
+ * Both are pinned in the verdicts. Telling them apart means lexing TypeScript, which is the
+ * second reader this module refuses; what is done instead is to write the limit down.
  */
-function waitOffence(line: string): 'deadline' | 'split' | undefined {
+function waitOffences(line: string): Set<'deadline' | 'split'> {
+  const offences = new Set<'deadline' | 'split'>();
   for (const call of line.matchAll(WAIT_CALL)) {
     if (DECLARES.test(line.slice(0, call.index))) continue;
     const open = call.index + call[0].length;
@@ -127,10 +144,10 @@ function waitOffence(line: string): 'deadline' | 'split' | undefined {
       if ('([{'.includes(line[i]!)) depth++;
       else if (')]}'.includes(line[i]!)) depth--;
     }
-    if (depth > 0) return 'split';
-    if (TRAILING_NUMBER.test(line.slice(open, i - 1))) return 'deadline';
+    if (depth > 0) offences.add('split');
+    else if (TRAILING_NUMBER.test(line.slice(open, i - 1))) offences.add('deadline');
   }
-  return undefined;
+  return offences;
 }
 
 /**
@@ -159,17 +176,17 @@ export function unboundedWaits(file: string, source: string): string[] {
     if (IMPORTS_RAW_CLIENT.test(line) && !TYPE_ONLY.test(line) && file !== ONE_HOME) {
       found.push(`${at} must use rawGet from ${ONE_HOME}, not a raw http client`);
     }
-    const wait = waitOffence(line);
+    const waits = waitOffences(line);
     // Before the exemption below, and the only rule that is: being excused from PICKING a
     // deadline is not being excused from writing it where it can be read.
-    if (wait === 'split') {
+    if (waits.has('split')) {
       found.push(`${at} must write the wait on one line, where its deadline can be read`);
     }
     if (file === DEADLINE_UNDER_TEST) return;
     if (HAND_TYPED_DEFAULT.test(line)) {
       found.push(`${at} must default to NET_DEADLINE_MS from ${ONE_HOME}, not to a number of its own`);
     }
-    if (wait === 'deadline') {
+    if (waits.has('deadline')) {
       found.push(`${at} must let the helper's deadline stand rather than hand it one`);
     }
   });

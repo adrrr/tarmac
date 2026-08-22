@@ -64,6 +64,11 @@ test('a wait split over several lines is reported where it opens, in every file'
   assert.match(found[0]!, /^watch\.test\.ts:1 /);
   assert.match(found[0]!, /on one line/);
   assert.equal(unboundedWaits('bounded-waits.test.ts', SPLIT_WAIT_CALL).length, 1, 'the deadline exemption is not one from writing it where it reads');
+  // Every call on the line, not the first one with something to say: a closed call handing a
+  // number used to end the reading, and in the file excused from numbers that left nothing.
+  const after = "await rawGet(p, h, '/x', {}, 500).then(() => waitFor(\n  () => done,\n));";
+  assert.equal(unboundedWaits('bounded-waits.test.ts', after).length, 1, 'a split call after an excused one is still read');
+  assert.equal(unboundedWaits('watch.test.ts', after).length, 2, 'and both offences are reported where neither is excused');
 });
 
 test('the one home may hold the raw client the others may not', () => {

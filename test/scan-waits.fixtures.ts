@@ -173,6 +173,30 @@ export const VERDICTS: Verdict[] = [
     caught: false,
     why: 'and the same shape for a poller, wherever a helper is too long to declare on one line',
   },
+  {
+    source: `class Harness {
+  async waitFor(
+    pred: () => boolean,
+  ): Promise<void> {}
+}`,
+    caught: false,
+    why: 'a method declares as much as a function does, and `async` before a name is never a call',
+  },
+  {
+    source: `interface Harness {
+  waitFor(
+    pred: () => boolean,
+  ): Promise<void>;
+}`,
+    caught: true,
+    why: 'but a member with NO modifier is reported: nothing on that line tells it from a call at statement start, and that is the side to be wrong on',
+  },
+  {
+    source: `await waitFor(pred, 'the sweep to finish :)',
+  60_000);`,
+    caught: false,
+    why: 'the limit that outlived the fix: an unpaired bracket in a string closes the call for a counter that cannot read strings, and hides the break again',
+  },
 ];
 
 /** The plainest raw-client import there is, for the test that `bounded.ts` may still hold it. */
