@@ -98,8 +98,13 @@ const shorthandY = (value: string): number => px(value.trim().split(/\s+/)[0]);
  * smaller type, both leave every individual declaration looking reasonable and the target short.
  */
 function tapHeight(selector: string): number {
-  const fontSize = px(declaredEverywhere(selector, 'font-size').at(-1)!);
-  const padding = shorthandY(declaredEverywhere(selector, 'padding').at(-1)!);
+  // Read outside every media block on purpose. `pointer: coarse` matches at any width — an iPad,
+  // or this phone in landscape, is coarse and past the 46rem breakpoint — so a padding or a
+  // font-size scoped to one viewport is not the geometry this sum is about. The check below
+  // refuses one to exist at all, rather than letting this quietly pick the wrong number.
+  const plain = cssOutsideMedia();
+  const fontSize = px(declaredEverywhere(selector, 'font-size', plain).at(-1)!);
+  const padding = shorthandY(declaredEverywhere(selector, 'padding', plain).at(-1)!);
   const coarse = atMedia('(pointer: coarse)');
   const inset = shorthandY(declaredEverywhere(`${selector}::after`, 'inset', coarse).at(-1)!);
   return fontSize * LINE_HEIGHT + 2 * padding + 2 * Math.abs(inset);
@@ -110,6 +115,27 @@ const CONTROLS = ['nav a', '.replay button', '.replaying-note button'];
 test('every control a thumb has to hit is at least 44px tall on a coarse pointer', () => {
   for (const selector of CONTROLS) {
     assert.ok(tapHeight(selector) >= 44, `${selector} is only ${tapHeight(selector)}px of tappable box`);
+  }
+});
+
+// The height above is the half a stylesheet can answer for. The other axis is the width of a
+// word, which no sheet knows: every control here clears 44 on its own text, measured in a
+// browser at 63, 48, 51 and 89, and there is no horizontal inset to make up a shortfall — one
+// was tried and made the two tabs' targets overlap by 7px.
+//
+// So the arithmetic has to be reading the geometry the coarse pointer actually meets. A padding
+// or a font-size on one of these controls inside a media block would be a second geometry the
+// sum above cannot see, and `pointer: coarse` matches on viewports that block does not cover.
+test('none of those controls is resized for one viewport behind the sum that pins it', () => {
+  const plain = cssOutsideMedia();
+  for (const selector of CONTROLS) {
+    for (const prop of ['font-size', 'padding']) {
+      assert.deepEqual(
+        declaredEverywhere(selector, prop),
+        declaredEverywhere(selector, prop, plain),
+        `${selector} declares ${prop} inside a media block`,
+      );
+    }
   }
 });
 
