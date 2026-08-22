@@ -542,8 +542,8 @@ never how much of the day it holds: a serve ten minutes old has seen ten minutes
 sentence under the handle is what states the range. Drag it and the dials render the fleet as
 the serve recorded it at that minute; the play button walks the readings, one every 100ms, and
 stops at the end rather than looping. The record is asked for when the page loads, and again
-when a tab that has been away comes back, never per position, so a drag is a lookup in samples the page
-already holds. A scrubber that asked per position would spawn a `claude agents --json` for
+when a tab that has been away comes back, never per position, so a drag is a lookup in samples
+the page already holds. A scrubber that asked per position would spawn a `claude agents --json` for
 every pixel of it. It is asked for on `/map` only: the table has no scrubber, and a full ring
 is megabytes.
 
@@ -600,9 +600,9 @@ and in what state, then `ctx 65% · Opus 5 · medium · $20.79 · up 15h`. That 
 one the map has always printed under a docked agent, and it is the whole reason the fold is
 affordable — the labels that go are the ones whose values wear their own name, a `$`, a `%`, a
 model, a state that is a word. Nothing is dropped and nothing moves: the columns appear in the
-order `renderRow` emits them, and every `data-label` a desktop reads is still on the cell. A
-session costs about 63px instead of 234, so a fleet of eight fits a screen and the waiting one
-at the top of the sort is visible without scrolling.
+order the table emits them, and every `data-label` a desktop reads is still on the cell. A
+session costs 63px of phone instead of 234, so eight of them fit one screen rather than two and
+a half.
 
 The summary line drops its ISO stamp, which is the widest thing on it and says what the header
 already says in words; the stamp stays in the markup, so a wide window and anything reading the

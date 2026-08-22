@@ -192,6 +192,17 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A long name no longer takes the phone's table sideways.** The manual promises that a name
+  with no length limit costs a width and never a scroll bar, and the narrow layout had never
+  held it: laid out at 320, 360, 390 and 430px against a fleet whose project name was 50
+  characters, the document came out 830px wide at every one of them — a table you scroll
+  sideways to read the left edge of, on the surface that exists to be read from a pocket. Both
+  values that can arrive as one unbroken token, a project (a directory's basename) and a
+  background session's name (a prompt), now break where they have to, and the waiting reason
+  inside the state pill wraps rather than holding one unbreakable line. Measured in a browser
+  rather than read off the stylesheet, which is how it was missed: nothing in the sheet looked
+  wrong.
+
 - **The suite's deadlines are the runner's, not a number typed next to each wait.** Every wait
   under `test/` on a socket or on a child's output carried one of its own: 4000ms written out
   at nineteen `fetch` calls, on `rawGet`'s socket deadline and on a poll budget, 20s on the
