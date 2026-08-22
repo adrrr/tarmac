@@ -28,10 +28,12 @@
 // decided by the real expression.
 //
 // What no longer has an assertion behind it, deliberately: a frame slow for a reason that is
-// not the filesystem — a `sleep`, a `node` boot, a shell construct that scales with nothing —
-// which is now `sweep-detached.test.ts`'s 400 ms frame against its 1 s stubbed sweep, two
-// orders of magnitude apart and on a handful of files. The frame times are still measured and
-// still printed here; nothing gates on them.
+// not the filesystem — a `sleep`, a `node` boot, a shell construct that scales with nothing.
+// `sweep-detached.test.ts` used to read as the cover for it, holding a 400 ms frame budget
+// against a 1 s stubbed sweep; that budget was this file's mistake again — a guess about how
+// fast a machine is, red at 466 ms on a loaded one — and it is gone (#94), which leaves that
+// frame pinned there too and no test in the suite timing a frame. The frame times are still
+// measured and still printed here; nothing gates on them.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
