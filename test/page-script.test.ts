@@ -32,21 +32,18 @@ test('the age keeps climbing between answers', async () => {
   assert.match(page.el('age').textContent, /updated 3s ago/);
 });
 
-test('a refused connection raises the banner and names the reason', async () => {
-  const page = mount(() => Promise.reject(new Error('Failed to fetch')));
-  await page.advance(6000);
-  assert.equal(page.el('offline').hidden, false);
-  assert.equal(page.body.classes.has('failing'), true);
-  assert.match(page.el('why').textContent, /Failed to fetch/);
-});
-
 // The defect found by pointing the real page at a server answering 200 with nothing: the
 // blank fleet was swapped in and stamped "updated 0s ago", green dot and all.
+//
+// Three polls, not two: an empty answer is a miss like any other, and the banner is owed a
+// second consecutive one before it speaks. The rule under test is what the page REFUSES —
+// the blank body is never swapped in, on the first miss as on the second.
 test('an empty answer is a failed refresh, not an empty fleet', async () => {
   const page = mount((call) => (call === 1 ? ok('<div>two busy sessions</div>') : ok('')));
   await page.advance(6000);
   await page.advance(5000);
   assert.equal(page.el('live').innerHTML, '<div>two busy sessions</div>', 'the fleet is still there');
+  await page.advance(5000);
   assert.equal(page.el('offline').hidden, false);
   assert.match(page.el('why').textContent, /empty page/i);
 });
@@ -54,6 +51,7 @@ test('an empty answer is a failed refresh, not an empty fleet', async () => {
 test('a 500 is a failure, and its body becomes the reason', async () => {
   const page = mount(() => Promise.resolve({ ok: false, body: 'tarmac could not read the fleet:\nclaude: not found' }));
   await page.advance(6000);
+  await page.advance(5000);
   assert.equal(page.el('offline').hidden, false);
   assert.match(page.el('why').textContent, /claude: not found/);
 });
@@ -117,6 +115,8 @@ test('an answer that does not identify itself as tarmac is never swapped in', as
   await page.advance(6000);
   await page.advance(5000);
   assert.equal(page.el('live').innerHTML, '<div>the real fleet</div>', 'the last good fleet stays');
+  // The refusal is immediate; only the BANNER waits for a second consecutive miss.
+  await page.advance(5000);
   assert.equal(page.el('offline').hidden, false, 'and the reader is told the refresh failed');
   assert.match(page.el('why').textContent, /tarmac/i);
 });
@@ -150,4 +150,65 @@ test('an answer that is never swapped in does not get to move the gauges', async
     '<div class="gauge">5h 21%</div>',
     'the header still shows what tarmac last said',
   );
+});
+
+// ── one miss is weather ───────────────────────────────────────────────────────────────
+//
+// On a phone the page is read on a radio: a tunnel, a lift, a handover between cells drops one
+// request and the next one lands. Raising the banner on the first of those framed the table
+// off and shouted an outage at a reader whose fleet was fine — five seconds later it was green
+// again. The banner is for a server that has gone, so it waits for the second consecutive miss
+// and the freshness line carries the truth in the meantime.
+test('one missed poll is weather: the banner waits for the second', async () => {
+  const page = mount(() => Promise.reject(new Error('Failed to fetch')));
+  await page.advance(6000);
+  assert.equal(page.el('offline').hidden, true, 'nothing is claimed on one miss');
+  assert.equal(page.body.classes.has('failing'), false, 'and the table is not framed off');
+  await page.advance(5000);
+  assert.equal(page.el('offline').hidden, false, 'the second miss is an outage');
+  assert.match(page.el('why').textContent, /Failed to fetch/);
+});
+
+// What makes the wait honest rather than a lie of omission: nothing on the page claims to be
+// fresher than it is while the banner holds. The age is counted by the shell's own clock and
+// keeps climbing whether or not an answer ever comes.
+test('the age tells the truth while the banner is still waiting', async () => {
+  const page = mount((call) => (call === 1 ? ok('<div>fleet</div>') : Promise.reject(new Error('gone'))));
+  await page.advance(6000);
+  await page.advance(5000);
+  assert.equal(page.el('offline').hidden, true, 'one miss so far');
+  assert.match(page.el('age').textContent, /updated 6s ago/, 'counted from the last good answer, not from the miss');
+});
+
+// Consecutive, not cumulative. Two misses an hour apart on a good connection are two blips,
+// and a counter that never resets turns the second one into a permanent banner.
+test('an answer between two misses puts the count back to zero', async () => {
+  const page = mount((call) => (call === 2 ? ok('<div>fleet</div>') : Promise.reject(new Error('blip'))));
+  await page.advance(6000);
+  await page.advance(5000);
+  await page.advance(5000);
+  assert.equal(page.el('offline').hidden, true, 'a miss, an answer and a miss is not an outage');
+});
+
+// The asymmetry, on purpose: a request the server took and never answered is not a dropped
+// packet, it is twenty seconds of silence from a process that accepted the connection. That
+// one is called at once — and once called, a later miss must not take the alarm back DOWN.
+// Counting it as a first miss did exactly that: the banner came up at the stall and dropped
+// off five seconds later, while the server was still gone.
+test('a poll that fails after a stall does not take the banner back down', async () => {
+  let stalled = false;
+  const page = mount((call) => {
+    if (call === 1) return ok('<div>fleet</div>');
+    if (!stalled) {
+      stalled = true;
+      return new Promise(() => {});
+    }
+    return Promise.reject(new Error('Failed to fetch'));
+  });
+  await page.advance(6000);
+  await page.advance(60_000);
+  assert.equal(page.el('offline').hidden, false, 'the stall raised it');
+  await page.advance(5000);
+  assert.equal(page.el('offline').hidden, false, 'and a miss after it does not lower it');
+  assert.equal(page.body.classes.has('failing'), true);
 });

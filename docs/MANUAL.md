@@ -261,22 +261,31 @@ when the last good reading arrived, and whether the last attempt to refresh fail
 
 The page asks the server for `/live` every 5 seconds and swaps it in; the header carries an
 age that keeps climbing whether or not the refresh works, so numbers that have stopped moving
-cannot pass for live ones. When a poll fails, a banner names the reason and the table is
-framed off. The data stays, because it is still true of an earlier moment. `list --watch`
-does the same thing in the terminal, and prints `! refresh failing — <reason>` above a table
-it refuses to throw away.
+cannot pass for live ones. When two polls in a row fail, a banner names the reason and the
+table is framed off. The data stays, because it is still true of an earlier moment. `list
+--watch` does the same thing in the terminal, and prints `! refresh failing — <reason>` above
+a table it refuses to throw away.
+
+Two in a row, not one. The page is read on a phone as often as on a laptop, and a radio drops
+a request for a tunnel, a lift, a handover between cells — the next one lands five seconds
+later. Framing the table off for that shouted an outage at a reader whose fleet was fine. The
+banner is for a server that has gone, so a single miss buys nothing but the age upstairs
+climbing five seconds further, which is the truth either way.
 
 Three failures are handled by name, because each of them can otherwise look like health:
 
-- **A refusal.** `serve` is gone, and the banner names it on the next poll.
+- **A refusal.** `serve` is gone, and the banner names it once a second poll agrees.
 - **An empty answer.** A 200 carrying nothing is not a fleet of nothing. Swapping it in would
   blank the table and stamp it "updated 0s ago" with the dot still green, which is this tool's
   own failure mode wearing its own colours. It counts as a failed refresh.
 - **No answer at all.** `fetch` has no timeout in any browser, so a server that accepts the
   connection and goes quiet would leave the request pending forever. After 20 seconds the page
-  gives up on it, says so, and asks again. That is above the collector's own 15s timeout, so a
-  slow-but-healthy fleet always fails server-side first with a real reason. An answer to a
-  request it already gave up on is discarded rather than allowed to overwrite a newer one.
+  gives up on it, says so at once rather than waiting for a second miss — twenty seconds of
+  silence from a live connection is not a dropped packet — and asks again. A miss after that
+  keeps the banner up rather than taking it back down. That is above the collector's own 15s
+  timeout, so a slow-but-healthy fleet always fails server-side first with a real reason. An
+  answer to a request it already gave up on is discarded rather than allowed to overwrite a
+  newer one.
 
 On a terminal `--watch` redraws once a second while it waits, so the age is never more than a
 second out of date and a hung read shows a counter that has visibly stopped. Piped, it writes
@@ -524,11 +533,13 @@ The one surface it never reaches is the retained record. See
 
 ### Replaying the day
 
-Under the map is a scrubber, and it is the one place on this page where a node is not the
-fleet as of the reading in the header. Drag it and the dials render the fleet as the serve
-recorded it at that minute; the play button walks the readings, one every 100ms, and stops at
-the end rather than looping. The record is asked for when the page loads, and again when a tab
-that has been away comes back, never per position, so a drag is a lookup in samples the page
+Under the map is a scrubber, labelled `REPLAY`, and it is the one place on this page where a
+node is not the fleet as of the reading in the header. The label says what the pair is and
+never how much of the day it holds: a serve ten minutes old has seen ten minutes, and the
+sentence under the handle is what states the range. Drag it and the dials render the fleet as
+the serve recorded it at that minute; the play button walks the readings, one every 100ms, and
+stops at the end rather than looping. The record is asked for when the page loads, and again
+when a tab that has been away comes back, never per position, so a drag is a lookup in samples the page
 already holds. A scrubber that asked per position would spawn a `claude agents --json` for
 every pixel of it. It is asked for on `/map` only: the table has no scrubber, and a full ring
 is megabytes.
@@ -575,6 +586,20 @@ nothing can drive. Under `prefers-reduced-motion: reduce` play still plays, one 
 second instead of ten.
 
 What the *serve* remembers, and hands the scrubber, is below.
+
+### On a phone
+
+The dashboard is read on a phone as often as on a laptop, and two things change under about
+46rem. The summary line drops its ISO stamp, which is the widest thing on it and says what the
+header already says in words; the stamp stays in the markup, so a wide window and anything
+reading the HTML still get the exact second. And while a replay is running, the scrubber pins
+to the bottom of the viewport, so the hand on the handle and the dials the handle moves are on
+screen together; the sentence saying what the record covers steps aside for the duration and
+comes back when the drag stops.
+
+Independently of width, wherever the pointer is coarse, every control on the page carries an
+invisible target of at least 44px: the two tabs, `Play`, and the way back out of a replay. The
+pills themselves are not redrawn, so a desktop reader's page is byte-identical.
 
 ## What the serve remembers
 

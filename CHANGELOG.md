@@ -78,6 +78,32 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The offline banner waits for a second consecutive missed poll, and every control carries a
+  44px target on a touchscreen.** From a UX audit of the dashboard read on a phone. The banner
+  frames the table off and says the fleet cannot be read, which is the wrong thing to shout
+  when a radio drops one request for a tunnel or a handover between cells and the next lands
+  five seconds later; it now needs two misses in a row, and the age in the header keeps
+  counting meanwhile, so nothing on the page claims to be fresher than it is. A stalled request
+  is the exception and still speaks at once: twenty seconds of silence from a connection the
+  server accepted is not a dropped packet, and a miss after that keeps the banner up rather
+  than taking it back down. The rule is the page's at every width, not the phone's. Alongside
+  it, the tabs, `Play` and the way back out of a replay grow an invisible tappable box of at
+  least 44px wherever `pointer: coarse` matches, computed per control rather than copied — one
+  inset for all three left the way out of a replay at 41px. Nothing that is drawn moves, so a
+  desktop page is byte-identical.
+
+- **The scrubber has a name, and on a phone it stays under the thumb.** A button reading `Play`
+  and a slider at the foot of a map, with nothing saying what they move, is a control nobody
+  touches; it is now labelled `REPLAY`. The label says what the pair is and never how much of
+  the day it holds — a serve ten minutes old has seen ten minutes, and the sentence under the
+  handle is what states the range. Under 46rem, while a replay is running, the scrubber pins to
+  the bottom of the viewport: the map is several screens tall on a phone, so dragging the
+  handle at its foot meant scrubbing blind and scrolling up to see what changed. The sentence
+  under it steps aside for the drag and comes back at rest. The summary line drops its ISO
+  timestamp at the same width, which the header already says in words as `updated 3s ago`; the
+  stamp stays in the markup, so a wide window and anything reading the HTML keep the exact
+  second.
+
 - **The wait guard now reads the two shapes it was written to catch and did not.** `#84` moved
   twenty-two hand-typed deadlines onto one derived constant, but the guard it left behind polices
   `fetch` lines and a shadowed `NET_DEADLINE_MS` only, so the very forms two of those defects

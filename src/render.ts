@@ -463,7 +463,7 @@ export function renderLive(fleet: Fleet): string {
 <div class="view view-map" role="group" aria-label="fleet map" aria-describedby="fleet-notes">${renderMap(fleet)}</div>`;
 
   return `<div id="limits-src" hidden>${renderLimits(fleet)}</div>
-<div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)} · ${esc(new Date(health.generatedAt).toISOString())}</div>
+<div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)}<span class="stamp"> · ${esc(new Date(health.generatedAt).toISOString())}</span></div>
 ${warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}
 ${body}
 <div id="fleet-notes">${notes.map((n) => `<div class="note">${esc(n)}</div>`).join('')}</div>`;
@@ -702,6 +702,20 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   nav a { color:var(--dim); text-decoration:none; font-size:.8rem; font-weight:600; text-transform:uppercase;
           letter-spacing:.06em; padding:.15rem .55rem; border-radius:99px; border:1px solid transparent; }
   nav a[aria-current="page"] { color:var(--fg); border-color:var(--line); }
+  /* A finger is not a cursor. Every control on this page is a pill sized for a pointer that
+     lands on a single pixel — about 26px of box against the 44 a thumb is asked to hit — and
+     the fix cannot be more padding: that would redraw the page for everyone to solve a problem
+     only a touchscreen has. So the TAPPABLE box grows and the drawn one does not, through an
+     invisible overlay that exists only where the pointer is coarse.
+
+     Two rules rather than one: the inset is what is LEFT to reach 44 once the pill's own line
+     box, padding and border are counted, and the way out of a replay is set in smaller type
+     than the tabs. Sized as one number for all three, it came out at 41px. */
+  nav a, .replay button, .replaying-note button { position:relative; }
+  @media (pointer: coarse) {
+    nav a::after, .replay button::after { content:''; position:absolute; inset:-.6rem -.3rem; }
+    .replaying-note button::after { content:''; position:absolute; inset:-.75rem -.3rem; }
+  }
   body[data-view="table"] .view-map { display:none; }
   body[data-view="map"] .view-table { display:none; }
 
@@ -752,6 +766,12 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      beats it: unguarded, this page came up announcing a replay nobody had asked for. */
   .replay:not([hidden]) { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-top:1rem;
             padding-top:.7rem; border-top:1px solid var(--line); }
+  /* The pair gets a name. A button reading "Play" and a slider under a map, with nothing
+     saying what they move, is a control nobody dares touch — which on a phone is most of what
+     is on screen. Its own line above them, because dropped into the row it would read as a
+     label for the button rather than for the pair, and take width from the slider to do it. */
+  .replay .replay-name { flex-basis:100%; font-size:.7rem; font-weight:700; letter-spacing:.07em;
+            text-transform:uppercase; color:var(--dim); }
   .replay button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent;
             border:1px solid var(--line); border-radius:99px; padding:.15rem .8rem; cursor:pointer; }
   .replay input[type="range"] { flex:1; min-width:10rem; accent-color:var(--dim); }
@@ -928,6 +948,27 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      column would be a phone that renders "not measured" as nothing at all. */
   @media (max-width: 46rem) {
     body { padding:1.25rem .75rem; }
+    /* The summary's ISO stamp, spent. It is the widest thing on that line and the header two
+       lines above already says the same fact in the words a reader uses — "updated 3s ago",
+       counted by the shell whether or not a poll ever lands. Hidden rather than dropped: the
+       fragment still carries the exact second for anyone who goes looking for it. */
+    .meta .stamp { display:none; }
+    /* The handle, pinned under the thumb. The scrubber sits at the FOOT of the map and a map on
+       a phone is several screens tall: dragging it means the dials it moves are above the fold,
+       so the reader scrubs blind, lets go, scrolls up to see what changed and scrolls back. Held
+       at the bottom of the viewport, the hand and the thing it is changing are on screen at once.
+
+       Opaque and above what passes under it, or the dials scroll through the slider dragging
+       them. The negative margin gives it the page's own gutters back, so the bar reaches the
+       edges of the phone and the rule above it reads as an edge rather than a floating line.
+
+       The sentence saying what the record covers yields while the drag is on: it is prose, and
+       prose in a bar pinned over the map is half the map. The banner at the top of the page is
+       what carries the minute under the hand, and it is sticky too. */
+    body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3;
+         background:var(--bg); border-top:1px solid var(--line);
+         padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
+    body.replaying .replay .covers { display:none; }
     .wrap { overflow-x:visible; }
     table, tbody, tr, td { display:block; }
     table { min-width:0; }
@@ -1017,6 +1058,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
 <!-- A dead handle is worse than no handle: this is revealed once the record is in hand, and
      what it says it covers is whatever the record answered with. -->
 <div class="replay" id="replay" hidden>
+  <!-- "Replay", and nothing about how much of the day it holds: the range is the record's to
+       state, in the sentence below, which is built around never calling ten minutes a day. -->
+  <span class="replay-name">Replay</span>
   <button type="button" id="play">Play</button>
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
@@ -1084,6 +1128,12 @@ function pageScript(view: View): string {
   var off = document.getElementById('offline'), why = document.getElementById('why');
   var limits = document.getElementById('limits');
   var last = Date.now(), failing = false, inFlight = false, since = 0, gen = 0;
+  // How many polls in a row have come back with nothing usable. On a phone the page is read on
+  // a radio, and one dropped request is a tunnel rather than an outage — the banner frames the
+  // table off and says the fleet cannot be read, which is the wrong thing to shout five seconds
+  // before the next answer lands. It waits for the second consecutive miss; the age upstairs
+  // keeps counting meanwhile, so nothing on the page is claiming to be fresher than it is.
+  var misses = 0, MISSES_BEFORE_BANNER = 2;
 
   function ago(ms) {
     // A clock that steps backwards (an NTP correction, a laptop waking) must not produce
@@ -1094,8 +1144,13 @@ function pageScript(view: View): string {
     return m < 60 ? m + 'm' : Math.round(m / 60) + 'h';
   }
 
+  // Called for the one failure that is NOT a missed poll: a request the server accepted and
+  // never answered. Twenty seconds of silence from a live connection is not a dropped packet,
+  // so it says so at once — and it spends the grace as it goes, or the next miss would find the
+  // count at one and take the banner back down while the server was still gone.
   function fail(why_) {
     failing = true;
+    misses = MISSES_BEFORE_BANNER;
     why.textContent = why_;
     off.hidden = false;
     document.body.classList.toggle('failing', true);
@@ -1155,10 +1210,14 @@ function pageScript(view: View): string {
         if (src) limits.innerHTML = src.innerHTML;
         last = Date.now();
         failing = false;
+        // Consecutive, not cumulative: two blips an hour apart are two blips, and a count that
+        // never went back to zero would turn the second one into a permanent banner.
+        misses = 0;
       });
     }).catch(function (e) {
       if (!mineStill()) return;
-      failing = true;
+      misses += 1;
+      failing = misses >= MISSES_BEFORE_BANNER;
       why.textContent = String((e && e.message) || e).slice(0, 200);
     }).then(function () {
       // Not ours to unlock: a request we were given up on must not clear a flag that a newer
