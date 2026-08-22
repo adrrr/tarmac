@@ -13,6 +13,7 @@
 
 import path from 'node:path';
 import { DEFAULT_STALE_AFTER_MS } from './config.ts';
+import { measured, windowsApart } from './limits.ts';
 import { guardVersions } from './schema.ts';
 import { isWaiting } from './sessions.ts';
 import { SID_NAME } from './wrapper.ts';
@@ -258,15 +259,42 @@ export interface AccountReading {
    * every five seconds is the page contradicting itself in one line.
    */
   ageMs: number;
+  /**
+   * How many readings MEASURED the account, this one included — the denominator `apart` is read
+   * against, and the answer to "how much of the fleet stands behind this number".
+   *
+   * Measured, not merely present: `rate_limits: {}`, `[]` and a pair of nulls are readings that
+   * said nothing, and counting them turns "1 of 2 readings disagree", which is a coin flip, into
+   * a reassuring "1 of 4". Zero when nothing on the fleet measured anything — the reading is
+   * still returned, so both surfaces can say "no reading" of a fleet that has one.
+   */
+  readings: number;
+  /**
+   * How many of the others describe a window this one does not. Zero is the ordinary fleet:
+   * one account, read at as many moments as there are sessions.
+   */
+  apart: number;
+  /**
+   * Which windows they are apart on, by payload key, as a set — one window two sessions
+   * disagree about is one fact. Unordered on purpose: the renderers walk their own vocabulary
+   * and keep the order they print the gauges in.
+   */
+  apartWindows: string[];
 }
 
 /**
  * The account's rate limits, as this fleet's sessions report them.
  *
  * They belong to the ACCOUNT and not to any one session, but they arrive per snapshot — so the
- * rows do not carry contradicting numbers, they carry the same number at different ages, and
- * the youngest is the one still true. Same rule as everything else in this module: the freshest
- * reading wins.
+ * rows normally do not carry contradicting numbers, they carry the same number at different
+ * ages, and the youngest is the one still true. Same rule as everything else in this module:
+ * the freshest reading wins.
+ *
+ * "Normally", because one thing can make that rule wrong, and it is why the count travels with
+ * the winner: readings that name different resets are not one allowance seen twice (see
+ * `windowsApart`). The freshest is still what gets drawn — there is nothing better to draw —
+ * but how many readings it speaks for, and how many describe some other window, go out with it
+ * so that no surface can present a picked winner as the fleet's one account.
  *
  * A snapshot dated AFTER the clock that read it is refused rather than believed, which is the
  * verdict `map.ts` reaches on the same value: an NTP correction or a mount whose time runs
@@ -277,16 +305,69 @@ export interface AccountReading {
  * header draws it, and two copies of "which session's word counts" is two answers about one
  * account the day either one is touched.
  */
-export function accountLimits(rows: FleetRow[]): AccountReading | null {
-  let freshest: AccountReading | null = null;
-  for (const r of rows) {
-    if (r.rateLimits === null || r.snapshotAgeMs === null || r.snapshotAgeMs < 0) continue;
-    if (freshest === null || r.snapshotAgeMs < freshest.ageMs) {
-      freshest = { rateLimits: r.rateLimits, ageMs: r.snapshotAgeMs };
-    }
+export function accountLimits(rows: FleetRow[], now: number): AccountReading | null {
+  // Dated readings only, and the same two exclusions on both sides of the question: a reading
+  // nothing can date cannot win on freshness, so it does not get to disagree either — it would
+  // put a number in the denominator that no surface is allowed to show.
+  const dated = rows
+    .filter((r) => r.rateLimits !== null && r.snapshotAgeMs !== null && r.snapshotAgeMs >= 0)
+    .map((r) => ({
+      rateLimits: r.rateLimits as Record<string, any>,
+      ageMs: r.snapshotAgeMs as number,
+      sessionId: r.sessionId,
+      measured: measured(r.rateLimits, now),
+    }));
+  if (dated.length === 0) return null;
+
+  // Freshest AND measured, in that order. A session that has just started is guaranteed to be
+  // the youngest snapshot on the machine and is the likeliest to carry a window whose number
+  // has not been taken yet — freshest alone let it blank an account three other sessions were
+  // reporting. When nothing measured anything, the freshest still comes back, so the surfaces
+  // say "no reading" about a reading that exists rather than about no reading at all.
+  const readings = dated.filter((r) => r.measured);
+  const freshest = youngest(readings.length > 0 ? readings : dated);
+
+  // Every reading that measured something, the shown one included: it is compared with itself,
+  // which is the one comparison that can never come back apart. Skipping it explicitly was a
+  // line no test could ever have killed.
+  const apartWindows = new Set<string>();
+  let apart = 0;
+  for (const r of readings) {
+    const windows = windowsApart(freshest.rateLimits, r.rateLimits, now);
+    if (windows.length === 0) continue;
+    apart += 1;
+    for (const w of windows) apartWindows.add(w);
   }
-  return freshest;
+
+  return {
+    rateLimits: freshest.rateLimits,
+    ageMs: freshest.ageMs,
+    readings: readings.length,
+    apart,
+    apartWindows: [...apartWindows],
+  };
 }
+
+/**
+ * The youngest reading, with a tie settled by session id rather than by the order the sources
+ * printed — the rule `preferred()` already applies to two snapshot files of the same age, for
+ * the same reason. `rows` is sorted on a key that is not total, so equal-aged readings keep
+ * whatever order `claude agents --json` emitted them in: without this, the number drawn AND the
+ * count published beside it move between two machines reading the same fleet. Which one it
+ * picks matters far less than that it picks the same one every time.
+ *
+ * An id nothing reported sorts last: it is the one value that cannot tell two readings apart.
+ */
+function youngest<T extends { ageMs: number; sessionId: string | null }>(readings: T[]): T {
+  let best = readings[0];
+  for (const r of readings) {
+    if (r.ageMs < best.ageMs) best = r;
+    else if (r.ageMs === best.ageMs && sortKey(r.sessionId) < sortKey(best.sessionId)) best = r;
+  }
+  return best;
+}
+
+const sortKey = (sessionId: string | null): string => (sessionId === null ? '￿' : sessionId);
 
 // Blocked on a human first, then busy, then unknown (it might be busy), then idle.
 //

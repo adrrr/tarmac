@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readLimits } from '../src/limits.ts';
+import { readLimits, windowsApart } from '../src/limits.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string): any => JSON.parse(fs.readFileSync(path.join(here, '..', 'fixtures', n), 'utf8'));
@@ -139,5 +139,75 @@ test('rate limits that are not an object of windows are drift, not a crash', () 
     // page reporting an account nobody measured. The page script draws these too, and this is
     // the half of that agreement the server owns.
     assert.equal(gauges[0].why, 'drift', JSON.stringify(rl));
+  }
+});
+
+// ── two readings of one account ─────────────────────────────────────────────────────────
+//
+// Every session files its own snapshot, so a fleet holds several readings of the two windows
+// and one of them gets drawn. The question this answers is whether the others were the same
+// windows — and only a window that is still OPEN can answer it. A reset epoch is where a
+// window ends: two readings naming the same one are two ages of a single allowance, two
+// naming different ones that are both still ahead of the clock cannot be one allowance at
+// all, and a reading whose window has already rolled over is simply old, which its age says.
+
+test('two readings that name the same resets are not apart, however far their percentages have moved', () => {
+  const a = { five_hour: { used_percentage: 17, resets_at: 1786212000 }, seven_day: { used_percentage: 42, resets_at: 1786500000 } };
+  const b = { five_hour: { used_percentage: 61, resets_at: 1786212000 }, seven_day: { used_percentage: 44, resets_at: 1786500000 } };
+  assert.deepEqual(windowsApart(a, b, NOW), [], 'a number that grew between two frames is not a disagreement');
+});
+
+test('two readings that name different windows, both still open, report that window', () => {
+  const a = { five_hour: { used_percentage: 17, resets_at: 1786212000 } };
+  const b = { five_hour: { used_percentage: 17, resets_at: 1786230000 } };
+  assert.deepEqual(windowsApart(a, b, NOW), ['five_hour']);
+});
+
+// The fleet shape this would otherwise cry wolf on every five hours: a session that idles
+// keeps the frame it last drew, and a five-hour window rolls over four or five times a day —
+// so an overnight snapshot names the window it was taken in, which ended hours ago. That is
+// not two accounts, it is one reading being old, and its age is printed beside it already.
+test('a reading whose window has already rolled over is old, not apart', () => {
+  const open = { five_hour: { used_percentage: 61, resets_at: 1786212000 } };
+  const rolled = { five_hour: { used_percentage: 17, resets_at: 1786190000 } };
+  assert.deepEqual(windowsApart(open, rolled, NOW), []);
+  assert.deepEqual(windowsApart(rolled, open, NOW), [], 'and it does not matter which way round they are read');
+});
+
+// The reset that is refused a countdown is refused a comparison, out of the same horizon: a
+// boundary fifty thousand years out is not a window this account is in.
+test('a boundary too far out to be a countdown is too far out to disagree', () => {
+  const a = { five_hour: { used_percentage: 17, resets_at: 1786212000 } };
+  const b = { five_hour: { used_percentage: 17, resets_at: 1786212000000 } };
+  assert.deepEqual(windowsApart(a, b, NOW), []);
+});
+
+test('both windows apart come back in the order they are read', () => {
+  const a = { five_hour: { used_percentage: 17, resets_at: 1786212000 }, seven_day: { used_percentage: 42, resets_at: 1786500000 } };
+  const b = { five_hour: { used_percentage: 17, resets_at: 1786230000 }, seven_day: { used_percentage: 42, resets_at: 1786600000 } };
+  assert.deepEqual(windowsApart(a, b, NOW), ['five_hour', 'seven_day']);
+});
+
+// A reading that names no reset is not a reading that names a different one. The two states
+// this whole module is built on, one field over: nothing measured is never a contradiction.
+test('a window one reading does not date is no disagreement with one that does', () => {
+  assert.deepEqual(windowsApart({ five_hour: { used_percentage: 17 } }, { five_hour: { used_percentage: 17, resets_at: 1786212000 } }, NOW), []);
+  assert.deepEqual(windowsApart({}, { five_hour: { used_percentage: 17, resets_at: 1786212000 } }, NOW), []);
+});
+
+test('a reset that is not a number is no boundary, and no disagreement is claimed from it', () => {
+  for (const at of ['soon', null, {}, Number.NaN]) {
+    const a = { five_hour: { used_percentage: 17, resets_at: at } };
+    const b = { five_hour: { used_percentage: 17, resets_at: 1786212000 } };
+    assert.deepEqual(windowsApart(a, b, NOW), [], String(at));
+  }
+});
+
+// Same rule as the reader above: `rate_limits: []` and `rate_limits: "none"` are legal JSON,
+// and neither may throw where a header is being drawn.
+test('rate limits that are not an object of windows are apart from nothing', () => {
+  for (const rl of [[] as any, 'none' as any, 42 as any, null as any, { five_hour: 'soon' } as any]) {
+    assert.deepEqual(windowsApart(rl, { five_hour: { used_percentage: 17, resets_at: 1786212000 } }, NOW), [], JSON.stringify(rl));
+    assert.deepEqual(windowsApart({ five_hour: { used_percentage: 17, resets_at: 1786212000 } }, rl, NOW), [], JSON.stringify(rl));
   }
 });

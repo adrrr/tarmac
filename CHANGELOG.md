@@ -11,6 +11,52 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **The account's two plan windows are shown by `list` as well as by the page, and the readings
+  behind them are counted.** The statusline payload carries `rate_limits.five_hour` and
+  `rate_limits.seven_day`, the reader has always kept them and the page has drawn them; `tarmac
+  list`, which is the whole product for anyone who never starts a `serve`, showed neither. It
+  now prints one line under the fleet totals — `account  5h 17% resets in 2h 14m · 7d 42%
+  resets in 3d 11h · as of 7m` — once for the fleet rather than once per row, because a rate
+  limit belongs to the account every session is spending from and a column of them would be the
+  same two numbers repeated down the table. Dated the way the AS OF column dates a context
+  reading, always and with the same `!` past the same threshold, since the percentage is exactly
+  as old as the frame that wrote it while the countdown beside it is recomputed on every read. A
+  fleet whose snapshots carry no rate limits reads `5h — no reading`, and a window whose shape
+  moved `5h — schema drift`; neither is ever `0%`. The five-hour window leads both surfaces,
+  being the one a reader can act on inside the day, and the seven-day one stands beside it at
+  the same weight rather than behind a flag. (#4)
+
+- **A number picked out of readings that disagree says so, on both surfaces.** The account
+  arrives once per session, so a fleet holds as many readings as it has snapshots and exactly
+  one of them is drawn: the freshest, which was the right rule and a silent one. Two conditions
+  now decide whether the others were the same account, and neither is the percentage — a number
+  that grew between two frames is the ordinary fleet. The first is the reset: `resets_at` is
+  where a window ends, so readings naming the same one are a single allowance seen at several
+  moments. The second is that both windows are still OPEN at the moment the fleet was read: a
+  session that idles keeps the frame it last drew and the five-hour window rolls over four or
+  five times a day, so an overnight snapshot names a window that ended hours ago — one reading
+  being old, which its age and its `!` already say, and without this rule any fleet with a
+  session idle longer than the current window would carry the warning permanently. What is left
+  is what nothing else on either surface can say: `the 5h window is read differently by 1 of 2
+  readings — the freshest is shown`. Whether two windows open at once means two accounts signed
+  in or something stranger is published nowhere tarmac reads, so it is counted and never
+  diagnosed. (#4)
+
+- **The account shown is the freshest reading that measured something, and ties no longer
+  depend on what printed first.** A session that has just started is guaranteed to be the
+  youngest snapshot on the machine, and it is the one likeliest to carry `used_percentage: null`
+  — the documented "no turn yet" shape. Freshest alone let it win and blank an account three
+  other sessions were reporting, `— no reading` said of a fleet that had one; the reading is now
+  the youngest that read a number, falling back to the youngest of all so that a fleet which
+  really measured nothing still says so. Two readings of the same age are settled on the session
+  id, the rule `preferred()` already applies to two snapshot files of one mtime: `rows` is sorted
+  on a key that is not total, so equal-aged readings kept whatever order `claude agents --json`
+  emitted them in, and both the number drawn and the count printed beside it moved with it. And
+  the denominator counts readings that MEASURED the account: `{}`, `[]` and a pair of nulls said
+  nothing, and counting them turned a coin flip into a reassuring "1 of 4". (#4)
+
 ### Changed
 
 - **The wait guard now reads the two shapes it was written to catch and did not.** `#84` moved

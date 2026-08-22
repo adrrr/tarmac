@@ -32,8 +32,9 @@ the field moved. It never turns a measurement it could not take into a confident
 | a session halted until you answer something | `waiting`, and which answer: `permission prompt`, `dialog open`, … |
 | a snapshot directory it could not read | the errno, not "run tarmac install" |
 | a cost key that is absent | `—` for the row, and a total qualified by how many sessions really report one |
-| no snapshot carrying the account's rate limits | `— no reading` in both gauges, on a dotted rail, never a window at 0% |
+| no snapshot carrying the account's rate limits | `— no reading` in both windows, on the page a dotted rail, never a window at 0% |
 | a rate-limit reset nowhere near the reading that carried it | `reset —`; the percentage stands, the impossible countdown does not |
+| snapshots naming two rate-limit windows open at once | the freshest, and how many readings describe the other one — never a winner picked in silence |
 | a Claude Code version no fixture covers | a footnote naming that version. Nothing blocked, nothing hidden |
 
 That last line is the smoke detector to the rest's alarm. The fields above were *observed*
@@ -258,13 +259,25 @@ where the test suite cannot reach.
 
 ## The account's two windows
 
-Every session on the page spends from the same two allowances, so they are drawn once, at the
-top of the page, rather than on each node: the five-hour window and the seven-day window, as
-the statusline payload reports them.
+Every session spends from the same two allowances, so they are shown once for the fleet rather
+than once per session: the five-hour window and the seven-day window, as the statusline payload
+reports them. On the page they are gauges at the top, above the fleet; in the terminal they are
+one line under it.
 
 ```
 5h ▬▭▭▭  17%  resets in 2h 14m      7d ▬▬▭▭  42%  resets in 3d 11h
 ```
+
+```
+4 sessions · 2 busy · $109.35
+account  5h 17% resets in 2h 14m · 7d 42% resets in 3d 11h · as of 7m
+```
+
+The five-hour window leads both of them. It is the one a reader can act on inside the day —
+"two hours left" is a decision about the next task, where a seven-day window is one the week
+was already spent against — so it is read first and its countdown is exact to the minute. The
+seven-day window stands beside it at the same weight rather than behind a flag, because it is
+the one that ends a week, and a number nobody chose to look at is a number nobody sees.
 
 The number is what is authoritative and the bar is a glance, the same bargain the context
 column makes. The reset arrives as an epoch and is shown as what is left of the window,
@@ -281,22 +294,58 @@ so often is, is 1970. Both used to render with a straight face (`resets in 19656
 percentage stands; the countdown becomes `reset —`.
 
 The limits belong to the account, and they arrive per session, so several sessions can carry
-the same number at different ages. The freshest reading wins, which is the rule the
-fleet model already applies to everything else, and a snapshot dated *after* the clock that
-read it is refused rather than believed (see [staying open](#staying-open)).
+the same number at different ages. The freshest reading that **measured** something wins: a
+session that has just started is the youngest snapshot on the machine and the likeliest to
+carry a window whose number has not been taken yet, and letting it win blanked an account three
+other sessions were reporting. A snapshot dated *after* the clock that read it is refused
+rather than believed (see [staying open](#staying-open)), and two readings of the same age are
+settled on the session id rather than on the order `claude agents --json` printed them in, so
+the same fleet reads the same way on two machines. Which reading was drawn is dated — but the
+age cannot say whether the readings behind it were about the same windows, and one of them is
+picked either way.
+
+That is the second thing both surfaces report:
+
+```
+! the 5h window is read differently by 1 of 2 readings — the freshest is shown
+```
+
+Two rules decide it, and neither is the percentage. The first is the reset: `resets_at` is
+where a window *ends*, so two readings naming the same one are one allowance seen at two
+moments — a percentage that grew between two frames is the ordinary fleet, and warning about it
+would be a warning on every poll. The second is that both windows must still be **open** at the
+moment the fleet was read. A session that idles keeps the frame it last drew and the five-hour
+window rolls over four or five times a day, so an overnight snapshot names the window it was
+taken in, which ended hours ago; that is one reading being old, which its own age and its `!`
+already say. Without this rule any fleet with a session idle longer than the current window
+would carry the warning permanently.
+
+What survives both is what nothing else here can say: two windows open at the same time, which
+one allowance cannot have. Whether that is two accounts signed in at once or something stranger
+is published on no surface tarmac reads, so it is counted and never diagnosed. A reading that
+dates no window is compared with nothing — an absent boundary is not a different one — and the
+count is of readings that measured the account, so a payload carrying `{}`, `[]` or a pair of
+nulls is not in the denominator. The sentence names only a window whose number is printed: one
+shown as `— schema drift` has nothing for "the freshest is shown" to be true of.
 
 What is missing is said, never guessed. No snapshot carrying rate limits at all is
-`— no reading` on a dotted rail, the same dotted emptiness an unmeasured dial wears. A window
-present with a null percentage is the same, because the key being there means the number has
-simply not been taken. A window that is gone, or holding something that is not a percentage,
-is `— schema drift`. None of the three is ever a `0%`, which would be the one sentence this
-page must not say about an account: *you have room*.
+`— no reading`, on the page a dotted rail, the same dotted emptiness an unmeasured dial wears.
+A window present with a null percentage is the same, because the key being there means the
+number has simply not been taken. A window that is gone, or holding something that is not a
+percentage, is `— schema drift`. None of the three is ever a `0%`, which would be the one
+sentence tarmac must not say about an account: *you have room*.
 
-A stale reading is dated, like every other stale reading here. The percentage is exactly as
-old as the snapshot it came from, while the countdown beside it is recomputed on every
-five-second re-render. An undated pair would put a frozen number next to a visibly moving one
-and let both read as now. Past the freshness threshold the pair carries `! 40m ago`, once
-for the two, because both windows come out of the same snapshot.
+The reading is dated, like every other reading here. The percentage is exactly as old as the
+snapshot it came from, while the countdown beside it is recomputed on every five-second
+re-render. An undated pair would put a frozen number next to a visibly moving one and let both
+read as now. In the terminal every reading is dated, as the AS OF column dates one, with the
+`!` of a reading past the freshness threshold: `as of 40m !`. A fleet no snapshot carried rate
+limits for has no reading and therefore no age — that is a case with nothing after the two
+windows, as is a fleet whose only such snapshot is dated after the clock that read it, refused
+rather than believed and left to the skew warning to name. Either way the missing age is what
+tells the pair apart from a snapshot that carried a window whose number had not been taken
+yet. On the page, where a fresh reading is not dated anywhere, only a stale one is:
+`! 40m ago`. Once for the two either way, because both windows come out of the same snapshot.
 
 On replay the gauges come down from the header and sit with the fleet they belong to, under
 the banner that dates it: the account of that minute, not of this one. Their reset is counted

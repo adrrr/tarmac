@@ -62,18 +62,15 @@ export const RESET_HORIZON_MS = 8 * 24 * 3600 * 1000;
 
 /** Both windows, always — a window that could not be read is a gauge that says so. */
 export function readLimits(rateLimits: Record<string, any> | null | undefined, now: number): Gauge[] {
-  // `rate_limits: []` and `rate_limits: "none"` are legal JSON and not a pair of windows.
-  // Neither may reach the lookup below as something to index.
-  const ok = rateLimits !== null && typeof rateLimits === 'object' && !Array.isArray(rateLimits);
   return LIMIT_WINDOWS.map(({ key, label, said }) => {
-    const w = ok ? (rateLimits as Record<string, any>)[key] : undefined;
-    const has = w !== null && typeof w === 'object' && !Array.isArray(w) && 'used_percentage' in w;
-    const v = has ? w.used_percentage : undefined;
+    const w = windowAt(rateLimits, key);
+    const has = w !== undefined && 'used_percentage' in w;
+    const v = w?.used_percentage;
     // Present and null: a window whose number has not been taken yet. Absent, or holding
     // something that is not a percentage: the shape moved. The discriminant is the key.
     const pct = has && typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? Math.floor(v) : null;
     const why: LimitWhy | null = pct !== null ? null : rateLimits == null || (has && v === null) ? 'absent' : 'drift';
-    const at = has && typeof w.resets_at === 'number' && Number.isFinite(w.resets_at) ? w.resets_at : null;
+    const at = has ? resetOf(w) : null;
     const resetsInMs = at === null ? null : at * 1000 - now;
     return {
       key,
@@ -85,3 +82,84 @@ export function readLimits(rateLimits: Record<string, any> | null | undefined, n
     };
   });
 }
+
+/**
+ * The windows two readings of the account describe DIFFERENTLY, by key, in the order above —
+ * meaning two windows that are BOTH still open at `now` and are not the same window.
+ *
+ * A fleet holds one reading per session and only one of them can be drawn, so the question is
+ * what the others were. It is settled on the reset and not the percentage: `resets_at` is where
+ * a window ENDS, so two readings naming the same one are two ages of a single allowance — the
+ * freshest is the one still true, and the age beside it says the rest. Percentages that differ
+ * under one reset are that same number caught at two frames, the normal state of a fleet, and
+ * warning about it would be a warning on every poll.
+ *
+ * The openness test is the other half, and without it this cries wolf every five hours. A
+ * session that idles keeps the frame it last drew, and the five-hour window rolls over four or
+ * five times a day: an overnight snapshot names the window it was taken in, which has since
+ * ended. That is not two accounts, it is one reading being old — a fact the fleet already
+ * prints, as that row's age and as the `!` beside it — so a window whose boundary is behind
+ * `now` is left out of the comparison rather than raised as a disagreement.
+ *
+ * What survives both rules is the thing nothing else on either surface can say: two windows
+ * open AT THE SAME TIME, which one allowance cannot have. Whether that is two accounts signed
+ * in at once or something stranger is published nowhere tarmac reads, so this reports that the
+ * readings are apart and never why.
+ *
+ * A reading that dates no window is not a reading that dates one differently: an absent
+ * boundary is compared with nothing, exactly as an absent percentage is drawn as nothing. And
+ * a boundary further out than `RESET_HORIZON_MS` is refused here as it is refused a countdown —
+ * a reset fifty thousand years away is not a window this account is in.
+ *
+ * Known blind spot, and the reason it is left open: two accounts whose windows happen to end at
+ * the same second read as one here, and their percentages then differ in silence. The only
+ * thing that would catch it is treating a percentage as evidence — and the shape that takes is
+ * "the fresher reading is lower than the older one", which cannot be true of one allowance and
+ * would be a false alarm the day a number is ever revised downward. A missed collision costs a
+ * warning nobody sees; the other rule costs a warning nobody can act on, on a fleet where
+ * nothing is wrong.
+ */
+export function windowsApart(
+  a: Record<string, any> | null | undefined,
+  b: Record<string, any> | null | undefined,
+  now: number,
+): string[] {
+  const apart: string[] = [];
+  for (const { key } of LIMIT_WINDOWS) {
+    const at = openBoundary(windowAt(a, key), now);
+    const bt = openBoundary(windowAt(b, key), now);
+    if (at !== null && bt !== null && at !== bt) apart.push(key);
+  }
+  return apart;
+}
+
+/** Whether this reading yielded a number for either window — a reading that measured something. */
+export const measured = (rateLimits: Record<string, any> | null | undefined, now: number): boolean =>
+  readLimits(rateLimits, now).some((g) => g.pct !== null);
+
+/**
+ * The epoch a window rolls over at, when that window is still OPEN at `now` — and `null` for
+ * one that has already rolled over, one nothing dates, and one dated beyond the horizon.
+ */
+function openBoundary(w: Record<string, any> | undefined, now: number): number | null {
+  const at = resetOf(w);
+  if (at === null) return null;
+  const inMs = at * 1000 - now;
+  return inMs > 0 && inMs <= RESET_HORIZON_MS ? at : null;
+}
+
+/**
+ * The window filed under `key`, or `undefined` when the payload carries nothing usable there.
+ *
+ * `rate_limits: []` and `rate_limits: "none"` are legal JSON and not a pair of windows, and
+ * neither may reach an index or a property read as something to look inside.
+ */
+function windowAt(rateLimits: Record<string, any> | null | undefined, key: string): Record<string, any> | undefined {
+  if (rateLimits === null || rateLimits === undefined || typeof rateLimits !== 'object' || Array.isArray(rateLimits)) return undefined;
+  const w = rateLimits[key];
+  return w !== null && typeof w === 'object' && !Array.isArray(w) ? w : undefined;
+}
+
+/** The epoch a window rolls over at, or `null` when this reading does not name one. */
+const resetOf = (w: Record<string, any> | undefined): number | null =>
+  w !== undefined && typeof w.resets_at === 'number' && Number.isFinite(w.resets_at) ? w.resets_at : null;

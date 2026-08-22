@@ -42,12 +42,17 @@ atlas              idle   — fresh  8h !   Opus 5   high    $0.00   8h
 ! 3 reading(s) marked "!" are older than 10m (--stale-after)
 
 4 sessions · 2 busy · $109.35
+account  5h 17% resets in 2h 14m · 7d 42% resets in 3d 11h · as of 7m
 ```
 
-That is the table with the status line chained. With nothing installed, the same command
-still lists every session, its state and its uptime, straight from `claude agents --json`.
-The context column reads `— absent`, model, effort and cost fall to `—`, and the line under
-the table counts how many sessions are covered.
+That is the table with the status line chained. The last line is the account's, not any
+session's: every row above spends from the same five-hour and seven-day
+[window](docs/MANUAL.md#the-accounts-two-windows), so it is printed once, dated like every
+other reading here, and `— no reading` rather than `0%` when no snapshot carried one.
+
+With nothing installed, the same command still lists every session, its state and its uptime,
+straight from `claude agents --json`. The context column reads `— absent`, model, effort and
+cost fall to `—`, and the line under the table counts how many sessions are covered.
 
 Node ≥ 20. Zero runtime dependencies: no framework, no bundler, nothing to audit.
 `--help` works everywhere. An option handed to a command that does not read it is an error,

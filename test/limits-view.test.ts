@@ -24,6 +24,16 @@ const fleet = (rateLimits: Record<string, any> | null = limits(), snapshotAgeMs 
   health: health(),
 });
 
+/** Two sessions, each with a reading of its own — the shape an account arrives in. */
+const twoReadings = (other: Record<string, any>, ages: [number, number] = [1200, 90_000]): Fleet => ({
+  rows: [row({ rateLimits: limits(), snapshotAgeMs: ages[0] }), row({ sessionId: 's2', rateLimits: other, snapshotAgeMs: ages[1] })],
+  health: health({ sessions: 2 }),
+});
+const headerOf = (f: Fleet): string => {
+  const html = renderPage(f);
+  return html.slice(html.indexOf('<header>'), html.indexOf('</header>'));
+};
+
 const page = (rateLimits: Record<string, any> | null = limits()): string => renderPage(fleet(rateLimits));
 /** The header alone — the stylesheet above it has widths and percentages of its own. */
 const header = (rateLimits: Record<string, any> | null = limits(), ageMs?: number): string => {
@@ -195,4 +205,53 @@ test('the replayed account is drawn with the replayed fleet, under the banner th
   const view = html.slice(html.indexOf('id="replay-view"'), html.indexOf('id="replay-map"'));
   assert.match(view, /id="replay-limits"/, 'inside the surface the past is drawn on');
   assert.ok(html.indexOf('id="replaying"') < html.indexOf('id="replay-limits"'), 'and after the banner');
+});
+
+// ── readings that are not about the same window ─────────────────────────────────────────
+//
+// One number is drawn out of as many readings as there are sessions, and the freshest wins.
+// That rule holds while the readings are one allowance seen at several moments — and says
+// nothing at all when they are not: a fleet spanning two logins, or a snapshot from before the
+// window rolled over, hands the header a winner picked from a set nobody was told about.
+
+test('the header says when the readings behind it are not all about the same window', () => {
+  const html = headerOf(twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 }, seven_day: { used_percentage: 42, resets_at: NOW / 1000 + 300_000 } }));
+  assert.match(html, /the 5h window is read differently by 1 of 2 readings/);
+  assert.match(html, /the freshest is shown/, 'and what the number beside it therefore is');
+  assert.match(html, /17%/, 'which is still drawn — there is nothing better to draw');
+});
+
+test('readings that name the same windows are the ordinary fleet, and go unremarked', () => {
+  assert.doesNotMatch(headerOf(twoReadings(limits())), /read differently/);
+});
+
+// The mark is a warning, in the same ink as the one that dates a stale reading: what it says
+// is that the number beside it may not be the account this fleet is spending from.
+test('the mark carries the warning weight, rather than reading as chrome', () => {
+  assert.match(headerOf(twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 } })), /class="mixed"/);
+});
+
+// Two different things can be wrong with one pair of numbers, and they are wrong in different
+// ways: the reading is old, and the readings behind it were not all about the same window. A
+// stale winner that was also picked out of a split fleet has to say both — dropping either one
+// leaves the reader a number they would read as answered.
+test('a stale reading picked out of a split fleet is dated AND marked, not one or the other', () => {
+  const html = headerOf(
+    twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 } }, [40 * 60_000, 50 * 60_000]),
+  );
+  assert.match(html, /! 40m ago/, 'how old the number is');
+  assert.match(html, /class="mixed"/, 'and that it was picked out of readings that disagreed');
+  assert.match(html, /the 5h window is read differently by 1 of 2 readings/);
+});
+
+// Read out of the stylesheet rather than grepped in it: `/\.stale, \.mixed \{/` was a literal,
+// so writing the same rule as `.mixed, .stale {` turned it red while changing nothing at all.
+// What has to hold is that whatever colours one mark colours the other, in the warning hue.
+test('both marks take their hue from one rule, so neither can lose it alone', () => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet()))![1].replace(/\/\*[\s\S]*?\*\//g, '');
+  const colouring = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, , d]) => /(^|;)\s*color\s*:/.test(d));
+  const mixed = colouring.filter(([, sel]) => /(^|,)\s*\.mixed\b/.test(sel));
+  assert.equal(mixed.length, 1, 'exactly one rule colours the mark');
+  assert.match(mixed[0][1], /(^|,)\s*\.stale\b/, 'and it is the rule that colours the stale mark too');
+  assert.match(mixed[0][2], /color\s*:\s*var\(--warn\)/, 'in the warning hue, not one of its own');
 });
