@@ -199,7 +199,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **A long name no longer takes the phone's table sideways.** The manual promises that a name
   with no length limit costs a width and never a scroll bar, and the narrow layout had never
-  held it: laid out at 320, 360, 390 and 430px against a fleet whose project name was 50
+  held it: laid out at 320, 360, 390 and 430px against a fleet whose project name was 51
   characters, the document came out 830px wide at every one of them — a table you scroll
   sideways to read the left edge of, on the surface that exists to be read from a pocket. Both
   values that can arrive as one unbroken token, a project (a directory's basename) and a
