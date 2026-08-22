@@ -170,10 +170,11 @@ function taggedReleases(): { tag: string; version: string }[] {
  * The walk runs to the LONGER of the two, so a section that was simply truncated parts company
  * where the shorter one ends — `undefined` against a line, reported as `(section ends)`. There
  * is therefore no "same, only shorter" case for the loop to fall through on, whatever the older
- * message below used to claim. The fall-through line itself is NOT unreachable: `assert.ok`
- * evaluates its message before it looks at its condition, so it runs once per tag on every
- * green run. It is simply never shown — the only caller that displays it has already found
- * the two sections different.
+ * message below used to claim. The line the loop falls through to is reached only for two equal
+ * inputs — `split('\n')` is injective, so matching every line up to the longer length means the
+ * strings matched — and nothing here passes equal inputs. It stays a plain return, not a throw:
+ * a caller that did pass them (a wording pin like #97's, restored) would crash on a throw where
+ * a string just goes unread.
  */
 function firstDifference(tagged: string, current: string): string {
   const a = tagged.split('\n');
@@ -215,13 +216,14 @@ test('every published CHANGELOG section still says what it said when it was tagg
       now !== null,
       `the \`## [${version}]\` section has disappeared from the CHANGELOG, but ${tag} is published and said something`,
     );
-    // `ok` rather than `equal`: a section runs to fifty lines of prose, and the two that
-    // `equal` prints bury the sentence that says what to do under six kilobytes of text that
-    // reads as identical. The line named below is the whole of what a reader needs.
-    assert.ok(
-      now === was,
-      `the \`## [${version}]\` section no longer matches what ${tag} published — most likely an entry merged into a section that had already shipped (a branch cut before the release commit), so move it to \`## [Unreleased]\`. First difference at ${firstDifference(was, now)}`,
-    );
+    // `fail` behind an `if` rather than `ok`: `ok` builds its message — the whole walk below —
+    // before it looks at its condition. `equal` prints both sections, fifty lines of prose
+    // apiece, burying the sentence that says what to do. The line named below is all a reader needs.
+    if (now !== was) {
+      assert.fail(
+        `the \`## [${version}]\` section no longer matches what ${tag} published — most likely an entry merged into a section that had already shipped (a branch cut before the release commit), so move it to \`## [Unreleased]\`. First difference at ${firstDifference(was, now)}`,
+      );
+    }
   }
 });
 
@@ -316,11 +318,11 @@ test('CI fetches the tags the guards above read', () => {
   );
 });
 
-// The one line a reader of the first failure is given. `ok` prints the message and nothing else,
-// so a line number that points at the wrong place sends them through fifty lines of prose by
-// hand — and a truncated section is the case where that is easiest to get wrong: walking to the
-// SHORTER of the two finds no difference at all and reports the two as parting company nowhere.
-test('the first difference names the line, a section that stops early ends there, and identical sections say so', () => {
+// The one line a reader of the first failure is given. `fail` prints the message and nothing
+// else, so a line number that points at the wrong place sends them through fifty lines of prose
+// by hand — and a truncated section is where that is easiest to get wrong: walking to the SHORTER
+// of the two finds no difference at all and reports the two as parting company nowhere.
+test('the first difference names the line, and a section that stops early ends there', () => {
   const tagged = '## [9.9.9] — 2026-01-01\n- a bullet\n- another';
 
   assert.match(firstDifference(tagged, '## [9.9.9] — 2026-01-01\n- a BULLET\n- another'), /^line 2\n/);
@@ -330,8 +332,4 @@ test('the first difference names the line, a section that stops early ends there
   assert.match(lost, /^line 3\n/);
   assert.match(lost, /current: \(section ends\)/);
   assert.match(firstDifference('## [9.9.9] — 2026-01-01\n- a bullet', tagged), /tagged: {2}\(section ends\)/);
-
-  // The fall-through wording is live code — built once per tag on every green run — so pin it:
-  // a rewrite that made it read like a findable difference would misdirect the first failure's reader.
-  assert.equal(firstDifference(tagged, tagged), '(no differing line — the sections are identical)');
 });
