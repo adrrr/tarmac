@@ -100,6 +100,14 @@ export function readLimits(rateLimits: Record<string, any> | null | undefined, n
  *
  * A reading that dates no window is not a reading that dates one differently: an absent
  * boundary is compared with nothing, exactly as an absent percentage is drawn as nothing.
+ *
+ * Known blind spot, and the reason it is left open: two accounts whose windows happen to end at
+ * the same second read as one here, and their percentages then differ in silence. The only
+ * thing that would catch it is treating a percentage as evidence — and the shape that takes is
+ * "the fresher reading is lower than the older one", which cannot be true of one allowance and
+ * would be a false alarm the day a number is ever revised downward. A missed collision costs a
+ * warning nobody sees; the other rule costs a warning nobody can act on, on a fleet where
+ * nothing is wrong.
  */
 export function windowsApart(
   a: Record<string, any> | null | undefined,
