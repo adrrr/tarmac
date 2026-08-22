@@ -242,6 +242,33 @@ test('a miss an hour after a blip is a first miss, not a second', async () => {
   assert.equal(page.el('offline').hidden, true, 'one dropped request on waking is still one');
 });
 
+// The window had a floor and no ceiling. `a miss right after a stall is still consecutive with
+// it` pins it above one poll interval, and nothing pinned it below anything: widened from three
+// intervals to a hundred (500s) the whole suite stays green, because the only test of a gap uses
+// an hour, and an hour clears any window anyone would type. At 500s a phone locked for eight
+// minutes over a dead radio comes back to the banner raised on one dropped request — the exact
+// regression the rule above exists to remove, reached by a mutation the suite cannot see.
+//
+// Five poll intervals is the outside edge of "in a row in time": past that, a miss is weather
+// again and the count starts over.
+const WINDOW_CEILING_MS = 5 * 5000;
+
+test('a miss five poll intervals after a blip is a first miss, not a second', async () => {
+  let calls = 0;
+  const page = mount(() => {
+    calls += 1;
+    return calls === 2 || calls === 3 ? Promise.reject(new Error('Failed to fetch')) : ok('<div>fleet</div>');
+  });
+  await page.advance(6000);
+  await page.advance(5000);
+  assert.equal(page.el('offline').hidden, true, 'the blip claims nothing');
+  page.hide();
+  await page.advance(WINDOW_CEILING_MS + 1);
+  await page.show();
+  assert.equal(page.calls, 3, 'the wake-up poll goes out, and it misses');
+  assert.equal(page.el('offline').hidden, true, 'a blip that far back is not consecutive with this one');
+});
+
 
 // A stall is still two misses' worth on its own, and the miss five seconds behind it is
 // consecutive with it — the window may not undo the grace `fail()` spends.
