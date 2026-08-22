@@ -90,6 +90,11 @@ export const VERDICTS: Verdict[] = [
   { source: 'const deadlineMs = 4000;', caught: true, why: 'and a const is the same guess as a default' },
   { source: 'async function poll(pred: () => boolean, budgetMs = 500): Promise<void> {', caught: true, why: 'a budget is a deadline' },
   {
+    source: "const answer = await rawGetText(port, `localhost:${port}`, '/api/fleet', {}, 500);",
+    caught: true,
+    why: 'the whole rawGet family is read, not the one spelling the rule was written for',
+  },
+  {
     source: "const status = await rawGet(port, `localhost:${port}`, '/api/fleet', {}, 500);",
     caught: true,
     why: 'the raw client’s deadline is not the caller’s to pick either',

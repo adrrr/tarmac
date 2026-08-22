@@ -129,6 +129,26 @@ test('an option nobody passed comes back as null, not as its default', () => {
   assert.equal(a.snapshotsDir, null);
 });
 
+// The reverse-proxy escape hatch: one flag per host, because a list with a separator in it
+// is a syntax to document and a wildcard waiting to be typed into it.
+test('reads --trust-host once per host, and nothing at all when it is absent', () => {
+  assert.deepEqual(parseArgs(['serve']).trustHost, [], 'nothing is trusted beyond loopback by default');
+  assert.deepEqual(parseArgs(['serve', '--trust-host', 'one.example']).trustHost, ['one.example']);
+  assert.deepEqual(
+    parseArgs(['serve', '--trust-host', 'one.example', '--trust-host=two.example:8443']).trustHost,
+    ['one.example', 'two.example'],
+    'repeated, in the order given, through the same parser the environment and the file use',
+  );
+});
+
+test('refuses a --trust-host nothing could ever match, and refuses it on the wrong command', () => {
+  assert.throws(() => parseArgs(['serve', '--trust-host', '*.ts.net']), /--trust-host/);
+  assert.throws(() => parseArgs(['serve', '--trust-host']), /--trust-host/);
+  // `list` reads no port and answers no request; a flag it silently swallowed would read as
+  // a fleet that had been made reachable.
+  assert.throws(() => parseArgs(['list', '--trust-host', 'one.example']), /--trust-host.*serve/s);
+});
+
 test('reads --stale-after verbatim, leaving what a duration means to one parser', () => {
   assert.equal(parseArgs(['list', '--stale-after', '90s']).staleAfter, '90s');
   assert.equal(parseArgs(['list', '--stale-after=2h']).staleAfter, '2h');

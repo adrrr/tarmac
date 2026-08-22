@@ -80,10 +80,12 @@ const HAND_TYPED_DEFAULT = /\b(?:timeout|deadline|budget|wait)[A-Za-z]*Ms\b(?:\s
  *
  * Read at the CALLEE, because the last argument alone means nothing: `setTimeout(fn, 5000)` is a
  * timer, not a wait, and a rule that could not tell them apart would have to be dropped. Any
- * `wait…`, any `…Until` poller and `rawGet` — the shapes every wait helper in this suite is
- * written in (`historyUntil` polls a record the way `waitFor` polls a predicate).
+ * `wait…`, any `…Until` poller and any `rawGet…` — the shapes every wait helper in this suite is
+ * written in (`historyUntil` polls a record the way `waitFor` polls a predicate). The raw client
+ * is read as a FAMILY: `rawGetText` is the same socket with the same deadline, and a rule naming
+ * one spelling of it would have excused the next one written.
  */
-const WAIT_CALL = /\b(?:wait[A-Za-z]*|[A-Za-z]+Until|rawGet)\s*\(/g;
+const WAIT_CALL = /\b(?:wait[A-Za-z]*|[A-Za-z]+Until|rawGet[A-Za-z]*)\s*\(/g;
 /** A trailing positional number, in the argument list of the call it belongs to. */
 const TRAILING_NUMBER = /,\s*\d[\d_]*\s*$/;
 

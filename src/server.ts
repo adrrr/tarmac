@@ -8,7 +8,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { reason, renderLive, renderPage } from './render.ts';
 import type { View } from './render.ts';
-import { SOURCE_PHRASE } from './config.ts';
+import { hostName, SOURCE_PHRASE } from './config.ts';
 import { createHistory, HISTORY_CADENCE_MS } from './history.ts';
 import type { Source } from './config.ts';
 import type { Fleet } from './fleet.ts';
@@ -38,9 +38,36 @@ export interface FleetServerDeps {
    * reader could choose is a reader who can make this process spawn `claude` every second.
    */
   sampleEveryMs?: number;
+  /**
+   * The hosts this serve answers to BESIDES loopback — empty by default, which is the whole
+   * of the privacy stance and what every serve nobody configured still does.
+   *
+   * It exists for one situation: a reverse proxy in front of this port forwards the Host the
+   * browser typed, and no proxy presents a loopback one, so `tailscale serve`, caddy and nginx
+   * all met a 403 with no supported answer (#105). Naming a host here says, in writing, that
+   * anyone who can make a browser send that Host — anyone on that tailnet, anyone the proxy
+   * lets in — may read this fleet's working directories, session ids and costs.
+   */
+  trustedHosts?: readonly string[];
 }
 
-export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS }: FleetServerDeps): Server {
+export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS, trustedHosts = [] }: FleetServerDeps): Server {
+  // Normalised HERE rather than trusted to arrive that way. This is the last thing between a
+  // foreign origin and the fleet, so it owns both sides of its own comparison — the config
+  // parser cuts a name the same way, and neither leans on the other having done it.
+  //
+  // The empty one is dropped for the same reason, and it is not tidiness: a name that
+  // normalises to nothing is a name that every Host normalising to nothing matches — `:8443`,
+  // a lone bracket — which would be a guard standing open on a list that looks set. Nothing
+  // reachable from a flag, a variable or a file gets here empty; that is the parser's promise,
+  // and this is the guard not resting on it.
+  const trusted = new Set(trustedHosts.map((h) => hostName(h.trim()).toLowerCase()).filter((h) => h !== ''));
+  // Which rule refused, decided once. With hosts named, "loopback hosts only" would read as a
+  // flag that never took; with none, this is the sentence it has always been, to the byte. The
+  // Host itself is never quoted back: it is the one string on the request the caller wrote.
+  const refusal = trusted.size === 0
+    ? 'tarmac serves loopback hosts only\n'
+    : 'tarmac serves loopback and trusted hosts only\n';
   // What this serve has already read, kept for a day and never written down. `since` is the
   // moment this server was made, not the first sample that landed: the span it covers is how
   // long the process has been up, and an hour of it with nothing in it is a fact worth
@@ -70,10 +97,12 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS 
 
   const server = http.createServer(async (req, res) => {
     // Loopback binding alone does not stop a DNS-rebinding page in the user's own browser
-    // from reading /api/fleet — which carries cwd paths, session ids and costs.
-    if (!isLoopbackHost(req.headers.host)) {
+    // from reading /api/fleet — which carries cwd paths, session ids and costs. Whatever a
+    // reader trusted on top of that is a name, exactly: matched whole, never as a prefix, a
+    // suffix or a pattern, so trusting one host can never be trusting a family of them.
+    if (!isLoopbackHost(req.headers.host) && !isTrustedHost(req.headers.host, trusted)) {
       res.writeHead(403, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
-      res.end('tarmac serves loopback hosts only\n');
+      res.end(refusal);
       return;
     }
 
@@ -277,6 +306,30 @@ function attempt(server: Server, port: number, host: string): Promise<NodeJS.Err
 
 function isLoopbackHost(host: string | undefined): boolean {
   if (!host) return false;
-  const name = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+  const name = hostName(host);
   return name === 'localhost' || name === '127.0.0.1' || name === '::1';
+}
+
+/**
+ * One of the names the reader wrote down, matched whole — never as a prefix, a suffix or a
+ * pattern, and no wildcard is accepted into that list or honoured against a request.
+ *
+ * What is matched is the name `hostName` cuts out, and that cut is the loopback check's, kept
+ * shared rather than tightened: it drops the port, and it drops a leading `[` or a trailing
+ * `]` whether or not they pair. So `[name` and `name]` reach the comparison as `name`, exactly
+ * as `[localhost` has always reached it as `localhost`. Nothing is opened by it — `Host` is a
+ * forbidden header, a browser derives it from the URL, and a client free to type the header is
+ * free to type the name itself — and narrowing it here would change what the default answers.
+ *
+ * The port is not part of the name on either side: a proxy presents `name:8443` on one setup
+ * and a bare `name` on 443, and the port in a `Host` header is chosen by whoever sends it, so
+ * matching on it would have refused half the setups this exists for and barred nobody. Case is
+ * not part of it either — host names are case-insensitive, and the loopback names above are
+ * left exactly as strict as they have always been rather than loosened to match.
+ *
+ * `host` is whichever `Host` node reports; it reports the first when a request carries two.
+ */
+function isTrustedHost(host: string | undefined, trusted: ReadonlySet<string>): boolean {
+  if (!host || trusted.size === 0) return false;
+  return trusted.has(hostName(host).toLowerCase());
 }

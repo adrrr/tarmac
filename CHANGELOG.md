@@ -13,6 +13,25 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`serve --trust-host <host>`, for the reverse proxy the Host guard had no answer for.** A
+  proxy — `tailscale serve`, caddy, nginx — forwards the `Host` the browser typed, and none of
+  them present a loopback one, so a dashboard put on a phone that way was a 403 on every page
+  and every API call, with nothing supported to do about it. The flag names a host to answer
+  besides loopback, once per host, and the list can be set from `TARMAC_TRUST_HOST` or
+  `"trustHosts"` in `config.json` like every other setting, flag beating environment beating
+  file. `serve` prints the names it will answer to and whose decision that was, next to the
+  port and the threshold. Opt-in and nothing else: with no host named the guard is what it was,
+  down to the sentence it refuses with. A name is matched whole — no wildcard is accepted into
+  the list and none is honoured against a request, and a name is never read as a prefix or a
+  suffix, so trusting `example.ts.net` is never trusting `sub.example.ts.net` or
+  `example.ts.net.somewhere-else.com`. The port is not part of the name on either side, since a
+  proxy presents `:8443` on one setup and nothing at all on 443 and the port in a `Host` header
+  is picked by whoever sends it; case is not part of it either. What the flag costs is in the
+  manual next to the flag: anyone who can make a browser send that `Host` reads this fleet's
+  working directories, session ids and costs, and tarmac cannot tell them from you.
+  `Sec-Fetch-Site` is untouched — a trusted `Host` does not make a cross-site page
+  same-origin. (#105)
+
 - **The account's two plan windows are shown by `list` as well as by the page, and the readings
   behind them are counted.** The statusline payload carries `rate_limits.five_hour` and
   `rate_limits.seven_day`, the reader has always kept them and the page has drawn them; `tarmac
