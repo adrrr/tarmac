@@ -190,8 +190,10 @@ export function rawGetText(
       // on the response, `req` gets no `'error'`, and a destroyed socket never goes inactive,
       // so `'timeout'` never fires either. Without this the wait is unbounded — proved by the
       // test that watched it stay pending past five seconds.
+      //
+      // `'error'` and not `'aborted'`: both fire on this, one is enough, and the other has
+      // been the deprecated spelling of it since node 17.
       res.on('error', reject);
-      res.on('aborted', () => reject(new Error(`answer from ${path} ended early`)));
     });
     req.on('timeout', () => req.destroy(new Error(`no answer from ${path} in ${timeoutMs}ms`)));
     req.on('error', reject);
