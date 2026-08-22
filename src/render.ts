@@ -972,16 +972,16 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        them. The negative margin gives it the page's own gutters back, so the bar reaches the
        edges of the phone and the rule above it reads as an edge rather than a floating line.
 
-       The sentence saying what the record covers yields for the whole replay, not for the drag:
-       body.replaying is a session, set when the first minute is drawn and cleared by Back to
-       live. It is prose, and prose in a bar pinned over the map is half the map. It is read
-       before a replay starts, which is when it answers the question it exists for — whether the
-       record is a day or ten minutes — and while one is running the banner overhead carries the
-       exact minute under the hand, which is the more precise answer. */
+       The sentence under the handle stays. Hiding it for the length of a replay was the obvious
+       way to keep the bar short, and it silently undid a fix this file argues for forty lines
+       into coversText: two of its three parts are standing properties of the RECORD, not the
+       range — nothing replayed here is dated, and the past is drawn ungrouped — and they were
+       put in the reader's view precisely because they had lived "nowhere the reader can see it"
+       and an ungrouped map reads as a rendering that broke. A phone replaying is exactly when a
+       reader is staring at one. The bar is taller for it. */
     body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3;
          background:var(--bg); border-top:1px solid var(--line);
          padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
-    body.replaying .replay .covers { display:none; }
     .wrap { overflow-x:visible; }
     table, tbody { display:block; }
     table { min-width:0; }

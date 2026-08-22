@@ -241,24 +241,23 @@ test('nothing pins the scrubber on a live page, or on a laptop', () => {
   assert.doesNotMatch(cssOutsideMedia(), /body\.replaying \.replay[^{]*\{[^}]*position:\s*sticky/, 'not on a laptop');
 });
 
-// The sentence saying what the record covers is rest-reading: two lines of prose, and two lines
-// of prose in a bar pinned over the map is half the map. It yields for the whole replay and not
-// for the drag — `body.replaying` is a session, set when the first minute is drawn and cleared
-// by Back to live — which is the bargain: it is read BEFORE a replay, when it answers the
-// question it exists for, and while one is running the banner overhead carries the exact minute.
-//
-// Scoped to `body.replaying` and to the phone, both asserted: unscoped either way it would take
-// the record's own range off a page that is not replaying at all.
-test('the prose under the handle yields its place for the length of a replay', () => {
-  assert.match(PHONE(), /body\.replaying \.replay \.covers\s*\{[^}]*display:\s*none/);
-  assert.doesNotMatch(cssOutsideMedia(), /\.covers\s*\{[^}]*display:\s*none/, 'and only on a phone');
-  for (const [, raw, declarations] of PHONE().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    if (!/\.covers\b/.test(raw) || !/display:\s*none/.test(declarations)) continue;
-    assert.match(raw.slice(raw.lastIndexOf('}') + 1).trim(), /^body\.replaying\b/, 'a live page keeps its range');
+// The sentence under the handle is not hidden on a phone, and this test is why rather than an
+// accident. Folding it away for the length of a replay is the obvious way to keep the pinned bar
+// short, and it undoes a fix `coversText` argues for in this same file: two of its three parts
+// are standing properties of the RECORD and not its range — nothing replayed here is dated, and
+// the past is drawn ungrouped — and they were put in the reader's view precisely because they
+// had lived "nowhere the reader can see it", where an ungrouped map reads as a rendering that
+// broke. A phone replaying is exactly when a reader is looking at one.
+test('the sentence under the handle is never folded away, on any viewport', () => {
+  for (const css of [sheet(), PHONE()]) {
+    for (const [, raw, declarations] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/\.covers\b/.test(raw)) continue;
+      assert.doesNotMatch(declarations, /display:\s*none|visibility:\s*hidden|opacity:\s*0\b/,
+        `${raw.slice(raw.lastIndexOf('}') + 1).trim()} takes the record's own properties off the page`);
+    }
   }
-  assert.match(renderPage(fleet(), 'map'), /id="covers"/, 'the sentence is still rendered');
+  assert.match(renderPage(fleet(), 'map'), /id="covers"/, 'and the sentence is still rendered');
 });
-
 // ── the session, as a strip ──────────────────────────────────────────────────────────────
 //
 // Below the breakpoint the table has always folded into a card of eight labelled lines, and a

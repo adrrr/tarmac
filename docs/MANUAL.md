@@ -544,8 +544,8 @@ The one surface it never reaches is the retained record. See
 
 ### Replaying the day
 
-Under the map is a scrubber, labelled `REPLAY`, and it is the one place on this page where a
-node is not the fleet as of the reading in the header. The label says what the pair is and
+Under the map is a scrubber, with `REPLAY` written above it, and it is the one place on this
+page where a node is not the fleet as of the reading in the header. The word says what the pair is and
 never how much of the day it holds: a serve ten minutes old has seen ten minutes, and the
 sentence under the handle is what states the range. Drag it and the dials render the fleet as
 the serve recorded it at that minute; the play button walks the readings, one every 100ms, and
@@ -625,15 +625,15 @@ already says in words; the stamp stays in the markup, so a wide window and anyth
 HTML still get the exact second.
 
 And while a replay is running, the scrubber pins to the bottom of the viewport, so the hand on
-the handle and the dials the handle moves are on screen together. The sentence saying what the
-record covers steps aside for the length of that replay, and comes back on `Back to live`: it is
-prose, and two lines of prose in a bar pinned over the map is half the map. It is read before a
-replay, which is when it answers the question it exists for — whether the record is a day or ten
-minutes — and while one is running the banner overhead names the exact minute instead.
+the handle and the dials the handle moves are on screen together. The sentence under it comes
+with it: two of the three things it says are properties of the record rather than of its range —
+that nothing replayed is dated, and that the past is drawn ungrouped — and a phone replaying is
+exactly when a reader is looking at an ungrouped map.
 
-Independently of width, wherever the pointer is coarse, every control on the page carries an
-invisible target of at least 44px: the two tabs, `Play`, and the way back out of a replay. The
-pills themselves are not redrawn, so a desktop reader's page is byte-identical.
+Independently of width, wherever the pointer is coarse, the four pills carry an invisible target
+of at least 44px: the two tabs, `Play`, and the way back out of a replay. The scrubber itself is
+not one of them — it is a range input, dragged by a thumb the browser sizes, and it is left
+alone. Nothing drawn is redrawn, so a desktop reader's page looks exactly as it did.
 
 ## What the serve remembers
 
