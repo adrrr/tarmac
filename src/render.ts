@@ -15,7 +15,7 @@ import { schemaNotice } from './schema.ts';
 import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
 import type { Gauge, LimitWhy } from './limits.ts';
 import { accountLimits, busyOnStaleFleet } from './fleet.ts';
-import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
+import type { AccountReading, Fleet, FleetHealth, FleetRow } from './fleet.ts';
 import type { Plan, UninstallMode, UninstallPlan } from './install.ts';
 
 /**
@@ -214,6 +214,9 @@ export function renderTable({ rows, health }: Fleet): string {
   const skewed = rows.filter(ahead).length;
   if (skewed > 0) warns.push(`! ${skewed} reading(s) are dated in the future — ${SKEW}`);
   if (health.unknownStatus > 0) warns.push(`! ${health.unknownStatus} session(s) report an unknown status`);
+  const account = accountLimits(rows);
+  const split = accountSplit(account);
+  if (split) warns.push(`! ${split}`);
   // Last, and never instead of anything above: this one is a heads-up, not a fault.
   const schema = schemaNotice(health.schemaGuard);
   if (schema) warns.push(`! ${schema}`);
@@ -224,8 +227,47 @@ export function renderTable({ rows, health }: Fleet): string {
     [line(head), ...body.map(line)].join('\n') +
     '\n' +
     (warns.length ? '\n' + warns.join('\n') + '\n' : '') +
-    `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n`
+    `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n${accountLine(account, health)}\n`
   );
+}
+
+/**
+ * The account's two windows, under the fleet rather than in a column.
+ *
+ * They are the one pair of numbers in this table that is not about a session: every row above
+ * spends from the same five-hour and seven-day allowance, so a column of them would be the
+ * same two numbers printed once per session. Under the totals, where the other fleet-wide
+ * facts are.
+ *
+ * Dated like every reading here, and always: the AS OF column exists because a percentage is
+ * as old as the frame that wrote it, and this one has no column to be dated by. The `!` is the
+ * same mark, past the same threshold, explained by the same warning above.
+ */
+function accountLine(account: AccountReading | null, health: FleetHealth): string {
+  const windows = readLimits(account === null ? null : account.rateLimits, health.generatedAt)
+    .map((g) => `${g.label} ${g.pct === null ? `— ${LIMIT_WHY[g.why!]}` : `${g.pct}% ${resetWords(g.resetsInMs, '—')}`}`)
+    .join(' · ');
+  // Nothing to date when nothing was read: "as of" a reading that does not exist would be the
+  // one lie this line could tell.
+  const as = account === null ? '' : ` · as of ${age(account.ageMs)}${account.ageMs > health.staleAfterMs ? ' !' : ''}`;
+  return `account  ${windows}${as}`;
+}
+
+/**
+ * What to say when the readings behind that line are not all about the same windows, and
+ * `null` on the ordinary fleet, where they are.
+ *
+ * One warning for both surfaces to be written from: the account is the ONE number here picked
+ * out of several that could have been it, and a picked winner presented as the fleet's account
+ * is exactly what a fleet spanning two logins would look like. The count is what the reader
+ * needs to go and look; which of the two causes it is — another account, or a window that has
+ * rolled over since the older frame — is published nowhere tarmac reads, so it is not guessed.
+ */
+function accountSplit(account: AccountReading | null): string | null {
+  if (account === null || account.apart === 0) return null;
+  const labels = LIMIT_WINDOWS.filter((w) => account.apartWindows.includes(w.key)).map((w) => w.label);
+  const which = `the ${labels.join(' and ')} window${labels.length === 1 ? '' : 's'}`;
+  return `${which} ${labels.length === 1 ? 'is' : 'are'} read differently by ${account.apart} of the ${account.readings} snapshots that carry rate limits — the freshest is the one shown`;
 }
 
 /**
@@ -457,7 +499,7 @@ function gauge(g: Gauge): string {
   return (
     `<div class="gauge"><span class="lbl" aria-hidden="true">${g.label}</span><span class="sr">${g.said}</span>` +
     `${rail}<span class="num">${g.pct === null ? dash() : `${g.pct}%`}</span>` +
-    `<span class="reset">${g.pct === null ? LIMIT_WHY[g.why!] : resetWords(g.resetsInMs)}</span></div>`
+    `<span class="reset">${g.pct === null ? LIMIT_WHY[g.why!] : resetWords(g.resetsInMs, dash())}</span></div>`
   );
 }
 
@@ -471,8 +513,8 @@ const LIMIT_WHY: Record<LimitWhy, string> = { absent: 'no reading', drift: 'sche
  * after the reading that reported it, so the percentage beside these words belongs to a window
  * that no longer exists. Saying that is the whole point of showing a reset at all.
  */
-const resetWords = (ms: number | null): string =>
-  ms === null ? `reset ${dash()}` : ms > 0 ? `resets in ${left(ms)}` : `reset was due ${left(-ms)} ago`;
+const resetWords = (ms: number | null, none: string): string =>
+  ms === null ? `reset ${none}` : ms > 0 ? `resets in ${left(ms)}` : `reset was due ${left(-ms)} ago`;
 
 /**
  * How long, in the two units that matter at each scale. Deliberately finer than `duration()`
