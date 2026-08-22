@@ -25,8 +25,8 @@ const fleet = (rateLimits: Record<string, any> | null = limits(), snapshotAgeMs 
 });
 
 /** Two sessions, each with a reading of its own — the shape an account arrives in. */
-const twoReadings = (other: Record<string, any>): Fleet => ({
-  rows: [row({ rateLimits: limits(), snapshotAgeMs: 1200 }), row({ sessionId: 's2', rateLimits: other, snapshotAgeMs: 90_000 })],
+const twoReadings = (other: Record<string, any>, ages: [number, number] = [1200, 90_000]): Fleet => ({
+  rows: [row({ rateLimits: limits(), snapshotAgeMs: ages[0] }), row({ sessionId: 's2', rateLimits: other, snapshotAgeMs: ages[1] })],
   health: health({ sessions: 2 }),
 });
 const headerOf = (f: Fleet): string => {
@@ -229,6 +229,19 @@ test('readings that name the same windows are the ordinary fleet, and go unremar
 // is that the number beside it may not be the account this fleet is spending from.
 test('the mark carries the warning weight, rather than reading as chrome', () => {
   assert.match(headerOf(twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 } })), /class="mixed"/);
+});
+
+// Two different things can be wrong with one pair of numbers, and they are wrong in different
+// ways: the reading is old, and the readings behind it were not all about the same window. A
+// stale winner that was also picked out of a split fleet has to say both — dropping either one
+// leaves the reader a number they would read as answered.
+test('a stale reading picked out of a split fleet is dated AND marked, not one or the other', () => {
+  const html = headerOf(
+    twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 } }, [40 * 60_000, 50 * 60_000]),
+  );
+  assert.match(html, /! 40m ago/, 'how old the number is');
+  assert.match(html, /class="mixed"/, 'and that it was picked out of readings that disagreed');
+  assert.match(html, /the 5h window is read differently by 1 of 2 readings/);
 });
 
 // Read out of the stylesheet rather than grepped in it: `/\.stale, \.mixed \{/` was a literal,
