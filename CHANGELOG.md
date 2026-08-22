@@ -11,6 +11,38 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **The account's two plan windows are shown by `list` as well as by the page, and the readings
+  behind them are counted.** The statusline payload carries `rate_limits.five_hour` and
+  `rate_limits.seven_day`, the reader has always kept them and the page has drawn them; `tarmac
+  list`, which is the whole product for anyone who never starts a `serve`, showed neither. It
+  now prints one line under the fleet totals — `account  5h 17% resets in 2h 14m · 7d 42%
+  resets in 3d 11h · as of 7m` — once for the fleet rather than once per row, because a rate
+  limit belongs to the account every session is spending from and a column of them would be the
+  same two numbers repeated down the table. Dated the way the AS OF column dates a context
+  reading, always and with the same `!` past the same threshold, since the percentage is exactly
+  as old as the frame that wrote it while the countdown beside it is recomputed on every read. A
+  fleet whose snapshots carry no rate limits reads `5h — no reading`, and a window whose shape
+  moved `5h — schema drift`; neither is ever `0%`. The five-hour window leads both surfaces,
+  being the one a reader can act on inside the day, and the seven-day one stands beside it at
+  the same weight rather than behind a flag. (#4)
+
+- **A number picked out of readings that disagree says so, on both surfaces.** The account
+  arrives once per session, so a fleet holds as many readings as it has snapshots and exactly
+  one of them is drawn: the freshest, which was the right rule and a silent one. What decides
+  whether the others were the same windows is the reset rather than the percentage. `resets_at`
+  is where a window ends, so readings naming the same one are a single allowance seen at
+  several moments — their percentages differing is one number caught at two frames, the
+  ordinary state of a fleet, and warning about it would be a warning on every poll. Readings
+  naming different resets are not one allowance, and both surfaces now report it: `the 5h window
+  is read differently by 1 of the 2 snapshots that carry rate limits — the freshest is the one
+  shown`. Whether that is two accounts or a snapshot from before the window rolled over is
+  published on no surface tarmac reads, so it is counted and never diagnosed. A reading that
+  dates no window is compared with nothing, and a reading nothing can date — a snapshot ahead of
+  the clock that read it, one with no age at all — counts neither as a reading nor as one apart,
+  the same two exclusions under which the winner is picked. (#4)
+
 ### Changed
 
 - **The wait guard now reads the two shapes it was written to catch and did not.** `#84` moved
