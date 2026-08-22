@@ -633,7 +633,11 @@ exactly when a reader is looking at an ungrouped map.
 Independently of width, wherever the pointer is coarse, the four pills carry an invisible target
 of at least 44px: the two tabs, `Play`, and the way back out of a replay. The scrubber itself is
 not one of them — it is a range input, dragged by a thumb the browser sizes, and it is left
-alone. Nothing drawn is redrawn, so a desktop reader's page looks exactly as it did.
+alone. The overlay is drawn nowhere, so it moves nothing: laid out at 1280px the table comes out
+box for box where it was, to two decimals, and the one node the page gained is a span wrapped
+round text already drawn in that place. What a desktop reader does see change is the scrubber's
+`REPLAY`, which is written above it at every width and not only on a phone — see
+[replaying the day](#replaying-the-day).
 
 ## What the serve remembers
 

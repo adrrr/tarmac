@@ -96,9 +96,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   inset for all three left the way out of a replay at 41px, and the arithmetic that chose them
   was wrong by the border until the pseudo-elements were measured in a browser: an overlay's
   containing block is its ancestor's padding box, so all four targets were laid out at 43.2px
-  while the sum read 45.2. Nothing that is DRAWN moves — the desktop page looks exactly as it
-  did, though its bytes are not identical: the summary's stamp gains a span, and the scrubber
-  gains its name at every width.
+  while the sum read 45.2. The overlay is drawn nowhere and moves nothing anywhere: on the table
+  at 1280px, all 81 boxes on the page come out at the position and size they had before, to two
+  decimals, and the only difference is one node that was not there — a span around the ISO stamp,
+  wrapped round text already drawn in that exact place. The scrubber is the exception and it is
+  meant: `REPLAY` is written above it at EVERY width, not only on a phone, so a desktop `/map`
+  gains 26.3px of replay bar (47.8 to 74.1 with the bar showing). A control nobody could name was
+  the defect being fixed, and naming it for a finger and not for a mouse would have been two
+  different pages.
 
 - **On a phone a session is a two-line strip, not a card of eight labelled lines.** Same audit.
   A card was 234px, so two and a half sessions filled a phone and "is anything waiting on me"
