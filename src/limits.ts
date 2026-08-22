@@ -62,18 +62,15 @@ export const RESET_HORIZON_MS = 8 * 24 * 3600 * 1000;
 
 /** Both windows, always — a window that could not be read is a gauge that says so. */
 export function readLimits(rateLimits: Record<string, any> | null | undefined, now: number): Gauge[] {
-  // `rate_limits: []` and `rate_limits: "none"` are legal JSON and not a pair of windows.
-  // Neither may reach the lookup below as something to index.
-  const ok = rateLimits !== null && typeof rateLimits === 'object' && !Array.isArray(rateLimits);
   return LIMIT_WINDOWS.map(({ key, label, said }) => {
-    const w = ok ? (rateLimits as Record<string, any>)[key] : undefined;
-    const has = w !== null && typeof w === 'object' && !Array.isArray(w) && 'used_percentage' in w;
-    const v = has ? w.used_percentage : undefined;
+    const w = windowAt(rateLimits, key);
+    const has = w !== undefined && 'used_percentage' in w;
+    const v = w?.used_percentage;
     // Present and null: a window whose number has not been taken yet. Absent, or holding
     // something that is not a percentage: the shape moved. The discriminant is the key.
     const pct = has && typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? Math.floor(v) : null;
     const why: LimitWhy | null = pct !== null ? null : rateLimits == null || (has && v === null) ? 'absent' : 'drift';
-    const at = has && typeof w.resets_at === 'number' && Number.isFinite(w.resets_at) ? w.resets_at : null;
+    const at = has ? resetOf(w) : null;
     const resetsInMs = at === null ? null : at * 1000 - now;
     return {
       key,
@@ -85,3 +82,50 @@ export function readLimits(rateLimits: Record<string, any> | null | undefined, n
     };
   });
 }
+
+/**
+ * The windows two readings of the account describe DIFFERENTLY, by key, in the order above.
+ *
+ * A fleet holds one reading per session, and only one of them can be drawn. What decides
+ * whether the others were the same windows is the reset, not the percentage: `resets_at` is
+ * where a window ENDS, so two readings naming the same one are two ages of a single allowance —
+ * the freshest is the one still true, and the age beside it says the rest. Percentages that
+ * differ under one reset are that same number caught at two frames, which is the normal state
+ * of a fleet and would be a warning on every poll.
+ *
+ * Two that name DIFFERENT resets are not two ages of one window: either the snapshots come
+ * from different accounts, or the older one belongs to a window that has since rolled over.
+ * Which of the two it is, is not published anywhere tarmac reads — so this reports that the
+ * readings are apart and never why.
+ *
+ * A reading that dates no window is not a reading that dates one differently: an absent
+ * boundary is compared with nothing, exactly as an absent percentage is drawn as nothing.
+ */
+export function windowsApart(
+  a: Record<string, any> | null | undefined,
+  b: Record<string, any> | null | undefined,
+): string[] {
+  const apart: string[] = [];
+  for (const { key } of LIMIT_WINDOWS) {
+    const at = resetOf(windowAt(a, key));
+    const bt = resetOf(windowAt(b, key));
+    if (at !== null && bt !== null && at !== bt) apart.push(key);
+  }
+  return apart;
+}
+
+/**
+ * The window filed under `key`, or `undefined` when the payload carries nothing usable there.
+ *
+ * `rate_limits: []` and `rate_limits: "none"` are legal JSON and not a pair of windows, and
+ * neither may reach an index or a property read as something to look inside.
+ */
+function windowAt(rateLimits: Record<string, any> | null | undefined, key: string): Record<string, any> | undefined {
+  if (rateLimits === null || rateLimits === undefined || typeof rateLimits !== 'object' || Array.isArray(rateLimits)) return undefined;
+  const w = rateLimits[key];
+  return w !== null && typeof w === 'object' && !Array.isArray(w) ? w : undefined;
+}
+
+/** The epoch a window rolls over at, or `null` when this reading does not name one. */
+const resetOf = (w: Record<string, any> | undefined): number | null =>
+  w !== undefined && typeof w.resets_at === 'number' && Number.isFinite(w.resets_at) ? w.resets_at : null;
