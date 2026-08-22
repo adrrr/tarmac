@@ -92,6 +92,20 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   inset for all three left the way out of a replay at 41px. Nothing that is drawn moves, so a
   desktop page is byte-identical.
 
+- **On a phone a session is a two-line strip, not a card of eight labelled lines.** Same audit.
+  A card was 234px, so two and a half sessions filled a phone and "is anything waiting on me"
+  cost four screens of scrolling — on the surface whose whole point is being read from a pocket.
+  Under 46rem the row now folds into the line the map has always printed under a docked agent:
+  who and in what state, then `ctx 65% · Opus 5 · medium · $20.79 · up 15h`, about 63px a
+  session. Nothing is dropped. The labels that go are the ones whose values wear their own name,
+  a `$`, a `%`, a model, a state that is a word; the two that do not get one back in the strip's
+  own words. Nothing is reordered either — the columns are placed in the order `renderRow`
+  emits them, and the one `order` that is not a column is the zero-height break that keeps the
+  numbers on a line of their own. CSS and nothing else: every `data-label` is still on the cell,
+  the markup a desktop reads is untouched, and so is every JSON surface. A background session's
+  name is its prompt, so it wraps rather than being cut, and it stays beside the project in the
+  page's grey rather than becoming the strip's title.
+
 - **The scrubber has a name, and on a phone it stays under the thumb.** A button reading `Play`
   and a slider at the foot of a map, with nothing saying what they move, is a control nobody
   touches; it is now labelled `REPLAY`. The label says what the pair is and never how much of

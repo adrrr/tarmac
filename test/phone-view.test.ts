@@ -199,3 +199,138 @@ test('the prose under the handle yields its place while the drag is on', () => {
   assert.doesNotMatch(cssOutsideMedia(), /\.covers\s*\{[^}]*display:\s*none/, 'and only on a phone');
   assert.match(renderPage(fleet(), 'map'), /id="covers"/, 'the sentence is still rendered');
 });
+
+// ── the session, as a strip ──────────────────────────────────────────────────────────────
+//
+// Below the breakpoint the table has always folded into a card of eight labelled lines, and a
+// card of eight lines is 234px: two and a half sessions fill a phone, and a fleet of eight is
+// four screens of scrolling to answer "is anything waiting on me". The map next door already
+// says a session in one line — `ctx 41% · Fable 5 · max` — and the card now says it the same
+// way. Two lines: who and in what state, then the numbers. Nothing is dropped; the labels that
+// go are the ones whose values wear their own name, a `$`, a `%`, the name of a model.
+//
+// It is CSS and nothing else. The markup a desktop reads, and every JSON surface, is untouched.
+
+/** The `order` the phone gives each column's value, keyed by the column's name. */
+function stripOrder(): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [, raw, declarations] of PHONE().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const order = /(?:^|;)\s*order\s*:\s*(-?\d+)/.exec(declarations)?.[1];
+    if (order === undefined) continue;
+    for (const selector of raw.slice(raw.lastIndexOf('}') + 1).split(',')) {
+      const label = /td\[data-label="([^"]+)"\]/.exec(selector)?.[1];
+      if (label !== undefined) out.set(label, Number(order));
+    }
+  }
+  return out;
+}
+
+/** The columns `renderRow` actually emits, in the order it emits them. */
+const columns = (): string[] =>
+  [...renderPage(fleet(), 'table').matchAll(/<td data-label="([^"]+)"/g)].map((m) => m[1]);
+
+test('a session on a phone is a row that wraps, not a stack of labelled lines', () => {
+  assert.match(PHONE(), /(?:^|\s)tr\s*\{[^}]*display:\s*flex/);
+  assert.match(PHONE(), /(?:^|\s)tr\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(PHONE(), /td\s*\{[^}]*display:\s*contents/, 'the cell steps out of the way of its value');
+});
+
+// Two lines, and exactly two: the break is a zero-height item wedged between the state and the
+// first number, so the first three values share a line whatever they are and the numbers start
+// a new one. Without it the row is a paragraph of values that reflows differently per session,
+// and a column of cards whose second line starts in a different place each time is unreadable.
+test('the strip breaks after the state, so the numbers always start a line of their own', () => {
+  const rule = /(?:^|\s)tr::after\s*\{([^}]*)\}/.exec(PHONE())?.[1];
+  assert.ok(rule, 'no line break in the strip');
+  assert.match(rule, /flex-basis:\s*100%/);
+  assert.match(rule, /height:\s*0/, 'a break, not a gap');
+  const order = Number(/(?:^|;)\s*order\s*:\s*(-?\d+)/.exec(rule)![1]);
+  const by = stripOrder();
+  assert.ok(by.get('State')! < order, 'the state is on the first line');
+  assert.ok(by.get('Context')! > order, 'and the numbers below it');
+});
+
+// Nothing is dropped. The claim the old layout made by printing every column's name is now made
+// by placing every column's value, so the check is the same one: every cell the table renders
+// has a place in the strip. Read off the markup rather than typed out here — a ninth column
+// added to `renderRow` and forgotten in the sheet lands on this line.
+test('every column the table renders has a place in the strip', () => {
+  const by = stripOrder();
+  for (const label of columns()) {
+    assert.ok(by.has(label), `${label} has no place on the phone`);
+  }
+});
+
+// The red line the map is held to, applied here: what a reader meets going through the markup
+// is what a reader meets going down the screen. `order` is used to insert a line break, never
+// to move one value past another.
+test('the strip prints the columns in the order the markup emits them', () => {
+  const by = stripOrder();
+  const placed = columns().map((label) => by.get(label)!);
+  for (let i = 1; i < placed.length; i++) {
+    assert.ok(placed[i] > placed[i - 1], `${columns()[i]} is drawn before ${columns()[i - 1]}`);
+  }
+});
+
+// A number with no name is a number that means nothing: `65%` under a prompt reads as how much
+// of the prompt is done, which is the mistake the map's own strip already had to fix. The
+// values that shed a label are the ones whose value says what it is — a `$`, a model's name —
+// and the two that do not get one back in the strip's own words.
+test('the values that shed their column name wear one of their own', () => {
+  assert.match(PHONE(), /td\[data-label="Context"\] \.v::before\s*\{[^}]*content:\s*'ctx '/);
+  assert.match(PHONE(), /td\[data-label="Uptime"\] \.v::before\s*\{[^}]*content:\s*'· up '/);
+});
+
+// The old layout printed the column names with `content:attr(data-label)`. That rule is gone,
+// and the attribute is not: it is what the strip hangs every one of its rules on, and it is
+// what `GET /` still carries for anything reading the markup.
+test('the column names leave the screen and stay in the markup', () => {
+  assert.doesNotMatch(sheet(), /content:\s*attr\(data-label\)/);
+  for (const label of columns()) {
+    assert.match(renderPage(fleet(), 'table'), new RegExp(`data-label="${label}"`), label);
+  }
+});
+
+// ── a name with no length limit ──────────────────────────────────────────────────────────
+//
+// A background session is named after its prompt, so the `Session` column holds a sentence
+// nobody capped. On a strip that shares its line with two other values, the honest answer is
+// to wrap it: an ellipsis is a width, and the manual's promise is that a long name costs a
+// width and never a scroll bar. The page is content-box below this breakpoint and `.wrap`
+// gives up its `overflow-x`, so a single line that refuses to break takes the whole document
+// sideways — a fleet you can no longer read the left edge of.
+const AGENT = 'sweep the flaky specs in the checkout suite and report what is really failing';
+
+test('a prompt with no length limit wraps rather than taking the page sideways', () => {
+  const decls = /td\[data-label="Session"\] \.v\s*\{([^}]*)\}/.exec(PHONE())?.[1];
+  assert.ok(decls, 'the session value has no rule of its own on a phone');
+  assert.match(decls, /white-space:\s*normal/, 'the desktop nowrap is given back');
+  assert.match(decls, /overflow-wrap:\s*anywhere/, 'and a word longer than the phone breaks');
+  assert.match(decls, /min-width:\s*0/, 'so the flex item may be narrower than its text');
+});
+
+// The state travels in a pill with a border round it, and the reason a session is waiting is
+// free text: `permission prompt` fits, a sentence does not. Left `nowrap` it is one unbreakable
+// item on the strip's first line, which is the same scroll bar by another road.
+test('the reason a session is waiting wraps inside its pill rather than past the phone', () => {
+  assert.match(PHONE(), /\.pill\s*\{[^}]*white-space:\s*normal/);
+  assert.match(
+    renderPage(fleet([row({ busy: null, status: 'waiting', waitingFor: 'permission prompt' })]), 'table'),
+    /waiting · permission prompt/,
+    'and the reason is printed in full, not abbreviated to fit',
+  );
+});
+
+// The red line under all of it: a background session's name is its PROMPT, and a prompt drawn
+// as the heading of a card is a dashboard announcing what its agents were told to do, in the
+// largest type on the page. The project leads the strip and carries the weight; the name
+// travels beside it in the grey the page uses for secondary facts.
+test("a background session's prompt is never promoted to the strip's title", () => {
+  const project = /td\[data-label="Project"\] \.v\s*\{([^}]*)\}/.exec(PHONE())![1];
+  const session = /td\[data-label="Session"\] \.v\s*\{([^}]*)\}/.exec(PHONE())![1];
+  assert.match(project, /font-weight:\s*[6-9]\d\d/, 'the project is the one that leads');
+  assert.doesNotMatch(session, /font-weight:\s*[6-9]\d\d/, 'and the prompt never outweighs it');
+  assert.match(session, /color:\s*var\(--dim\)/);
+  const html = renderPage(fleet([row({ kind: 'background', name: AGENT })]), 'table');
+  assert.match(html, new RegExp(`data-label="Session"[^>]*><span class="v">${AGENT}`), 'still printed in full');
+});

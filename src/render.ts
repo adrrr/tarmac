@@ -970,11 +970,30 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
          padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
     body.replaying .replay .covers { display:none; }
     .wrap { overflow-x:visible; }
-    table, tbody, tr, td { display:block; }
+    table, tbody { display:block; }
     table { min-width:0; }
     thead { display:none; }
-    tr { border:1px solid var(--line); border-left-width:3px; border-radius:8px;
-         padding:.35rem .7rem; margin-bottom:.6rem; }
+    /* The card stops being eight labelled lines and becomes the strip the map already speaks.
+       Eight lines is 234px of phone: two and a half sessions fill the screen, and "is anything
+       waiting on me" costs four screens of scrolling. Two lines instead — who and in what
+       state, then the numbers, "ctx 65% · Opus 5 · medium · $20.79 · up 15h", which is the
+       line a docked agent has always printed on the map next door.
+
+       Nothing is dropped. The labels that go are the ones whose values wear their own name: a
+       "$", "%", a model, a state that is a word. The two that do not get one back below, in
+       the strip's own words rather than as a column heading.
+
+       The cell steps out of the layout entirely, with display:contents, so the row is the flex
+       container and every VALUE is one of its items. Anything else puts a box between the row
+       and the thing being placed, and the order below would have nothing to order. */
+    tr { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:.4rem; row-gap:.05rem;
+         border:1px solid var(--line); border-left-width:3px; border-radius:8px;
+         padding:.5rem .75rem .55rem; margin-bottom:.55rem; }
+    td { display:contents; }
+    /* The line break, as an item: zero-height, full-width, wedged between the state and the
+       first number. Without it the strip is a paragraph that reflows per session, and a column
+       of cards whose second line starts somewhere different each time cannot be scanned. */
+    tr::after { content:''; order:4; flex-basis:100%; height:0; }
     tr[data-state="busy"] { border-left-color:var(--busy); }
     tr[data-state="waiting"] { border-left-color:var(--wait); }
     tr[data-state="unknown"] { border-left-color:var(--warn); }
@@ -996,11 +1015,35 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        away. It spans the row instead, like the cells below it. The berth docks its own strips
        full width at every size, so what this rule is left covering is the REPLAY's flat grid. */
     .node[data-role="agent"] { grid-column:1 / -1; }
-    td, td:first-child { border:0; padding:.2rem 0; white-space:normal;
-         display:flex; justify-content:space-between; align-items:baseline; gap:1rem; }
-    td::before { content:attr(data-label); color:var(--dim); font-size:.72rem; font-weight:600;
-         text-transform:uppercase; letter-spacing:.06em; flex:none; }
-    .v { text-align:right; }
+    /* Line one: who, and in what state. The project leads and carries the weight; the session
+       name travels beside it in the page's grey. That order is deliberate and it is a red line
+       — a background session is NAMED AFTER ITS PROMPT, and a prompt set as the heading of a
+       card is a dashboard announcing what its agents were told to do, in the largest type on
+       the page. It also has no length limit, so it is the one value here allowed to wrap: the
+       page is content-box at this width and .wrap has given up its overflow-x, so a line
+       that refuses to break takes the whole document sideways. */
+    td[data-label="Project"] .v { order:1; font-weight:600; }
+    td[data-label="Session"] .v { order:2; flex:1 1 0; min-width:0; color:var(--dim);
+         white-space:normal; overflow-wrap:anywhere; }
+    td[data-label="State"] .v { order:3; margin-left:auto; }
+    /* The reason a session is waiting is free text: "permission prompt" fits on a phone and a
+       sentence does not. Held nowrap, the pill is one unbreakable item on that first line,
+       which is the same scroll bar by the other road. It wraps inside its own border instead. */
+    .pill { white-space:normal; }
+    /* Line two: the numbers, each wearing a name of its own. "65%" alone under a line of prompt
+       reads as how much of the prompt is done, which is the mistake the map's strip already had
+       to fix; "$20.79" and "Opus 5" say what they are without help. */
+    td[data-label="Context"] .v, td[data-label="Model"] .v, td[data-label="Effort"] .v,
+    td[data-label="Cost"] .v, td[data-label="Uptime"] .v { font-size:.82rem; }
+    td[data-label="Context"] .v { order:5; font-variant-numeric:tabular-nums; font-weight:600; }
+    td[data-label="Context"] .v::before { content:'ctx '; color:var(--dim); font-weight:400; }
+    td[data-label="Model"] .v { order:6; }
+    td[data-label="Effort"] .v { order:7; color:var(--dim); }
+    td[data-label="Cost"] .v { order:8; font-variant-numeric:tabular-nums; }
+    td[data-label="Uptime"] .v { order:9; color:var(--dim); font-variant-numeric:tabular-nums; }
+    td[data-label="Model"] .v::before, td[data-label="Effort"] .v::before,
+    td[data-label="Cost"] .v::before { content:'· '; color:var(--dim); font-weight:400; }
+    td[data-label="Uptime"] .v::before { content:'· up '; color:var(--dim); font-weight:400; }
     .bar { display:none; }
   }
 </style>

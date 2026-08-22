@@ -276,7 +276,15 @@ test('the cards of a berth come before its strips, in the markup as on the scree
     ]),
   );
   assert.ok(html.indexOf('harbor-3f') < html.indexOf('sweep-01'), 'the card first, whatever order they arrived in');
-  assert.doesNotMatch(mapCss(), /(?:^|;|\{)\s*order\s*:/, 'and nothing in the sheet moves one past the other');
+  // `order` moves a flex item past its siblings, and nothing this view draws may be moved. It
+  // is scoped to those elements rather than refused across the whole sheet, because the table's
+  // phone strip declares it too — to wedge a line break between the state and the first number,
+  // never to reorder, which `phone-view` pins against the columns `renderRow` emits.
+  for (const [, raw, declarations] of mapCss().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/(?:^|;)\s*order\s*:/.test(declarations)) continue;
+    const selector = raw.slice(raw.lastIndexOf('}') + 1).trim();
+    assert.doesNotMatch(selector, /\.map\b|\.berth|\.node\b|\.strip\b/, `${selector} moves a node past its siblings`);
+  }
   assert.doesNotMatch(mapCss(), /flex-direction:\s*\w+-reverse/);
   // `wrap-reverse` reverses the ROWS: the berths keep their order along each line and the
   // lines stack upwards, so the fleet's first frame ends up at the bottom of the page.

@@ -525,9 +525,12 @@ never invisible.
 after what they were asked to do, and tarmac carries the name as it came: onto the node, into
 the table's `Session` column, and verbatim into `GET /api/fleet` and `list --json`. A
 screenshot of a real fleet is therefore a screenshot of what its agents were told. A long name
-is ellipsised on a node to fit its column, which is a width, not a redaction: the whole string
-is still in the markup and in both JSON surfaces, and the first half of a prompt is usually
-the half that gives it away. Worth knowing before the screen, or the payload, goes anywhere.
+is ellipsised on a node to fit its column, and wrapped rather than ellipsised in the table's
+phone strip, where it has a line to itself and nothing to be cut to; both are widths, not
+redactions. The whole string is still in the markup and in both JSON surfaces, and the first
+half of a prompt is usually the half that gives it away. What neither does is push the page
+sideways: a name with no length limit costs lines, never a horizontal scroll bar. Worth knowing
+before the screen, or the payload, goes anywhere.
 The one surface it never reaches is the retained record. See
 [what the serve remembers](#what-the-serve-remembers).
 
@@ -589,13 +592,25 @@ What the *serve* remembers, and hands the scrubber, is below.
 
 ### On a phone
 
-The dashboard is read on a phone as often as on a laptop, and two things change under about
-46rem. The summary line drops its ISO stamp, which is the widest thing on it and says what the
-header already says in words; the stamp stays in the markup, so a wide window and anything
-reading the HTML still get the exact second. And while a replay is running, the scrubber pins
-to the bottom of the viewport, so the hand on the handle and the dials the handle moves are on
-screen together; the sentence saying what the record covers steps aside for the duration and
-comes back when the drag stops.
+The dashboard is read on a phone as often as on a laptop, and three things change under about
+46rem.
+
+The table stops being a stack of labelled lines and becomes a two-line strip per session: who
+and in what state, then `ctx 65% · Opus 5 · medium · $20.79 · up 15h`. That second line is the
+one the map has always printed under a docked agent, and it is the whole reason the fold is
+affordable — the labels that go are the ones whose values wear their own name, a `$`, a `%`, a
+model, a state that is a word. Nothing is dropped and nothing moves: the columns appear in the
+order `renderRow` emits them, and every `data-label` a desktop reads is still on the cell. A
+session costs about 63px instead of 234, so a fleet of eight fits a screen and the waiting one
+at the top of the sort is visible without scrolling.
+
+The summary line drops its ISO stamp, which is the widest thing on it and says what the header
+already says in words; the stamp stays in the markup, so a wide window and anything reading the
+HTML still get the exact second.
+
+And while a replay is running, the scrubber pins to the bottom of the viewport, so the hand on
+the handle and the dials the handle moves are on screen together; the sentence saying what the
+record covers steps aside for the duration and comes back when the drag stops.
 
 Independently of width, wherever the pointer is coarse, every control on the page carries an
 invisible target of at least 44px: the two tabs, `Play`, and the way back out of a replay. The
