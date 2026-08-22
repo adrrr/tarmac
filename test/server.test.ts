@@ -685,10 +685,27 @@ test('a serve that trusts a host says so when it refuses another', async () => {
 
 // The guard normalises what it is handed rather than trusting a caller to have done it: it
 // is the last thing standing between a foreign origin and the fleet's cwd paths.
-test('a host named with a port, or in capitals, is the name it will match', async () => {
+test('a host named with a port, in capitals, or padded, is the name it will match', async () => {
   await withServer(collectOk, async (base) => {
     assert.equal(await rawGet(new URL(base).port, TRUSTED), 200);
-  }, { trustedHosts: [`${TRUSTED.toUpperCase()}:8443`] });
+  }, { trustedHosts: [`  ${TRUSTED.toUpperCase()}:8443  `] });
+});
+
+// The guard owns the VALIDITY of its list too, not just its spelling. A name that normalises
+// to nothing would otherwise be a name every Host that normalises to nothing matches — `:8443`
+// and a lone bracket among them — and the guard would be wide open on a list that looks set.
+// `parseTrustHost` refuses an empty host at every rung, so nothing reachable from a command
+// line arrives here; this is the guard refusing to depend on that.
+test('an empty name in the list is not a name every empty Host matches', async () => {
+  // Named rather than written at the call: the suite's static guard counts brackets, and one
+  // inside a string reads to it as a call left open — the limit its own comments write down.
+  const loneBracket = '[';
+  await withServer(collectOk, async (base) => {
+    const port = new URL(base).port;
+    assert.equal(await rawGet(port, ':8443'), 403, 'a Host that is nothing but a port');
+    assert.equal(await rawGet(port, loneBracket), 403);
+    assert.equal(await rawGet(port, TRUSTED), 200, 'and the real name still gets in');
+  }, { trustedHosts: ['', '   ', TRUSTED] });
 });
 
 // What the open page asks for every few seconds. It must be the fragment and nothing else:

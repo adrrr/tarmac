@@ -142,14 +142,16 @@ state-by-state table is in [the manual](docs/MANUAL.md#degradation-state-by-stat
 
 ## Configuration
 
-Three numbers are opinions rather than truths, so all three are yours. Everything else is
-deliberately not configurable, and all of it works with no configuration at all.
+Three numbers are opinions rather than truths, so all three are yours, and behind a reverse
+proxy the hosts `serve` answers to are yours as well. Everything else is deliberately not
+configurable, and all of it works with no configuration at all.
 
 | Setting | Flag | Default |
 |---|---|---|
 | freshness threshold | `--stale-after 90s` \| `15m` \| `2h` | `10m` |
 | port | `--port 8080` | `4477` |
 | snapshots dir (read side) | `--snapshots-dir DIR` | the wrapper's frozen path when installed, else the XDG state directory |
+| trusted hosts | `--trust-host HOST`, once per host | none — loopback only |
 
 Each also has an environment variable and a key in `<home>/.claude/tarmac/config.json`.
 Flag beats environment beats config file beats default, settled per setting; `serve` opens by

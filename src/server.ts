@@ -55,7 +55,13 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS,
   // Normalised HERE rather than trusted to arrive that way. This is the last thing between a
   // foreign origin and the fleet, so it owns both sides of its own comparison — the config
   // parser cuts a name the same way, and neither leans on the other having done it.
-  const trusted = new Set(trustedHosts.map((h) => hostName(h.trim()).toLowerCase()));
+  //
+  // The empty one is dropped for the same reason, and it is not tidiness: a name that
+  // normalises to nothing is a name that every Host normalising to nothing matches — `:8443`,
+  // a lone bracket — which would be a guard standing open on a list that looks set. Nothing
+  // reachable from a flag, a variable or a file gets here empty; that is the parser's promise,
+  // and this is the guard not resting on it.
+  const trusted = new Set(trustedHosts.map((h) => hostName(h.trim()).toLowerCase()).filter((h) => h !== ''));
   // Which rule refused, decided once. With hosts named, "loopback hosts only" would read as a
   // flag that never took; with none, this is the sentence it has always been, to the byte. The
   // Host itself is never quoted back: it is the one string on the request the caller wrote.
@@ -305,8 +311,15 @@ function isLoopbackHost(host: string | undefined): boolean {
 }
 
 /**
- * One of the names the reader wrote down, and nothing else — no wildcard is accepted into that
- * list and none is honoured here.
+ * One of the names the reader wrote down, matched whole — never as a prefix, a suffix or a
+ * pattern, and no wildcard is accepted into that list or honoured against a request.
+ *
+ * What is matched is the name `hostName` cuts out, and that cut is the loopback check's, kept
+ * shared rather than tightened: it drops the port, and it drops a leading `[` or a trailing
+ * `]` whether or not they pair. So `[name` and `name]` reach the comparison as `name`, exactly
+ * as `[localhost` has always reached it as `localhost`. Nothing is opened by it — `Host` is a
+ * forbidden header, a browser derives it from the URL, and a client free to type the header is
+ * free to type the name itself — and narrowing it here would change what the default answers.
  *
  * The port is not part of the name on either side: a proxy presents `name:8443` on one setup
  * and a bare `name` on 443, and the port in a `Host` header is chosen by whoever sends it, so

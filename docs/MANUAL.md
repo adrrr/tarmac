@@ -212,9 +212,10 @@ renderers say which of the two they are looking at rather than defaulting to ins
 tarmac serving http://127.0.0.1:4477
 ```
 
-It binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
-marks as coming from another origin, meaning `Sec-Fetch-Site` anything but `same-origin` or
-`none`. Your cwd paths and costs never leave the machine. A client that sends no such header,
+It binds to loopback and refuses any request whose `Host` is not loopback — unless you named
+that host yourself, which is the one way past this and is [below](#putting-it-behind-a-reverse-proxy) —
+or that a browser marks as coming from another origin, meaning `Sec-Fetch-Site` anything but
+`same-origin` or `none`. Your cwd paths and costs never leave the machine. A client that sends no such header,
 curl or a script, is left alone. A busy default port walks up to the next free one and says
 so; a port you chose yourself, by flag, environment or config file, refuses instead, because
 you chose it (see [configuration](#configuration)).
@@ -239,7 +240,11 @@ read as a prefix or a suffix: `--trust-host example.ts.net` admits neither `sub.
 nor `example.ts.net.somewhere-else.com`. The port is not part of the name — a proxy presents
 `:8443` on one setup and nothing at all on 443, and the port in a `Host` header is chosen by
 whoever sends it, so matching on it would refuse half the setups this exists for and bar
-nobody. Case is not part of it either. A value that could never match a `Host` header at all —
+nobody. Case is not part of it either, though the loopback names are left exactly as strict as
+they have always been, so `LOCALHOST` is still refused where `PROXY.EXAMPLE.TS.NET` is served.
+Everything else about the name counts to the character: `example.ts.net.`, with the trailing
+dot a browser keeps when you type one, is a different host from `example.ts.net`, and a host
+you did not name fails closed. A value that could never match a `Host` header at all —
 a wildcard, a URL, an IPv6 literal — stops the run rather than sitting in the list refusing
 everything all day.
 
