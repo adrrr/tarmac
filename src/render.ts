@@ -1049,6 +1049,10 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     td[data-label="Cost"] .v, td[data-label="Uptime"] .v { font-size:.82rem; }
     td[data-label="Context"] .v { order:5; font-variant-numeric:tabular-nums; font-weight:600; }
     td[data-label="Context"] .v::before { content:'ctx '; color:var(--dim); font-weight:400; }
+    /* The weight above is for a percentage. A session with no reading renders this same cell as
+       "— not chained", and in the number's weight a missing measurement reads like a
+       measurement — heavier here than the same words are on the desktop table. */
+    td[data-label="Context"] .v .dim { font-weight:400; }
     td[data-label="Model"] .v { order:6; }
     td[data-label="Effort"] .v { order:7; color:var(--dim); }
     td[data-label="Cost"] .v { order:8; font-variant-numeric:tabular-nums; }

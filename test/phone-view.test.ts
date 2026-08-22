@@ -281,6 +281,19 @@ test('the values that shed their column name wear one of their own', () => {
   assert.match(PHONE(), /td\[data-label="Uptime"\] \.v::before\s*\{[^}]*content:\s*'· up '/);
 });
 
+// The weight on the context value is for a PERCENTAGE. A session with no reading renders the
+// same cell as `— not chained`, and set in the number's weight a missing measurement reads
+// like a measurement — heavier on a phone than the same words are on the desktop table, which
+// is this tool's own promise inverted. The quiet ink the reason already wears takes it back.
+test('a context nobody measured is not set in the weight of a number', () => {
+  assert.match(PHONE(), /td\[data-label="Context"\] \.v \.dim\s*\{[^}]*font-weight:\s*400/);
+  assert.match(
+    renderPage(fleet([row({ ctxState: 'absent', ctxPct: null })]), 'table'),
+    /data-label="Context"[^>]*><span class="v"><span class="dim">—<\/span> <span class="dim">not chained/,
+    'the dash and its reason are the cell, and both are dim',
+  );
+});
+
 // The old layout printed the column names with `content:attr(data-label)`. That rule is gone,
 // and the attribute is not: it is what the strip hangs every one of its rules on, and it is
 // what `GET /` still carries for anything reading the markup.
