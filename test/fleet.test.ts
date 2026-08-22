@@ -443,17 +443,29 @@ test('readings that name the same windows are one account read twice, and nothin
   assert.equal(limits!.readings, 2, 'and it says how many readings stood behind the one shown');
 });
 
-test('a reading that names another window, open at the same time, is counted apart and the window named', () => {
+// One reading disagreeing on BOTH windows, because that is the shape a second account arrives
+// in — a login of its own has a five-hour and a seven-day boundary, and neither is this one's.
+// It is still ONE reading apart: the count is of readings, the windows are a set beside it, and
+// a count that moved with the windows would read as two sessions where there is one.
+test('a reading that names other windows, open at the same time, is one reading apart and each window named', () => {
   const limits = accountLimits(
     [
-      row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17, resets_at: open(600) } } }),
-      row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 61, resets_at: open(8040) } } }),
+      row({
+        snapshotAgeMs: 90_000,
+        rateLimits: { five_hour: { used_percentage: 17, resets_at: open(600) }, seven_day: { used_percentage: 33, resets_at: open(150_000) } },
+      }),
+      row({
+        sessionId: 's2',
+        snapshotAgeMs: 1200,
+        rateLimits: { five_hour: { used_percentage: 61, resets_at: open(8040) }, seven_day: { used_percentage: 42, resets_at: open(300_000) } },
+      }),
     ],
     NOW,
   );
   assert.equal(limits!.rateLimits.five_hour.used_percentage, 61, 'the freshest is still the one shown');
-  assert.equal(limits!.apart, 1);
-  assert.deepEqual(limits!.apartWindows, ['five_hour']);
+  assert.equal(limits!.apart, 1, 'one reading, however many of its windows are elsewhere');
+  assert.equal(limits!.apartWindows.length, 2, 'and both of them are named');
+  assert.deepEqual(limits!.apartWindows, ['five_hour', 'seven_day']);
   assert.equal(limits!.readings, 2);
 });
 
