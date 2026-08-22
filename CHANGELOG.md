@@ -30,18 +30,32 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **A number picked out of readings that disagree says so, on both surfaces.** The account
   arrives once per session, so a fleet holds as many readings as it has snapshots and exactly
-  one of them is drawn: the freshest, which was the right rule and a silent one. What decides
-  whether the others were the same windows is the reset rather than the percentage. `resets_at`
-  is where a window ends, so readings naming the same one are a single allowance seen at
-  several moments — their percentages differing is one number caught at two frames, the
-  ordinary state of a fleet, and warning about it would be a warning on every poll. Readings
-  naming different resets are not one allowance, and both surfaces now report it: `the 5h
-  window is read differently by 1 of 2 readings — the freshest is shown`. Whether that is two
-  accounts or a snapshot from before the window rolled over is published on no surface tarmac
-  reads, so it is counted and never diagnosed. A reading that
-  dates no window is compared with nothing, and a reading nothing can date — a snapshot ahead of
-  the clock that read it, one with no age at all — counts neither as a reading nor as one apart,
-  the same two exclusions under which the winner is picked. (#4)
+  one of them is drawn: the freshest, which was the right rule and a silent one. Two conditions
+  now decide whether the others were the same account, and neither is the percentage — a number
+  that grew between two frames is the ordinary fleet. The first is the reset: `resets_at` is
+  where a window ends, so readings naming the same one are a single allowance seen at several
+  moments. The second is that both windows are still OPEN at the moment the fleet was read: a
+  session that idles keeps the frame it last drew and the five-hour window rolls over four or
+  five times a day, so an overnight snapshot names a window that ended hours ago — one reading
+  being old, which its age and its `!` already say, and without this rule any fleet with a
+  session idle longer than the current window would carry the warning permanently. What is left
+  is what nothing else on either surface can say: `the 5h window is read differently by 1 of 2
+  readings — the freshest is shown`. Whether two windows open at once means two accounts signed
+  in or something stranger is published nowhere tarmac reads, so it is counted and never
+  diagnosed. (#4)
+
+- **The account shown is the freshest reading that measured something, and ties no longer
+  depend on what printed first.** A session that has just started is guaranteed to be the
+  youngest snapshot on the machine, and it is the one likeliest to carry `used_percentage: null`
+  — the documented "no turn yet" shape. Freshest alone let it win and blank an account three
+  other sessions were reporting, `— no reading` said of a fleet that had one; the reading is now
+  the youngest that read a number, falling back to the youngest of all so that a fleet which
+  really measured nothing still says so. Two readings of the same age are settled on the session
+  id, the rule `preferred()` already applies to two snapshot files of one mtime: `rows` is sorted
+  on a key that is not total, so equal-aged readings kept whatever order `claude agents --json`
+  emitted them in, and both the number drawn and the count printed beside it moved with it. And
+  the denominator counts readings that MEASURED the account: `{}`, `[]` and a pair of nulls said
+  nothing, and counting them turned a coin flip into a reassuring "1 of 4". (#4)
 
 ### Changed
 

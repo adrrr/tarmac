@@ -343,5 +343,38 @@ test('readings that name a different window are counted, and the window is named
 test('a fleet whose readings agree says nothing about disagreement', () => {
   const rl = limits();
   const out = renderTable(fleet([row({ rateLimits: rl }), row({ sessionId: 's2', rateLimits: rl, snapshotAgeMs: 90_000 })], { sessions: 2 }));
-  assert.equal(/different .. window/.test(out), false);
+  assert.doesNotMatch(out, /read differently/);
+});
+
+// The fleet this used to warn about every night, and the reason the openness rule exists: a
+// session that idles keeps the frame it last drew, and the five-hour window rolls over four or
+// five times a day. Its snapshot names the window it was taken in, which has ended — a fact
+// the AS OF column and the stale warning already carry between them.
+test('a session whose window rolled over hours ago is old, and is not called a disagreement', () => {
+  const out = renderTable(
+    fleet(
+      [
+        row({ rateLimits: limits(), snapshotAgeMs: 1200 }),
+        row({
+          sessionId: 's2',
+          snapshotAgeMs: 6 * 3600_000,
+          stale: true,
+          rateLimits: limits({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 - 3600 } }),
+        }),
+      ],
+      { sessions: 2, stale: 1 },
+    ),
+  );
+  assert.doesNotMatch(out, /read differently/);
+  assert.match(out, /5h 17%/, 'the freshest is still the account line');
+});
+
+// The sentence qualifies a number. A window the line under it prints as `— schema drift` has no
+// number to qualify, and "the freshest is shown" said of it promises one that is not there.
+test('the split names only a window the account line actually prints a number for', () => {
+  const drifted = { five_hour: { used_percentage: '17%', resets_at: NOW / 1000 + 600 }, seven_day: { used_percentage: 42, resets_at: NOW / 1000 + 300_000 } };
+  const other = { five_hour: { used_percentage: 61, resets_at: NOW / 1000 + 8040 }, seven_day: { used_percentage: 42, resets_at: NOW / 1000 + 300_000 } };
+  const out = renderTable(fleet([row({ rateLimits: drifted, snapshotAgeMs: 1200 }), row({ sessionId: 's2', rateLimits: other, snapshotAgeMs: 90_000 })], { sessions: 2 }));
+  assert.match(out, /5h — schema drift/);
+  assert.doesNotMatch(out, /read differently/);
 });

@@ -215,7 +215,8 @@ export function renderTable({ rows, health }: Fleet): string {
   if (skewed > 0) warns.push(`! ${skewed} reading(s) are dated in the future — ${SKEW}`);
   if (health.unknownStatus > 0) warns.push(`! ${health.unknownStatus} session(s) report an unknown status`);
   const account = accountLimits(rows, health.generatedAt);
-  const split = accountSplit(account);
+  const gauges = readLimits(account === null ? null : account.rateLimits, health.generatedAt);
+  const split = accountSplit(account, gauges);
   if (split) warns.push(`! ${split}`);
   // Last, and never instead of anything above: this one is a heads-up, not a fault.
   const schema = schemaNotice(health.schemaGuard);
@@ -227,7 +228,7 @@ export function renderTable({ rows, health }: Fleet): string {
     [line(head), ...body.map(line)].join('\n') +
     '\n' +
     (warns.length ? '\n' + warns.join('\n') + '\n' : '') +
-    `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n${accountLine(account, health)}\n`
+    `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n${accountLine(gauges, account, health)}\n`
   );
 }
 
@@ -243,12 +244,14 @@ export function renderTable({ rows, health }: Fleet): string {
  * as old as the frame that wrote it, and this one has no column to be dated by. The `!` is the
  * same mark, past the same threshold, explained by the same warning above.
  */
-function accountLine(account: AccountReading | null, health: FleetHealth): string {
-  const windows = readLimits(account === null ? null : account.rateLimits, health.generatedAt)
+function accountLine(gauges: Gauge[], account: AccountReading | null, health: FleetHealth): string {
+  const windows = gauges
     .map((g) => `${g.label} ${g.pct === null ? `— ${LIMIT_WHY[g.why!]}` : `${g.pct}% ${resetWords(g.resetsInMs, '—')}`}`)
     .join(' · ');
-  // Nothing to date when nothing was read: "as of" a reading that does not exist would be the
-  // one lie this line could tell.
+  // A reading is dated; no reading is not. The two states read alike in the windows above —
+  // `— no reading` is what a payload with no rate limits and a fleet with no snapshot at all
+  // both come to — and the age is what tells them apart: a snapshot that said nothing carries
+  // the moment it said it, and a fleet nothing was read for has no such moment to print.
   const as = account === null ? '' : ` · as of ${age(account.ageMs)}${account.ageMs > health.staleAfterMs ? ' !' : ''}`;
   return `account  ${windows}${as}`;
 }
@@ -259,13 +262,20 @@ function accountLine(account: AccountReading | null, health: FleetHealth): strin
  *
  * One warning for both surfaces to be written from: the account is the ONE number here picked
  * out of several that could have been it, and a picked winner presented as the fleet's account
- * is exactly what a fleet spanning two logins would look like. The count is what the reader
- * needs to go and look; which of the two causes it is — another account, or a window that has
- * rolled over since the older frame — is published nowhere tarmac reads, so it is not guessed.
+ * is exactly what a fleet signed into two logins at once would look like. The count is what the
+ * reader needs in order to go and look; WHY two windows were open at the same time is published
+ * nowhere tarmac reads, so it is not guessed.
+ *
+ * Only windows that are drawn as a number, because this sentence qualifies one: a window the
+ * surface prints as `— schema drift` has nothing for "the freshest is shown" to be true of, and
+ * a warning derived from a field the line under it has just called unreadable is a warning about
+ * the wrong thing. When that leaves nothing to name, there is nothing to say.
  */
-function accountSplit(account: AccountReading | null): string | null {
+function accountSplit(account: AccountReading | null, gauges: Gauge[]): string | null {
   if (account === null || account.apart === 0) return null;
-  const labels = LIMIT_WINDOWS.filter((w) => account.apartWindows.includes(w.key)).map((w) => w.label);
+  const drawn = new Set(gauges.filter((g) => g.pct !== null).map((g) => g.key));
+  const labels = LIMIT_WINDOWS.filter((w) => account.apartWindows.includes(w.key) && drawn.has(w.key)).map((w) => w.label);
+  if (labels.length === 0) return null;
   const which = `the ${labels.join(' and ')} window${labels.length === 1 ? '' : 's'}`;
   // Said the long way round on purpose: "1 of 4 readings names" and "2 of 4 readings name" are
   // two sentences, and a count that has to agree with a verb is a count someone will get wrong.
@@ -468,9 +478,8 @@ ${body}
  */
 export function renderLimits({ rows, health }: Fleet): string {
   const account = accountLimits(rows, health.generatedAt);
-  const gauges = readLimits(account === null ? null : account.rateLimits, health.generatedAt)
-    .map(gauge)
-    .join('');
+  const read = readLimits(account === null ? null : account.rateLimits, health.generatedAt);
+  const gauges = read.map(gauge).join('');
   // Dated when the snapshot behind it is past the threshold, exactly as the table dates a stale
   // context. It matters more here than anywhere else on the page: the percentage is as old as
   // that snapshot, while the countdown beside it is recomputed on every five-second re-render —
@@ -486,7 +495,7 @@ export function renderLimits({ rows, health }: Fleet): string {
   // Beside the number rather than in a box below the fleet, because what it qualifies is the
   // number — and it says the whole sentence, since a mark whose reason is elsewhere is a mark
   // the reader cannot argue with.
-  const split = accountSplit(account);
+  const split = accountSplit(account, read);
   return (
     gauges +
     (stale ? `<span class="stale">! ${esc(asOfAge(account!.ageMs))} ago</span>` : '') +

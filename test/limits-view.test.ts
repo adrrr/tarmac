@@ -228,7 +228,17 @@ test('readings that name the same windows are the ordinary fleet, and go unremar
 // The mark is a warning, in the same ink as the one that dates a stale reading: what it says
 // is that the number beside it may not be the account this fleet is spending from.
 test('the mark carries the warning weight, rather than reading as chrome', () => {
-  const html = headerOf(twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 } }));
-  assert.match(html, /class="mixed"/);
-  assert.match(renderPage(fleet()), /\.stale, \.mixed \{/, 'the two marks share one rule, so neither can lose its hue alone');
+  assert.match(headerOf(twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 } })), /class="mixed"/);
+});
+
+// Read out of the stylesheet rather than grepped in it: `/\.stale, \.mixed \{/` was a literal,
+// so writing the same rule as `.mixed, .stale {` turned it red while changing nothing at all.
+// What has to hold is that whatever colours one mark colours the other, in the warning hue.
+test('both marks take their hue from one rule, so neither can lose it alone', () => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(renderPage(fleet()))![1].replace(/\/\*[\s\S]*?\*\//g, '');
+  const colouring = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, , d]) => /(^|;)\s*color\s*:/.test(d));
+  const mixed = colouring.filter(([, sel]) => /(^|,)\s*\.mixed\b/.test(sel));
+  assert.equal(mixed.length, 1, 'exactly one rule colours the mark');
+  assert.match(mixed[0][1], /(^|,)\s*\.stale\b/, 'and it is the rule that colours the stale mark too');
+  assert.match(mixed[0][2], /color\s*:\s*var\(--warn\)/, 'in the warning hue, not one of its own');
 });

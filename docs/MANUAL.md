@@ -34,7 +34,7 @@ the field moved. It never turns a measurement it could not take into a confident
 | a cost key that is absent | `—` for the row, and a total qualified by how many sessions really report one |
 | no snapshot carrying the account's rate limits | `— no reading` in both windows, on the page a dotted rail, never a window at 0% |
 | a rate-limit reset nowhere near the reading that carried it | `reset —`; the percentage stands, the impossible countdown does not |
-| snapshots that name different rate-limit resets | the freshest, and how many of them describe some other window — never a winner picked in silence |
+| snapshots naming two rate-limit windows open at once | the freshest, and how many readings describe the other one — never a winner picked in silence |
 | a Claude Code version no fixture covers | a footnote naming that version. Nothing blocked, nothing hidden |
 
 That last line is the smoke detector to the rest's alarm. The fields above were *observed*
@@ -294,11 +294,15 @@ so often is, is 1970. Both used to render with a straight face (`resets in 19656
 percentage stands; the countdown becomes `reset —`.
 
 The limits belong to the account, and they arrive per session, so several sessions can carry
-the same number at different ages. The freshest reading wins, which is the rule the
-fleet model already applies to everything else, and a snapshot dated *after* the clock that
-read it is refused rather than believed (see [staying open](#staying-open)). Which reading was
-drawn is dated, so a stale winner says so — but the age cannot say whether the readings behind
-it were about the same windows, and one of them is picked either way.
+the same number at different ages. The freshest reading that **measured** something wins: a
+session that has just started is the youngest snapshot on the machine and the likeliest to
+carry a window whose number has not been taken yet, and letting it win blanked an account three
+other sessions were reporting. A snapshot dated *after* the clock that read it is refused
+rather than believed (see [staying open](#staying-open)), and two readings of the same age are
+settled on the session id rather than on the order `claude agents --json` printed them in, so
+the same fleet reads the same way on two machines. Which reading was drawn is dated — but the
+age cannot say whether the readings behind it were about the same windows, and one of them is
+picked either way.
 
 That is the second thing both surfaces report:
 
@@ -306,14 +310,23 @@ That is the second thing both surfaces report:
 ! the 5h window is read differently by 1 of 2 readings — the freshest is shown
 ```
 
-What decides it is the reset, not the percentage. `resets_at` is where a window *ends*, so two
-readings naming the same one are one allowance seen at two moments — a percentage that grew
-between two frames is the ordinary fleet, and warning about it would be a warning on every
-poll. Two that name different resets are not: either the sessions are signed into different
-accounts, or the older snapshot describes a window that has since rolled over. Which of the two
-is not published on any surface tarmac reads, so it is not guessed — the counts are shown and
-the reader goes and looks. A reading that dates no window at all is compared with nothing:
-an absent boundary is not a different one.
+Two rules decide it, and neither is the percentage. The first is the reset: `resets_at` is
+where a window *ends*, so two readings naming the same one are one allowance seen at two
+moments — a percentage that grew between two frames is the ordinary fleet, and warning about it
+would be a warning on every poll. The second is that both windows must still be **open** at the
+moment the fleet was read. A session that idles keeps the frame it last drew and the five-hour
+window rolls over four or five times a day, so an overnight snapshot names the window it was
+taken in, which ended hours ago; that is one reading being old, which its own age and its `!`
+already say. Without this rule any fleet with a session idle longer than the current window
+would carry the warning permanently.
+
+What survives both is what nothing else here can say: two windows open at the same time, which
+one allowance cannot have. Whether that is two accounts signed in at once or something stranger
+is published on no surface tarmac reads, so it is counted and never diagnosed. A reading that
+dates no window is compared with nothing — an absent boundary is not a different one — and the
+count is of readings that measured the account, so a payload carrying `{}`, `[]` or a pair of
+nulls is not in the denominator. The sentence names only a window whose number is printed: one
+shown as `— schema drift` has nothing for "the freshest is shown" to be true of.
 
 What is missing is said, never guessed. No snapshot carrying rate limits at all is
 `— no reading`, on the page a dotted rail, the same dotted emptiness an unmeasured dial wears.
@@ -325,10 +338,13 @@ sentence tarmac must not say about an account: *you have room*.
 The reading is dated, like every other reading here. The percentage is exactly as old as the
 snapshot it came from, while the countdown beside it is recomputed on every five-second
 re-render. An undated pair would put a frozen number next to a visibly moving one and let both
-read as now. In the terminal the age is always printed, as the AS OF column prints one, with
-the `!` of a reading past the freshness threshold: `as of 40m !`. On the page, where a fresh
-reading is not dated anywhere, only a stale one is: `! 40m ago`. Once for the two either way,
-because both windows come out of the same snapshot.
+read as now. In the terminal every reading is dated, as the AS OF column dates one, with the
+`!` of a reading past the freshness threshold: `as of 40m !`. A fleet no snapshot carried rate
+limits for has no reading and therefore no age — that is the one case with nothing after the
+two windows, and it is what tells it apart from a snapshot that carried a window whose number
+had not been taken yet. On the page, where a fresh reading is not dated anywhere, only a stale
+one is: `! 40m ago`. Once for the two either way, because both windows come out of the same
+snapshot.
 
 On replay the gauges come down from the header and sit with the fleet they belong to, under
 the banner that dates it: the account of that minute, not of this one. Their reset is counted
