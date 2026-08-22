@@ -27,7 +27,7 @@ const USAGE = `tarmac — fleet observability for Claude Code
                     [--claude-bin PATH] [--json] [--watch]
         one-shot fleet table — with --watch, redrawn every 5s until ^C
   tarmac serve      [--home DIR] [--port N] [--stale-after D] [--snapshots-dir DIR]
-                    [--claude-bin PATH]
+                    [--claude-bin PATH] [--trust-host HOST]
         local dashboard
   tarmac install    [--home DIR] [--yes]
         chain the statusline
@@ -45,11 +45,15 @@ const USAGE = `tarmac — fleet observability for Claude Code
                    (default: $XDG_STATE_HOME/tarmac/snapshots, or
                    <home>/.local/state/tarmac/snapshots)
   --claude-bin     path to the claude CLI (default: claude)
+  --trust-host     a Host the dashboard also answers to, besides loopback — repeat it
+                   once per host (default: none). For a reverse proxy: give the name
+                   your browser shows, without the port, and remember that whoever can
+                   reach that name can read this fleet
 
-  Those three settings can also be set, in decreasing order of precedence, by the
-  environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR) and by
-  <home>/.claude/tarmac/config.json ({"staleAfterMs": …, "port": …, "snapshotsDir": …}).
-  \`serve\` prints which one won.
+  Those four settings can also be set, in decreasing order of precedence, by the
+  environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR, TARMAC_TRUST_HOST)
+  and by <home>/.claude/tarmac/config.json ({"staleAfterMs": …, "port": …,
+  "snapshotsDir": …, "trustHosts": […]}). \`serve\` prints which one won.
 `;
 
 try {
@@ -135,6 +139,7 @@ try {
 
       const server = createFleetServer({
         collect: () => collectFleet({ claudeBin: args.claudeBin, snapshotsDir, staleAfterMs, snapshotsDirSource: config.snapshotsDir.source, installed: frozen !== null }),
+        trustedHosts: config.trustHosts.value,
       });
       // A port nobody chose is not worth failing over: this walks past a busy 4477 and says
       // where it landed. A port that WAS chosen refuses instead, and the refusal leaves
