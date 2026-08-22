@@ -1736,11 +1736,12 @@ function pageScript(view: View): string {
 function renderRow(r: FleetRow): string {
   const state = stateOf(r);
   const word = stateLabel(state, r);
-  // `data-label` is not decoration: below ~46rem the columns stack, the header row is gone,
-  // and a value whose column has no name is a bare "—" that could mean anything.
-  // Every cell holds exactly ONE element. Stacked on a phone the label sits left and the
-  // value right, and two sibling nodes in one cell get pushed to opposite ends of the card —
-  // which is how "63%" once ended up stranded in the middle of a row, under the wrong label.
+  // `data-label` is not decoration, and no longer for the reason it was: below ~46rem nothing
+  // draws the column names at all, and what the attribute does instead is CARRY THE LAYOUT —
+  // every rule in the narrow block selects `td[data-label="…"] .v`, which is where the strip's
+  // order, its `ctx ` and `· ` prefixes and its wrapping all come from. One element per cell for
+  // the same reason: `td` is `display:contents` there, so the `.v` is the ROW's flex item, and a
+  // second sibling in one cell would be a second item placed on an `order` of its own.
   return `<tr data-state="${state}">
     <td data-label="Project" class="project"><span class="v">${esc(r.project)}</span></td>
     <td data-label="Session" class="dim"><span class="v">${esc(r.name)}</span></td>
