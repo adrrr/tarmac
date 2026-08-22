@@ -312,10 +312,12 @@ export function accountLimits(rows: FleetRow[]): AccountReading | null {
   let freshest = readings[0];
   for (const r of readings) if (r.ageMs < freshest.ageMs) freshest = r;
 
+  // Every reading, the shown one included: it is compared with itself, which is the one
+  // comparison that can never come back apart. Skipping it explicitly was a line no test could
+  // ever have killed.
   const apartWindows = new Set<string>();
   let apart = 0;
   for (const r of readings) {
-    if (r === freshest) continue;
     const windows = windowsApart(freshest.rateLimits, r.rateLimits);
     if (windows.length === 0) continue;
     apart += 1;
