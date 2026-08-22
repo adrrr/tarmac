@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderSettings, renderTable } from '../src/render.ts';
 import { guardVersions } from '../src/schema.ts';
-import { health, row } from './fleet-fixtures.ts';
+import { health, row, NOW } from './fleet-fixtures.ts';
 import type { Fleet, FleetHealth, FleetRow } from '../src/fleet.ts';
 
 const fleet = (rows: FleetRow[], h: Partial<FleetHealth> = {}): Fleet => ({ rows, health: health(h) });
@@ -269,4 +269,112 @@ test('says when two snapshot files claimed the same session', () => {
 
 test('stays quiet about duplicates when there are none', () => {
   assert.equal(/freshest/.test(renderTable(fleet([row()], { snapshotsDuplicates: 0 }))), false);
+});
+
+// ── the account's two windows ───────────────────────────────────────────────────────────
+//
+// The one pair of numbers in `list` that is not about a session: every session in the table
+// spends from the same five-hour and seven-day allowance, so it is printed once under the
+// fleet rather than in a column beside each row. The rules are the page's, in the terminal's
+// words — a window nobody read is never 0%, and the reading carries the age of the snapshot it
+// came from, exactly like the AS OF column above it.
+
+/** An account read a moment ago: 17% of five hours, 42% of seven days. */
+const limits = (over: Record<string, any> = {}): Record<string, any> => ({
+  five_hour: { used_percentage: 17, resets_at: NOW / 1000 + 8040 },
+  seven_day: { used_percentage: 42, resets_at: NOW / 1000 + 300_000 },
+  ...over,
+});
+
+test('prints the account line under the fleet, with both windows and what is left of each', () => {
+  const out = renderTable(fleet([row({ rateLimits: limits() })]));
+  assert.match(out, /account +5h 17% resets in 2h 14m · 7d 42% resets in 3d 11h/);
+});
+
+test('the account is said once for the fleet, not once per session', () => {
+  const rl = limits();
+  const out = renderTable(fleet([row({ rateLimits: rl }), row({ sessionId: 's2', rateLimits: rl })], { sessions: 2 }));
+  assert.equal((out.match(/5h 17%/g) ?? []).length, 1);
+});
+
+// The rule the AS OF column follows, one line down: the percentage is as old as the snapshot
+// that carried it, and a fleet where every terminal idles is a fleet of yesterday's numbers.
+test('the account reading carries the age of the snapshot it came from', () => {
+  assert.match(renderTable(fleet([row({ rateLimits: limits(), snapshotAgeMs: 120_000 })])), /as of 2m$/m);
+});
+
+test('an account reading past the freshness threshold wears the same mark the rows do', () => {
+  const out = renderTable(fleet([row({ rateLimits: limits(), snapshotAgeMs: 40 * 60_000, stale: true })], { stale: 1 }));
+  assert.match(out, /as of 40m !$/m);
+});
+
+// This project's cardinal sin, in the terminal: a fleet whose snapshots carry no rate limits
+// has not told us the account is empty.
+test('a fleet with no rate limits says so in both windows, and never prints 0%', () => {
+  const out = renderTable(fleet([row()]));
+  assert.match(out, /account +5h — no reading · 7d — no reading/);
+  assert.equal(/0%/.test(out), false);
+});
+
+test('a window whose shape moved says drift, and the other one is still printed', () => {
+  const out = renderTable(fleet([row({ rateLimits: { five_hour: { used_percentage: '17%' }, seven_day: { used_percentage: 42 } } })]));
+  assert.match(out, /5h — schema drift/);
+  assert.match(out, /7d 42%/);
+});
+
+// The half of this the freshest-wins rule cannot answer on its own. Two sessions naming
+// different resets are not one allowance read twice, and the number printed is one of them —
+// so the line says how many readings it speaks for instead of presenting a picked winner as
+// the account.
+test('readings that name a different window are counted, and the window is named', () => {
+  const out = renderTable(
+    fleet(
+      [
+        row({ rateLimits: limits({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 } }), snapshotAgeMs: 90_000 }),
+        row({ sessionId: 's2', rateLimits: limits(), snapshotAgeMs: 1200 }),
+      ],
+      { sessions: 2 },
+    ),
+  );
+  assert.match(out, /! the 5h window is read differently by 1 of 2 readings — the freshest is shown/);
+  assert.match(out, /5h 17%/, 'the freshest is still printed — there is nothing better to print');
+});
+
+test('a fleet whose readings agree says nothing about disagreement', () => {
+  const rl = limits();
+  const out = renderTable(fleet([row({ rateLimits: rl }), row({ sessionId: 's2', rateLimits: rl, snapshotAgeMs: 90_000 })], { sessions: 2 }));
+  assert.doesNotMatch(out, /read differently/);
+});
+
+// The fleet this used to warn about every night, and the reason the openness rule exists: a
+// session that idles keeps the frame it last drew, and the five-hour window rolls over four or
+// five times a day. Its snapshot names the window it was taken in, which has ended — a fact
+// the AS OF column and the stale warning already carry between them.
+test('a session whose window rolled over hours ago is old, and is not called a disagreement', () => {
+  const out = renderTable(
+    fleet(
+      [
+        row({ rateLimits: limits(), snapshotAgeMs: 1200 }),
+        row({
+          sessionId: 's2',
+          snapshotAgeMs: 6 * 3600_000,
+          stale: true,
+          rateLimits: limits({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 - 3600 } }),
+        }),
+      ],
+      { sessions: 2, stale: 1 },
+    ),
+  );
+  assert.doesNotMatch(out, /read differently/);
+  assert.match(out, /5h 17%/, 'the freshest is still the account line');
+});
+
+// The sentence qualifies a number. A window the line under it prints as `— schema drift` has no
+// number to qualify, and "the freshest is shown" said of it promises one that is not there.
+test('the split names only a window the account line actually prints a number for', () => {
+  const drifted = { five_hour: { used_percentage: '17%', resets_at: NOW / 1000 + 600 }, seven_day: { used_percentage: 42, resets_at: NOW / 1000 + 300_000 } };
+  const other = { five_hour: { used_percentage: 61, resets_at: NOW / 1000 + 8040 }, seven_day: { used_percentage: 42, resets_at: NOW / 1000 + 300_000 } };
+  const out = renderTable(fleet([row({ rateLimits: drifted, snapshotAgeMs: 1200 }), row({ sessionId: 's2', rateLimits: other, snapshotAgeMs: 90_000 })], { sessions: 2 }));
+  assert.match(out, /5h — schema drift/);
+  assert.doesNotMatch(out, /read differently/);
 });

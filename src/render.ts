@@ -15,7 +15,7 @@ import { schemaNotice } from './schema.ts';
 import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
 import type { Gauge, LimitWhy } from './limits.ts';
 import { accountLimits, busyOnStaleFleet } from './fleet.ts';
-import type { Fleet, FleetHealth, FleetRow } from './fleet.ts';
+import type { AccountReading, Fleet, FleetHealth, FleetRow } from './fleet.ts';
 import type { Plan, UninstallMode, UninstallPlan } from './install.ts';
 
 /**
@@ -214,6 +214,10 @@ export function renderTable({ rows, health }: Fleet): string {
   const skewed = rows.filter(ahead).length;
   if (skewed > 0) warns.push(`! ${skewed} reading(s) are dated in the future — ${SKEW}`);
   if (health.unknownStatus > 0) warns.push(`! ${health.unknownStatus} session(s) report an unknown status`);
+  const account = accountLimits(rows, health.generatedAt);
+  const gauges = readLimits(account === null ? null : account.rateLimits, health.generatedAt);
+  const split = accountSplit(account, gauges);
+  if (split) warns.push(`! ${split}`);
   // Last, and never instead of anything above: this one is a heads-up, not a fault.
   const schema = schemaNotice(health.schemaGuard);
   if (schema) warns.push(`! ${schema}`);
@@ -224,8 +228,58 @@ export function renderTable({ rows, health }: Fleet): string {
     [line(head), ...body.map(line)].join('\n') +
     '\n' +
     (warns.length ? '\n' + warns.join('\n') + '\n' : '') +
-    `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n`
+    `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n${accountLine(gauges, account, health)}\n`
   );
+}
+
+/**
+ * The account's two windows, under the fleet rather than in a column.
+ *
+ * They are the one pair of numbers in this table that is not about a session: every row above
+ * spends from the same five-hour and seven-day allowance, so a column of them would be the
+ * same two numbers printed once per session. Under the totals, where the other fleet-wide
+ * facts are.
+ *
+ * Dated like every reading here, and always: the AS OF column exists because a percentage is
+ * as old as the frame that wrote it, and this one has no column to be dated by. The `!` is the
+ * same mark, past the same threshold, explained by the same warning above.
+ */
+function accountLine(gauges: Gauge[], account: AccountReading | null, health: FleetHealth): string {
+  const windows = gauges
+    .map((g) => `${g.label} ${g.pct === null ? `— ${LIMIT_WHY[g.why!]}` : `${g.pct}% ${resetWords(g.resetsInMs, '—')}`}`)
+    .join(' · ');
+  // A reading is dated; no reading is not. The two states read alike in the windows above —
+  // `— no reading` is what a payload with no rate limits and a fleet with no snapshot at all
+  // both come to — and the age is what tells them apart: a snapshot that said nothing carries
+  // the moment it said it, and a fleet nothing was read for has no such moment to print.
+  const as = account === null ? '' : ` · as of ${age(account.ageMs)}${account.ageMs > health.staleAfterMs ? ' !' : ''}`;
+  return `account  ${windows}${as}`;
+}
+
+/**
+ * What to say when the readings behind that line are not all about the same windows, and
+ * `null` on the ordinary fleet, where they are.
+ *
+ * One warning for both surfaces to be written from: the account is the ONE number here picked
+ * out of several that could have been it, and a picked winner presented as the fleet's account
+ * is exactly what a fleet signed into two logins at once would look like. The count is what the
+ * reader needs in order to go and look; WHY two windows were open at the same time is published
+ * nowhere tarmac reads, so it is not guessed.
+ *
+ * Only windows that are drawn as a number, because this sentence qualifies one: a window the
+ * surface prints as `— schema drift` has nothing for "the freshest is shown" to be true of, and
+ * a warning derived from a field the line under it has just called unreadable is a warning about
+ * the wrong thing. When that leaves nothing to name, there is nothing to say.
+ */
+function accountSplit(account: AccountReading | null, gauges: Gauge[]): string | null {
+  if (account === null || account.apart === 0) return null;
+  const drawn = new Set(gauges.filter((g) => g.pct !== null).map((g) => g.key));
+  const labels = LIMIT_WINDOWS.filter((w) => account.apartWindows.includes(w.key) && drawn.has(w.key)).map((w) => w.label);
+  if (labels.length === 0) return null;
+  const which = `the ${labels.join(' and ')} window${labels.length === 1 ? '' : 's'}`;
+  // Said the long way round on purpose: "1 of 4 readings names" and "2 of 4 readings name" are
+  // two sentences, and a count that has to agree with a verb is a count someone will get wrong.
+  return `${which} ${labels.length === 1 ? 'is' : 'are'} read differently by ${account.apart} of ${account.readings} readings — the freshest is shown`;
 }
 
 /**
@@ -423,10 +477,9 @@ ${body}
  * alone would be as old as the tab.
  */
 export function renderLimits({ rows, health }: Fleet): string {
-  const account = accountLimits(rows);
-  const gauges = readLimits(account === null ? null : account.rateLimits, health.generatedAt)
-    .map(gauge)
-    .join('');
+  const account = accountLimits(rows, health.generatedAt);
+  const read = readLimits(account === null ? null : account.rateLimits, health.generatedAt);
+  const gauges = read.map(gauge).join('');
   // Dated when the snapshot behind it is past the threshold, exactly as the table dates a stale
   // context. It matters more here than anywhere else on the page: the percentage is as old as
   // that snapshot, while the countdown beside it is recomputed on every five-second re-render —
@@ -437,7 +490,17 @@ export function renderLimits({ rows, health }: Fleet): string {
   // fact said twice is noise. The replay has no equivalent — the ring keeps each reading and
   // never how old it was, which is why nothing replayed on this page is dated.
   const stale = account !== null && account.ageMs > health.staleAfterMs;
-  return gauges + (stale ? `<span class="stale">! ${esc(asOfAge(account!.ageMs))} ago</span>` : '');
+  // The other thing that can be wrong with this pair, and the one the age cannot say: the
+  // number was picked out of several readings, and they were not all about the same window.
+  // Beside the number rather than in a box below the fleet, because what it qualifies is the
+  // number — and it says the whole sentence, since a mark whose reason is elsewhere is a mark
+  // the reader cannot argue with.
+  const split = accountSplit(account, read);
+  return (
+    gauges +
+    (stale ? `<span class="stale">! ${esc(asOfAge(account!.ageMs))} ago</span>` : '') +
+    (split === null ? '' : `<span class="mixed">! ${esc(split)}</span>`)
+  );
 }
 
 /**
@@ -457,7 +520,7 @@ function gauge(g: Gauge): string {
   return (
     `<div class="gauge"><span class="lbl" aria-hidden="true">${g.label}</span><span class="sr">${g.said}</span>` +
     `${rail}<span class="num">${g.pct === null ? dash() : `${g.pct}%`}</span>` +
-    `<span class="reset">${g.pct === null ? LIMIT_WHY[g.why!] : resetWords(g.resetsInMs)}</span></div>`
+    `<span class="reset">${g.pct === null ? LIMIT_WHY[g.why!] : resetWords(g.resetsInMs, dash())}</span></div>`
   );
 }
 
@@ -471,8 +534,8 @@ const LIMIT_WHY: Record<LimitWhy, string> = { absent: 'no reading', drift: 'sche
  * after the reading that reported it, so the percentage beside these words belongs to a window
  * that no longer exists. Saying that is the whole point of showing a reset at all.
  */
-const resetWords = (ms: number | null): string =>
-  ms === null ? `reset ${dash()}` : ms > 0 ? `resets in ${left(ms)}` : `reset was due ${left(-ms)} ago`;
+const resetWords = (ms: number | null, none: string): string =>
+  ms === null ? `reset ${none}` : ms > 0 ? `resets in ${left(ms)}` : `reset was due ${left(-ms)} ago`;
 
 /**
  * How long, in the two units that matter at each scale. Deliberately finer than `duration()`
@@ -589,7 +652,10 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      reading, the payload shapes nobody has captured yet. It reads as chrome to someone
      scanning their sessions and as an answer to someone who came looking for it. */
   .note { color:var(--dim); font-size:.75rem; line-height:1.5; margin:.9rem 0 0; max-width:95ch; }
-  .stale { color:var(--warn); font-weight:600; }
+  /* Two marks, one weight: a reading that has gone cold, and a reading picked out of several
+     that were not about the same window. Both say the number beside them may not be what the
+     reader takes it for, so neither may end up quieter than the other. */
+  .stale, .mixed { color:var(--warn); font-weight:600; }
   .wrap { overflow-x:auto; }
   table { border-collapse:collapse; width:100%; min-width:44rem; }
   th { text-align:left; font-weight:600; font-size:.75rem; text-transform:uppercase; letter-spacing:.06em;
