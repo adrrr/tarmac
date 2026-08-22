@@ -350,15 +350,22 @@ test('reports nothing reporting when no session is covered at all', () => {
 
 // ── the account, out of sessions that disagree about it ─────────────────────────────────
 //
-// One account, read at whatever moment each session last drew a frame — so the rows do not
-// carry contradicting numbers, they carry the same number at different ages, and the youngest
-// is the one still true. Two readers depend on this rule now: the ring, which samples it every
-// minute, and the header gauges, which draw it.
+// One account, read at whatever moment each session last drew a frame — so the rows usually do
+// not carry contradicting numbers, they carry the same number at different ages, and the
+// youngest is the one still true. Three readers depend on this rule: the ring, which samples it
+// every minute, the header gauges, and the line under `tarmac list`.
+
+/** A window still open at the fleet's clock, so nothing here is judged as rolled over. */
+const open = (secondsOut: number): number => NOW / 1000 + secondsOut;
+
 test('the account limits are the freshest reading that carried them', () => {
-  const limits = accountLimits([
-    row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17 } } }),
-    row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 42 } } }),
-  ]);
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17 } } }),
+      row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 42 } } }),
+    ],
+    NOW,
+  );
   assert.equal(limits!.rateLimits.five_hour.used_percentage, 42);
   assert.equal(limits!.ageMs, 1200, 'and it carries the age of the reading it came from');
 });
@@ -367,75 +374,156 @@ test('the account limits are the freshest reading that carried them', () => {
 // it (an NTP correction, a mount running ahead) is not the youngest reading, and letting it
 // win would misreport the account's limits for as long as the skew lasts.
 test('a snapshot dated in the future does not get to be the freshest reading', () => {
-  const limits = accountLimits([
-    row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3 } } }),
-    row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91 } } }),
-  ]);
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3 } } }),
+      row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91 } } }),
+    ],
+    NOW,
+  );
   assert.equal(limits!.rateLimits.five_hour.used_percentage, 91);
 });
 
 test('a fleet whose snapshots carry no rate limits reports the account as absent, never as zero', () => {
-  assert.equal(accountLimits([row(), row({ sessionId: 's2' })]), null);
+  assert.equal(accountLimits([row(), row({ sessionId: 's2' })], NOW), null);
 });
 
 // An undated reading is not a young one. A row with no snapshot at all has no age to be
 // judged by, and it carries no limits either — but the pair must not be reachable.
 test('a row with no snapshot age cannot be the freshest reading', () => {
-  const limits = accountLimits([
-    row({ snapshotAgeMs: null, rateLimits: { five_hour: { used_percentage: 5 } } }),
-    row({ sessionId: 's2', snapshotAgeMs: 60_000, rateLimits: { five_hour: { used_percentage: 88 } } }),
-  ]);
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: null, rateLimits: { five_hour: { used_percentage: 5 } } }),
+      row({ sessionId: 's2', snapshotAgeMs: 60_000, rateLimits: { five_hour: { used_percentage: 88 } } }),
+    ],
+    NOW,
+  );
   assert.equal(limits!.rateLimits.five_hour.used_percentage, 88);
+});
+
+// Freshest AND measured, in that order — a session that has just started is guaranteed to be
+// the youngest snapshot on the machine, and it is the one most likely to carry a window whose
+// number has not been taken yet. Letting it win blanked an account three other sessions were
+// reporting: "no reading" said of a fleet that had one.
+test('a fresher reading that measured nothing does not blank an account the fleet did read', () => {
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: 500, rateLimits: { five_hour: { used_percentage: null }, seven_day: { used_percentage: null } } }),
+      row({ sessionId: 's2', snapshotAgeMs: 60_000, rateLimits: { five_hour: { used_percentage: 88 } } }),
+    ],
+    NOW,
+  );
+  assert.equal(limits!.rateLimits.five_hour.used_percentage, 88);
+  assert.equal(limits!.ageMs, 60_000, 'and it is dated as the reading it really is');
+});
+
+test('a fleet where nothing was measured still reports its freshest reading, so the surfaces can say so', () => {
+  const limits = accountLimits([row({ snapshotAgeMs: 500, rateLimits: { five_hour: { used_percentage: null } } })], NOW);
+  assert.equal(limits!.readings, 0, 'nothing measured the account');
+  assert.equal(limits!.ageMs, 500);
 });
 
 // Which reading was drawn is half the story; the other half is whether the ones behind it
 // were about the same windows. A percentage that moved between two frames is not a
-// disagreement — a reset epoch that differs is, and it is the shape both a different account
-// and a rolled-over window arrive in. Silently keeping the youngest was this function's whole
-// contract, and it is what the header would have gone on doing over two accounts.
+// disagreement — a window open at the same time as another one is, and it is the shape both a
+// second account and a clock nobody can explain arrive in. Silently keeping the youngest was
+// this function's whole contract, and it is what the header would have gone on doing over two
+// accounts.
 test('readings that name the same windows are one account read twice, and nothing is apart', () => {
   const rl = (pct: number): Record<string, any> => ({
-    five_hour: { used_percentage: pct, resets_at: 1786212000 },
-    seven_day: { used_percentage: 42, resets_at: 1786500000 },
+    five_hour: { used_percentage: pct, resets_at: open(8040) },
+    seven_day: { used_percentage: 42, resets_at: open(300_000) },
   });
-  const limits = accountLimits([
-    row({ snapshotAgeMs: 90_000, rateLimits: rl(17) }),
-    row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: rl(61) }),
-  ]);
+  const limits = accountLimits(
+    [row({ snapshotAgeMs: 90_000, rateLimits: rl(17) }), row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: rl(61) })],
+    NOW,
+  );
   assert.equal(limits!.apart, 0);
   assert.deepEqual(limits!.apartWindows, []);
   assert.equal(limits!.readings, 2, 'and it says how many readings stood behind the one shown');
 });
 
-test('a reading that names another window is counted apart, and the window is named', () => {
-  const limits = accountLimits([
-    row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17, resets_at: 1786230000 } } }),
-    row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 61, resets_at: 1786212000 } } }),
-  ]);
+test('a reading that names another window, open at the same time, is counted apart and the window named', () => {
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17, resets_at: open(600) } } }),
+      row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 61, resets_at: open(8040) } } }),
+    ],
+    NOW,
+  );
   assert.equal(limits!.rateLimits.five_hour.used_percentage, 61, 'the freshest is still the one shown');
   assert.equal(limits!.apart, 1);
   assert.deepEqual(limits!.apartWindows, ['five_hour']);
   assert.equal(limits!.readings, 2);
 });
 
+// The fleet shape this must stay quiet on, or it is a warning every night: a session that has
+// not drawn a frame since before the window rolled over carries the window it was taken in.
+test('a reading whose window has rolled over is not counted apart, however far behind it is', () => {
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: 6 * 3600_000, rateLimits: { five_hour: { used_percentage: 91, resets_at: open(-3600) } } }),
+      row({ sessionId: 's2', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 12, resets_at: open(8040) } } }),
+    ],
+    NOW,
+  );
+  assert.equal(limits!.apart, 0);
+  assert.equal(limits!.readings, 2, 'it is still a reading, and still counted as one');
+});
+
 // One window named differently by two sessions is one fact, not two — the count is of
 // READINGS, and the windows they are apart on are a set.
 test('two readings apart on one window are two readings, and the window is said once', () => {
-  const other = { five_hour: { used_percentage: 17, resets_at: 1786230000 } };
-  const limits = accountLimits([
-    row({ snapshotAgeMs: 90_000, rateLimits: other }),
-    row({ sessionId: 's2', snapshotAgeMs: 80_000, rateLimits: other }),
-    row({ sessionId: 's3', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 61, resets_at: 1786212000 } } }),
-  ]);
+  const other = { five_hour: { used_percentage: 17, resets_at: open(600) } };
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: 90_000, rateLimits: other }),
+      row({ sessionId: 's2', snapshotAgeMs: 80_000, rateLimits: other }),
+      row({ sessionId: 's3', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 61, resets_at: open(8040) } } }),
+    ],
+    NOW,
+  );
   assert.equal(limits!.apart, 2);
   assert.deepEqual(limits!.apartWindows, ['five_hour']);
   assert.equal(limits!.readings, 3);
 });
 
-// The reading shown is one of the readings. A fleet of one session is not a fleet with
-// nothing behind its number, and "0 of 1" is not what the surfaces should have to say.
+// The denominator is what it says it is: how many readings measured the account. A payload
+// carrying `[]`, `{}` or a pair of nulls measured nothing, and counting it turns "1 of 2
+// readings disagree" — a coin flip — into a reassuring "1 of 4".
+test('readings that measured nothing are not in the count the surfaces publish', () => {
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: 90_000, rateLimits: { five_hour: { used_percentage: 17, resets_at: open(600) } } }),
+      row({ sessionId: 's2', snapshotAgeMs: 50_000, rateLimits: {} }),
+      row({ sessionId: 's3', snapshotAgeMs: 40_000, rateLimits: [] as any }),
+      row({ sessionId: 's4', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 61, resets_at: open(8040) } } }),
+    ],
+    NOW,
+  );
+  assert.equal(limits!.readings, 2);
+  assert.equal(limits!.apart, 1);
+});
+
+// The tie `snapshots.ts` already refuses to leave to chance one module over: two files of the
+// same age had their order decided by whatever `claude agents --json` printed first, and BOTH
+// the number drawn and the count published moved with it.
+test('two readings of the same age settle the same way, whichever order the sessions arrive in', () => {
+  const rows = [
+    row({ sessionId: 'aaa', snapshotAgeMs: 5000, rateLimits: { five_hour: { used_percentage: 12, resets_at: open(600) } } }),
+    row({ sessionId: 'bbb', snapshotAgeMs: 5000, rateLimits: { five_hour: { used_percentage: 88, resets_at: open(8040) } } }),
+    row({ sessionId: 'ccc', snapshotAgeMs: 5000, rateLimits: { five_hour: { used_percentage: 50, resets_at: open(4000) } } }),
+  ];
+  const forwards = accountLimits(rows, NOW);
+  const backwards = accountLimits([...rows].reverse(), NOW);
+  assert.equal(forwards!.rateLimits.five_hour.used_percentage, backwards!.rateLimits.five_hour.used_percentage);
+  assert.equal(forwards!.apart, backwards!.apart);
+});
+
+// A measured window is a measured window: `why` exists to name a missing number, and a page
+// that reads it without checking `pct` first must not find a word there.
 test('a lone reading counts itself, and is apart from nothing', () => {
-  const limits = accountLimits([row({ snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 17, resets_at: 1786212000 } } })]);
+  const limits = accountLimits([row({ snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 17, resets_at: open(600) } } })], NOW);
   assert.equal(limits!.readings, 1);
   assert.equal(limits!.apart, 0);
 });
@@ -444,11 +532,14 @@ test('a lone reading counts itself, and is apart from nothing', () => {
 // read it, or one with no age at all, cannot win on freshness — so it cannot lose on
 // disagreement either, or the page would count a reading it refuses to date.
 test('readings nothing can date are counted neither among the readings nor among the apart', () => {
-  const limits = accountLimits([
-    row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3, resets_at: 1786230000 } } }),
-    row({ sessionId: 's2', snapshotAgeMs: null, rateLimits: { five_hour: { used_percentage: 5, resets_at: 1786240000 } } }),
-    row({ sessionId: 's3', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91, resets_at: 1786212000 } } }),
-  ]);
+  const limits = accountLimits(
+    [
+      row({ snapshotAgeMs: -600_000, rateLimits: { five_hour: { used_percentage: 3, resets_at: open(600) } } }),
+      row({ sessionId: 's2', snapshotAgeMs: null, rateLimits: { five_hour: { used_percentage: 5, resets_at: open(700) } } }),
+      row({ sessionId: 's3', snapshotAgeMs: 1200, rateLimits: { five_hour: { used_percentage: 91, resets_at: open(8040) } } }),
+    ],
+    NOW,
+  );
   assert.equal(limits!.readings, 1);
   assert.equal(limits!.apart, 0);
 });

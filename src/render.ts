@@ -214,7 +214,7 @@ export function renderTable({ rows, health }: Fleet): string {
   const skewed = rows.filter(ahead).length;
   if (skewed > 0) warns.push(`! ${skewed} reading(s) are dated in the future — ${SKEW}`);
   if (health.unknownStatus > 0) warns.push(`! ${health.unknownStatus} session(s) report an unknown status`);
-  const account = accountLimits(rows);
+  const account = accountLimits(rows, health.generatedAt);
   const split = accountSplit(account);
   if (split) warns.push(`! ${split}`);
   // Last, and never instead of anything above: this one is a heads-up, not a fault.
@@ -467,7 +467,7 @@ ${body}
  * alone would be as old as the tab.
  */
 export function renderLimits({ rows, health }: Fleet): string {
-  const account = accountLimits(rows);
+  const account = accountLimits(rows, health.generatedAt);
   const gauges = readLimits(account === null ? null : account.rateLimits, health.generatedAt)
     .map(gauge)
     .join('');

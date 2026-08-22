@@ -160,6 +160,6 @@ function sampleOf({ rows, health }: Fleet): HistorySample {
       costUsd: r.costUsd,
     })),
     // The reading, without its age: the ring keeps each reading and never how old it was.
-    rateLimits: accountLimits(rows)?.rateLimits ?? null,
+    rateLimits: accountLimits(rows, health.generatedAt)?.rateLimits ?? null,
   };
 }
