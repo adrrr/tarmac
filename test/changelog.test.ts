@@ -170,8 +170,10 @@ function taggedReleases(): { tag: string; version: string }[] {
  * The walk runs to the LONGER of the two, so a section that was simply truncated parts company
  * where the shorter one ends — `undefined` against a line, reported as `(section ends)`. There
  * is therefore no "same, only shorter" case for the loop to fall through on, whatever the older
- * message below used to claim: what reaches the last line is two sections that are equal, and
- * every caller has already ruled that out before asking.
+ * message below used to claim. The fall-through line itself is NOT unreachable: `assert.ok`
+ * evaluates its message before it looks at its condition, so it runs once per tag on every
+ * green run. It is simply never shown — the only caller that displays it has already found
+ * the two sections different.
  */
 function firstDifference(tagged: string, current: string): string {
   const a = tagged.split('\n');
@@ -318,7 +320,7 @@ test('CI fetches the tags the guards above read', () => {
 // so a line number that points at the wrong place sends them through fifty lines of prose by
 // hand — and a truncated section is the case where that is easiest to get wrong: walking to the
 // SHORTER of the two finds no difference at all and reports the two as parting company nowhere.
-test('the first difference names the line, and a section that stops early ends there', () => {
+test('the first difference names the line, a section that stops early ends there, and identical sections say so', () => {
   const tagged = '## [9.9.9] — 2026-01-01\n- a bullet\n- another';
 
   assert.match(firstDifference(tagged, '## [9.9.9] — 2026-01-01\n- a BULLET\n- another'), /^line 2\n/);
@@ -328,4 +330,8 @@ test('the first difference names the line, and a section that stops early ends t
   assert.match(lost, /^line 3\n/);
   assert.match(lost, /current: \(section ends\)/);
   assert.match(firstDifference('## [9.9.9] — 2026-01-01\n- a bullet', tagged), /tagged: {2}\(section ends\)/);
+
+  // The fall-through wording is live code — built once per tag on every green run — so pin it:
+  // a rewrite that made it read like a findable difference would misdirect the first failure's reader.
+  assert.equal(firstDifference(tagged, tagged), '(no differing line — the sections are identical)');
 });
