@@ -74,8 +74,24 @@ function cssOutsideMedia(css: string = sheet()): string {
 // one does not, through an overlay that only exists where the pointer is coarse.
 
 const REM = 16;
-/** `body`'s own `font:14px/1.5` — the ratio every line box on this page is laid out with. */
-const LINE_HEIGHT = 1.5;
+/**
+ * The line-height a control's own line box is laid out with — named per control rather than
+ * assumed, because `body`'s `font:14px/1.5` is not the whole story. The way out of a replay is a
+ * button inside `<div class="warn replaying-note">`, and `.warn` sets 1.45: Chrome lays that
+ * button's line box out at 17.4px against the 19.2 a flat 1.5 predicts. Small, and the wrong
+ * direction to be wrong in, since it is the tightest of the three targets to begin with.
+ *
+ * The whole sheet's minimum would be 1.2, from `.why` inside a dial, which no control inherits —
+ * a model wrong in the safe direction is still a model that fails a page that is fine.
+ */
+function lineHeight(selector: string): number {
+  const css = sheet();
+  if (selector !== '.replaying-note button') return Number(/font:\s*\d+px\/([\d.]+)/.exec(css)![1]);
+  // Only if the button really is inside one: the markup and the sheet have to agree, or this
+  // number is read off a rule that stopped applying.
+  assert.match(renderPage(fleet(), 'map'), /<div class="warn replaying-note"/, 'the note is still a .warn');
+  return Number(declaredEverywhere('.warn', 'line-height', css).at(-1)!);
+}
 
 const px = (value: string): number =>
   value.endsWith('rem') ? parseFloat(value) * REM : parseFloat(value);
@@ -107,7 +123,7 @@ function tapHeight(selector: string): number {
   const padding = shorthandY(declaredEverywhere(selector, 'padding', plain).at(-1)!);
   const coarse = atMedia('(pointer: coarse)');
   const inset = shorthandY(declaredEverywhere(`${selector}::after`, 'inset', coarse).at(-1)!);
-  return fontSize * LINE_HEIGHT + 2 * padding + 2 * Math.abs(inset);
+  return fontSize * lineHeight(selector) + 2 * padding + 2 * Math.abs(inset);
 }
 
 const CONTROLS = ['nav a', '.replay button', '.replaying-note button'];
@@ -169,8 +185,14 @@ test('the coarse-pointer block adds targets and moves nothing that is drawn', ()
     }
     assert.match(declarations, /(?:^|;)\s*content:\s*''/, `${selectors.join(', ')} generates no box at all`);
     assert.match(declarations, /(?:^|;)\s*position:\s*absolute/, `${selectors.join(', ')} is not laid over its control`);
-    assert.doesNotMatch(declarations, /pointer-events\s*:\s*none|display\s*:\s*none|visibility\s*:\s*hidden/,
-      `${selectors.join(', ')} builds a target nothing can tap`);
+    // A whitelist, because a denylist of ways to be invisible is a list somebody adds to. These
+    // three build the target and nothing else builds anything: `background:red` paints a slab
+    // over every control on the page and `z-index:-1` puts the target behind its own control,
+    // and both walked past a list of `pointer-events`, `display` and `visibility`.
+    for (const [, prop] of declarations.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)) {
+      assert.ok(['content', 'position', 'inset'].includes(prop),
+        `${selectors.join(', ')} declares ${prop}, which is not part of building a target`);
+    }
   }
   assert.ok(rules > 0, 'the block this is about was found at all');
 });
@@ -296,6 +318,11 @@ test('a session on a phone is a row that wraps, not a stack of labelled lines', 
   assert.match(tr, /column-gap:\s*[.\d]/, 'the values would touch');
   assert.match(tr, /row-gap:\s*[.\d]/, 'the two lines would set their own spacing');
   assert.match(tr, /align-items:\s*baseline/, 'the second line is smaller type and would float');
+  // The axis, said out loud: `flex-direction:column` stacks the values back into eight lines and
+  // undoes the whole change while every assertion above still reads true.
+  for (const value of declaredEverywhere('tr', 'flex-direction', PHONE())) {
+    assert.equal(value, 'row', 'the strip is a row');
+  }
   assert.match(PHONE(), /td\s*\{[^}]*display:\s*contents/, 'the cell steps out of the way of its value');
 });
 
@@ -306,6 +333,7 @@ test('a session on a phone is a row that wraps, not a stack of labelled lines', 
 test('the strip breaks after the state, so the numbers always start a line of their own', () => {
   const rule = /(?:^|\s)tr::after\s*\{([^}]*)\}/.exec(PHONE())?.[1];
   assert.ok(rule, 'no line break in the strip');
+  assert.match(rule, /content:\s*''/, 'a pseudo with no content is never generated');
   assert.match(rule, /flex-basis:\s*100%/);
   assert.match(rule, /height:\s*0/, 'a break, not a gap');
   const order = Number(/(?:^|;)\s*order\s*:\s*(-?\d+)/.exec(rule)![1]);
@@ -317,7 +345,8 @@ test('the strip breaks after the state, so the numbers always start a line of th
 // Nothing is dropped. The claim the old layout made by printing every column's name is now made
 // by placing every column's value, so the check is the same one: every cell the table renders
 // has a place in the strip. Read off the markup rather than typed out here — a ninth column
-// added to `renderRow` and forgotten in the sheet lands on this line.
+// added to `renderRow` and forgotten in the sheet lands on this line, which is only true
+// because the cell it is read from is required to carry a `data-label` (next test down).
 test('every column the table renders has a place in the strip', () => {
   const by = stripOrder();
   for (const label of columns()) {
@@ -325,9 +354,38 @@ test('every column the table renders has a place in the strip', () => {
   }
 });
 
+// A place is not the same as being on the screen, and the check above cannot tell the two apart:
+// `td[data-label="Context"] { display:none }` takes the whole context reading off every phone and
+// leaves its `order` declaration exactly where it was. So the block is scanned for anything that
+// hides part of a session, whatever spelling it arrives in.
+//
+// Two exemptions, both named here rather than pattern-matched: `thead`, whose column names the
+// strip replaces, and `.bar`, the magnitude rail beside the percentage, which is a second way of
+// saying a number the strip still prints.
+test('nothing in the phone block takes a value off the screen', () => {
+  for (const [, raw, declarations] of PHONE().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/display:\s*none|visibility:\s*hidden|opacity:\s*0(?!\.)/.test(declarations)) continue;
+    const selector = raw.slice(raw.lastIndexOf('}') + 1).trim();
+    if (!/\btable\b|\btbody\b|\btr\b|\btd\b|\.v\b|\.pill\b/.test(selector)) continue;
+    assert.match(selector, /^thead$|\.bar$/, `${selector} hides part of a session`);
+  }
+  // And the rail is still hidden, which is what makes it an exemption rather than an oversight.
+  assert.match(PHONE(), /\.bar\s*\{[^}]*display:\s*none/);
+});
+
 // The red line the map is held to, applied here: what a reader meets going through the markup
 // is what a reader meets going down the screen. `order` is used to insert a line break, never
 // to move one value past another.
+// `columns()` reads `data-label`, so a cell without one is invisible to every check above it —
+// and to the strip, which hangs all of its rules on that attribute. Such a cell would take the
+// default `order: 0` and draw its value ahead of the project, at full size, with no name.
+test('every cell the table renders carries the attribute the strip hangs on', () => {
+  const html = renderPage(fleet(), 'table');
+  const rows = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>'));
+  assert.equal((rows.match(/<td\b/g) ?? []).length, (rows.match(/data-label="/g) ?? []).length);
+  assert.ok(columns().length >= 8, 'and the columns were found at all');
+});
+
 test('the strip prints the columns in the order the markup emits them', () => {
   const by = stripOrder();
   const placed = columns().map((label) => by.get(label)!);
