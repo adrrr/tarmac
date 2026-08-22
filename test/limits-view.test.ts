@@ -216,8 +216,8 @@ test('the replayed account is drawn with the replayed fleet, under the banner th
 
 test('the header says when the readings behind it are not all about the same window', () => {
   const html = headerOf(twoReadings({ five_hour: { used_percentage: 91, resets_at: NOW / 1000 + 60 }, seven_day: { used_percentage: 42, resets_at: NOW / 1000 + 300_000 } }));
-  assert.match(html, /the 5h window is read differently by 1 of the 2 snapshots that carry rate limits/);
-  assert.match(html, /the freshest is the one shown/, 'and what the number beside it therefore is');
+  assert.match(html, /the 5h window is read differently by 1 of 2 readings/);
+  assert.match(html, /the freshest is shown/, 'and what the number beside it therefore is');
   assert.match(html, /17%/, 'which is still drawn — there is nothing better to draw');
 });
 

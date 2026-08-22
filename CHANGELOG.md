@@ -35,10 +35,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   is where a window ends, so readings naming the same one are a single allowance seen at
   several moments — their percentages differing is one number caught at two frames, the
   ordinary state of a fleet, and warning about it would be a warning on every poll. Readings
-  naming different resets are not one allowance, and both surfaces now report it: `the 5h window
-  is read differently by 1 of the 2 snapshots that carry rate limits — the freshest is the one
-  shown`. Whether that is two accounts or a snapshot from before the window rolled over is
-  published on no surface tarmac reads, so it is counted and never diagnosed. A reading that
+  naming different resets are not one allowance, and both surfaces now report it: `the 5h
+  window is read differently by 1 of 2 readings — the freshest is shown`. Whether that is two
+  accounts or a snapshot from before the window rolled over is published on no surface tarmac
+  reads, so it is counted and never diagnosed. A reading that
   dates no window is compared with nothing, and a reading nothing can date — a snapshot ahead of
   the clock that read it, one with no age at all — counts neither as a reading nor as one apart,
   the same two exclusions under which the winner is picked. (#4)

@@ -303,7 +303,7 @@ it were about the same windows, and one of them is picked either way.
 That is the second thing both surfaces report:
 
 ```
-! the 5h window is read differently by 1 of the 2 snapshots that carry rate limits — the freshest is the one shown
+! the 5h window is read differently by 1 of 2 readings — the freshest is shown
 ```
 
 What decides it is the reset, not the percentage. `resets_at` is where a window *ends*, so two

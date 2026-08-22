@@ -336,7 +336,7 @@ test('readings that name a different window are counted, and the window is named
       { sessions: 2 },
     ),
   );
-  assert.match(out, /! the 5h window is read differently by 1 of the 2 snapshots that carry rate limits — the freshest is the one shown/);
+  assert.match(out, /! the 5h window is read differently by 1 of 2 readings — the freshest is shown/);
   assert.match(out, /5h 17%/, 'the freshest is still printed — there is nothing better to print');
 });
 

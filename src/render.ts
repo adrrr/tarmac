@@ -267,7 +267,9 @@ function accountSplit(account: AccountReading | null): string | null {
   if (account === null || account.apart === 0) return null;
   const labels = LIMIT_WINDOWS.filter((w) => account.apartWindows.includes(w.key)).map((w) => w.label);
   const which = `the ${labels.join(' and ')} window${labels.length === 1 ? '' : 's'}`;
-  return `${which} ${labels.length === 1 ? 'is' : 'are'} read differently by ${account.apart} of the ${account.readings} snapshots that carry rate limits — the freshest is the one shown`;
+  // Said the long way round on purpose: "1 of 4 readings names" and "2 of 4 readings name" are
+  // two sentences, and a count that has to agree with a verb is a count someone will get wrong.
+  return `${which} ${labels.length === 1 ? 'is' : 'are'} read differently by ${account.apart} of ${account.readings} readings — the freshest is shown`;
 }
 
 /**
