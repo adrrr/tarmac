@@ -155,10 +155,36 @@ export function rawGet(
   extra: Record<string, string> = {},
   timeoutMs = NET_DEADLINE_MS,
 ): Promise<number | undefined> {
+  return rawGetText(port, host, path, extra, timeoutMs).then((answer) => answer.status);
+}
+
+/** What such a request came back with, when the words of the answer are the subject. */
+export interface RawAnswer {
+  status: number | undefined;
+  body: string;
+}
+
+/**
+ * The same request, kept whole. `rawGet` is the common case and stays the short spelling; a
+ * refusal whose WORDS are what a test is about — the Host guard's, which has to be the same
+ * sentence it always was — needs the body, and one implementation is what keeps the deadline
+ * above from being written twice and bounded once.
+ */
+export function rawGetText(
+  port: string,
+  host: string,
+  path = '/api/fleet',
+  extra: Record<string, string> = {},
+  timeoutMs = NET_DEADLINE_MS,
+): Promise<RawAnswer> {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path, headers: { Host: host, ...extra }, timeout: timeoutMs }, (res) => {
-      res.resume();
-      resolve(res.statusCode);
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      res.on('end', () => resolve({ status: res.statusCode, body }));
     });
     req.on('timeout', () => req.destroy(new Error(`no answer from ${path} in ${timeoutMs}ms`)));
     req.on('error', reject);
