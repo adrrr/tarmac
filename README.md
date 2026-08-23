@@ -45,30 +45,33 @@ atlas              idle   — fresh  8h !   Opus 5   high    $0.00   8h
 account  5h 17% resets in 2h 14m · 7d 42% resets in 3d 11h · as of 7m
 ```
 
-That is the table with the status line chained. The last line is the account's, not any
-session's: every row above spends from the same five-hour and seven-day
-[window](docs/MANUAL.md#the-accounts-two-windows), so it is printed once, dated like every
-other reading here, and `— no reading` rather than `0%` when no snapshot carried one.
+That is the table with the status line chained. The last line belongs to the account, not to
+any one session. Every row above spends from the same five-hour and seven-day
+[window](docs/MANUAL.md#the-accounts-two-windows), so it is printed once. It is dated like
+every other reading here, and it reads `— no reading` rather than `0%` when no snapshot
+carried one.
 
 With nothing installed, the same command still lists every session, its state and its uptime,
-straight from `claude agents --json`. The context column reads `— absent`, model, effort and
-cost fall to `—`, and the line under the table counts how many sessions are covered.
+straight from `claude agents --json`. The context column reads `— absent`. Model, effort and
+cost fall to `—`. The line under the table counts how many sessions are covered.
 
 Node ≥ 20. Zero runtime dependencies: no framework, no bundler, nothing to audit.
 `--help` works everywhere. An option handed to a command that does not read it is an error,
-not something quietly ignored. Every command, flag and route:
+never something quietly ignored. Every command, flag and route is in
 [the manual](docs/MANUAL.md#commands-and-options).
 
 ## The map
 
-`tarmac serve` puts the same fleet in the browser: every session a row, ages that keep
-climbing, and a banner the moment a refresh fails instead of a table quietly going stale. It
-binds to loopback and refuses any request whose `Host` is not loopback, or that a browser
-marks as coming from another origin, so your cwd paths and costs never leave the machine. A
-client that sends no such mark, curl or a script, is left alone. Behind a reverse proxy, which
-presents a `Host` of its own, `--trust-host <name>` names the one to let through and says who
-that lets in: [the manual](docs/MANUAL.md#putting-it-behind-a-reverse-proxy). The listening
-rules: [the manual](docs/MANUAL.md#what-serve-listens-on).
+`tarmac serve` puts the same fleet in the browser. Every session is a row, the ages keep
+climbing, and a banner goes up the moment a refresh fails, so the table never goes stale in
+silence.
+
+It binds to loopback. It refuses any request whose `Host` is not loopback, and any request a
+browser marks as coming from another origin, so your cwd paths and costs never leave the
+machine. A client that sends no such mark, curl or a script, is left alone. A reverse proxy
+presents a `Host` of its own, so `--trust-host <name>` names the one to let through;
+[the manual](docs/MANUAL.md#putting-it-behind-a-reverse-proxy) says who that lets in. The
+listening rules are [there too](docs/MANUAL.md#what-serve-listens-on).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/map-dark.png">
@@ -76,47 +79,47 @@ rules: [the manual](docs/MANUAL.md#what-serve-listens-on).
        alt="The tarmac map, live. Four framed groups, one per working directory and labelled with its project: beacon, holding a session halted on a permission prompt; harbor, holding a session busy with its context arc at 90% and a background agent docked under the cards of that frame as a strip named after its prompt; quay, reporting a status tarmac does not know; and atlas, idle at 36%. A frame says only that its nodes were read in the same directory. Nothing inside one claims that any node dispatched another. The account's five-hour and seven-day gauges sit above them, and one warning above the fleet names the unrecognised status rather than filing it as idle.">
 </picture>
 
-The tab in the header swaps the table for the same fleet as nodes: one per session, the arc
-its context, the shape by the name its state. A background agent has no terminal behind it to
-draw a frame with, so it gets a strip of text rather than a dial that could never fill. Both
+The tab in the header swaps the table for the same fleet drawn as nodes: one per session, the
+arc its context, the shape by the name its state. A background agent has no terminal behind it
+to draw a frame with, so it gets a strip of text rather than a dial that could never fill. Both
 views render the same reading into the same fragment, so they can never disagree.
 
 The nodes are grouped by working directory: a frame per directory, labelled with its project,
-the sessions inside it as cards and the agents docked underneath as strips. That is the whole
-of what the frame claims: these were read in the same directory. It is not a parentage.
-`claude agents --json` publishes nothing that ties an agent to whoever dispatched it, so no
-label, no position and no line inside a frame says one node asked for another. An agent whose
-directory matches no session gets a frame of its own rather than somebody else's.
+the sessions inside it as cards and the agents docked underneath as strips. A frame claims one
+thing and no more: these nodes were read in the same directory. `claude agents --json`
+publishes nothing that ties an agent to whoever dispatched it, so no label, no position and no
+line inside a frame says one node asked for another. An agent whose directory matches no
+session gets its own frame rather than somebody else's.
 
 Above the fleet are the account's five-hour and seven-day
-[gauges](docs/MANUAL.md#the-accounts-two-windows); under it a scrubber over the day this
-serve has seen. Drag it and the nodes render the fleet as it was at that minute, press play
-and the day walks past. Replayed, they are drawn flat and unframed: the record keeps a project
-name and never the directory it was read in, and a basename is not a directory. Two checkouts
-of `atlas` answer to the same word, so a frame drawn on it would claim a shared directory
-nobody can check.
+[gauges](docs/MANUAL.md#the-accounts-two-windows). Under it is a scrubber over the day this
+serve has seen. Drag it and the nodes render the fleet as it was at that minute. Press play
+and the day walks past. Replayed, the nodes are drawn flat and unframed. The record keeps a
+project name and never the directory it was read in, and a basename is not a directory. Two
+checkouts of `atlas` answer to the same word, so a frame drawn on it would claim a shared
+directory nobody can check.
 
 The map follows the rules the table follows. A reading past the freshness threshold is drawn
-thin, amber and dated. A percentage nobody measured is an empty dotted dial rather than a ring
-at zero. Where nothing was published at all, such as the strip of an agent the join found no
-snapshot for, nothing is drawn in its place, neither a dial nor a dash. A word
+thin, amber and dated. A percentage nobody measured is an empty dotted dial, never a ring at
+zero. Where nothing was published at all, such as the strip of an agent the join found no
+snapshot for, nothing is drawn in its place: no dial, no dash. A word
 `claude agents --json` printed that tarmac has no boolean for is shown as it came rather than
 filed as `idle`, and raises one warning above the fleet naming it. The page is JSON
 underneath: `GET /api/fleet` and `GET /api/history` serve exactly what the map draws. Details
-in [the manual](docs/MANUAL.md#the-map).
+are in [the manual](docs/MANUAL.md#the-map).
 
 ## Install
 
 `install` changes the `statusLine` key of `~/.claude/settings.json`, and never on your
 say-so alone. It prints the whole plan first, including the exact command that undoes it,
-then waits for a typed word. `y` is not an answer; scripts pass `--yes`, deliberately.
+then waits for a typed word. `y` is not an answer. Scripts pass `--yes`, deliberately.
 
 A status line you already had is wrapped, not replaced: its display stays byte-identical, and
 `uninstall` names which of its four restore modes ran. Two files land under `~/.claude/`, the
 wrapper and the `backup.json` that undoes it, and neither changes at runtime. The snapshots go
 to `~/.local/state/tarmac/snapshots` (`$XDG_STATE_HOME` when set), because `~/.claude` is a
-directory people commit. The plan, the restore modes and the cleanup of the layout that kept
-snapshots inside `.claude`:
+directory people commit. The plan, the restore modes and the cleanup of the old layout that
+kept snapshots inside `.claude` are in
 [the manual](docs/MANUAL.md#installing-safely-the-full-contract).
 
 ## Why it does not break
@@ -132,17 +135,18 @@ tarmac reads two things instead:
 | `claude agents --json` | which sessions exist, busy, idle or waiting on you, cwd, uptime | a documented CLI surface (`--help`: *"Print active sessions … as a JSON array … for scripting"*) |
 | the status line payload | context %, model, effort, cost | the JSON Claude Code hands to your own `statusLine.command` on every frame. Observed, not published as a schema |
 
-That second line is the honest caveat. The real defence is not immunity, it is visible
-degradation. A missing measurement is never a confident `0`. It is an em dash that names which
-kind of missing it is: `absent` for a session no status line ever wrote for, `fresh` for one
-that has taken no turn yet, `drift` for a release that moved the payload out from under us. A
-stale reading keeps its value and gets dated with a `!`. A Claude Code build no fixture covers
-gets its version named *before* anything breaks, and tarmac keeps reporting. The full
-state-by-state table is in [the manual](docs/MANUAL.md#degradation-state-by-state).
+That second row is the honest caveat. tarmac does not promise the payload will hold still.
+It promises that a measurement it could not take never renders as a confident `0`. What you
+get instead is an em dash naming which kind of missing it is: `absent` for a session no status
+line ever wrote for, `fresh` for one that has taken no turn yet, `drift` for a release that
+moved the payload out from under us. A stale reading keeps its value and gets dated with a
+`!`. A Claude Code build no fixture covers gets its version named *before* anything breaks,
+and tarmac keeps reporting. The full state-by-state table is in
+[the manual](docs/MANUAL.md#degradation-state-by-state).
 
 ## Configuration
 
-Three numbers are opinions rather than truths, so all three are yours, and behind a reverse
+Three numbers here are judgement calls, so all three are yours to set, and behind a reverse
 proxy the hosts `serve` answers to are yours as well. Everything else is deliberately not
 configurable, and all of it works with no configuration at all.
 
@@ -151,22 +155,22 @@ configurable, and all of it works with no configuration at all.
 | freshness threshold | `--stale-after 90s` \| `15m` \| `2h` | `10m` |
 | port | `--port 8080` | `4477` |
 | snapshots dir (read side) | `--snapshots-dir DIR` | the wrapper's frozen path when installed, else the XDG state directory |
-| trusted hosts | `--trust-host HOST`, once per host | none — loopback only |
+| trusted hosts | `--trust-host HOST`, once per host | none, so loopback only |
 
 Each also has an environment variable and a key in `<home>/.claude/tarmac/config.json`.
-Flag beats environment beats config file beats default, settled per setting; `serve` opens by
+Flag beats environment beats config file beats default, settled per setting. `serve` opens by
 printing each effective value and where it came from. Nothing is silently dropped or silently
 corrected. A value that will not parse stops the run and says what it got, where it came from,
 and what would have worked. Spellings, edge cases and the two health fields
-`tarmac list --json` reports: [the manual](docs/MANUAL.md#configuration).
+`tarmac list --json` reports are in [the manual](docs/MANUAL.md#configuration).
 
 ## What it deliberately does not do
 
 - **No inferred "waiting for you".** `agents --json` reports `waiting` with a reason, such as
   a permission prompt or an open dialog, and tarmac draws exactly that, in the table and on
-  the map. What it will not do is guess at the rest: a session that asked you a question in prose
-  still reports `idle`, and the only way to know better is to read a transcript, which is
-  the one thing this tool will not do. The signal is as good as its source, and no better.
+  the map. It does not guess at the rest. A session that asked you a question in prose still
+  reports `idle`, because the only way to know better is to read a transcript, and this tool
+  does not read transcripts.
 - **No history on disk.** `tarmac list` is a snapshot in time. A running `serve` holds the
   last 24 hours of the readings it took itself, in memory, so the page can replay them. That
   record reaches no further back than the serve that took it, and goes when it goes. None of
@@ -182,9 +186,9 @@ npm run build                  # flat JavaScript into dist/
 node scripts/demo-fleet.ts     # the invented fleet the captures above are taken of
 ```
 
-Every capture on this page is taken of a fleet that does not exist, because a screenshot of a
-real machine carries working directories, prompts and costs, and nothing real enters this
-repo. What CI covers, which Node version develops and which one ships:
+Every capture on this page is taken of a fleet that does not exist. A screenshot of a real
+machine carries working directories, prompts and costs, and nothing real enters this repo.
+What CI covers, which Node version develops and which one ships:
 [the manual](docs/MANUAL.md#developing). Capturing the fixtures for a new Claude Code build:
 [the manual](docs/MANUAL.md#capturing-a-new-claude-code-version).
 

@@ -29,7 +29,7 @@ const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
 const TEMP = `.tarmac-${SID}.66956.tmp`;
 // `.<sid>.<pid>.tmp` is a convention, not a signature. The fleet's own production
 // statusline wrapper writes exactly this — same charset, same 8..64 bounds, same shape —
-// and REPORT.md documents pointing `--snapshots-dir` straight at its directory.
+// and docs/MANUAL.md documents pointing `--snapshots-dir` straight at its directory.
 // Matching on shape would delete another program's files and call them our litter.
 const FOREIGN = `.${SID}.66956.tmp`;
 
@@ -154,7 +154,7 @@ test('removes every stale temp file and counts them', () => {
 
 // C1 from review. `.<sid>.<pid>.tmp` is what half the world's atomic writers emit, and
 // specifically what the fleet's own production statusline wrapper emits into a directory
-// REPORT.md tells you to point `--snapshots-dir` at. A shape is not a signature:
+// docs/MANUAL.md tells you to point `--snapshots-dir` at. A shape is not a signature:
 // the only thing that proves we wrote a file is a name only we write.
 test('never removes another tool\'s temp file that happens to share the convention', () => {
   const dir = snapDir({ [FOREIGN]: 4 * HOUR, '.mydatabase-backup.9912.tmp': 30 * 24 * HOUR });
