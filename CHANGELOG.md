@@ -11,6 +11,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.6.0] — 2026-08-23
+
 ### Added
 
 - **`serve --trust-host <host>`, for the reverse proxy the Host guard had no answer for.** A
