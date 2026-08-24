@@ -12,8 +12,11 @@ the test suite, so none of it is aspiration.
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
-`--help` works everywhere. An option handed to a command that does not read it is an error,
-never something quietly ignored, and the error names the commands it does belong to.
+`--help` works everywhere, and so does `--version` (`-v`). It prints the version of the
+package it is running from, read from that package rather than written into the code, so
+under `npx` it names the build in hand and not the newest one published. An option handed to
+a command that does not read it is an error, never something quietly ignored, and the error
+names the commands it does belong to.
 
 ## Degradation, state by state
 

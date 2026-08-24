@@ -56,6 +56,14 @@ test('every flag the synopsis offers is one that command really accepts', () => 
   }
 });
 
+/**
+ * The flags that are not about a command at all — every command takes them, and repeating
+ * them on four synopsis lines would say four times what belongs in the option list once.
+ * They are exempt from the check below and from nothing else: the forward direction still
+ * holds a synopsis that offers one to the parser that has to accept it.
+ */
+const ANSWERED_EVERYWHERE = new Set(['--help', '--version', '-v']);
+
 // The other direction, and the one that matters more: a flag the parser takes and the help
 // never mentions is a feature nobody can find. `--home` was in that state on `list` and
 // `serve`; `--claude-bin` was in it on both, with no synopsis line at all — which the
@@ -67,8 +75,7 @@ test('every flag a command accepts is shown on that command in --help', () => {
   }
   for (const [command, flags] of shown) {
     for (const flag of OPTION_FLAGS) {
-      // `--help` is answerable everywhere and is documented once, on its own line.
-      if (flag === '--help' || !accepts(command as Command, flag)) continue;
+      if (ANSWERED_EVERYWHERE.has(flag) || !accepts(command as Command, flag)) continue;
       assert.ok(flags.includes(flag), `\`tarmac ${command}\` accepts ${flag} and no synopsis line for it says so`);
     }
   }

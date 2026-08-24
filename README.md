@@ -56,8 +56,8 @@ straight from `claude agents --json`. The context column reads `— absent`. Mod
 cost fall to `—`. The line under the table counts how many sessions are covered.
 
 Node ≥ 20. Zero runtime dependencies: no framework, no bundler, nothing to audit.
-`--help` works everywhere. An option handed to a command that does not read it is an error,
-never something quietly ignored. Every command, flag and route is in
+`--help` and `--version` (`-v`) work everywhere. An option handed to a command that does not
+read it is an error, never something quietly ignored. Every command, flag and route is in
 [the manual](docs/MANUAL.md#commands-and-options).
 
 ## The map

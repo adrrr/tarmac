@@ -11,7 +11,15 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **`--version` (`-v`), on any command.** It is the first thing anyone types to find out what
+  they are running, and it was `tarmac: unknown option: --version`, exit 1. It now prints the
+  version and nothing else — bare, so a script can read it — and exits 0, before any command
+  has begun: `tarmac install --version` answers rather than printing a plan and waiting for a
+  typed word. The number is read from the `package.json` beside the CLI rather than written
+  into the code, so what it reports is the build in hand — which is the whole question when
+  `npx` may have served a cached one. (#110)
 
 ## [0.6.0] — 2026-08-23
 

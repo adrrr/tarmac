@@ -8,6 +8,7 @@
 // `install` / `uninstall` default to the home this process runs under, print what they are
 // about to change, and proceed only on the typed verb (or `--yes`, in writing, for scripts).
 
+import fs from 'node:fs';
 import os from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from './args.ts';
@@ -34,6 +35,7 @@ const USAGE = `tarmac — fleet observability for Claude Code
   tarmac uninstall  [--home DIR] [--yes]
         restore the statusline exactly
 
+  --version, -v    print the version of this build and exit — on any command
   --watch          redraw the table every 5s until ^C, dating every reading
   --home           whose .claude to read or change (default: this home)
   --yes            skip the typed confirmation — required when stdin is not a terminal
@@ -56,6 +58,22 @@ const USAGE = `tarmac — fleet observability for Claude Code
   "snapshotsDir": …, "trustHosts": […]}). \`serve\` prints which one won.
 `;
 
+/**
+ * What this build calls itself, read from the `package.json` that ships beside it — the one
+ * file npm puts in every tarball whatever `files` says, and the only place the number is
+ * written down. `dist/cli.js` sits one directory in exactly as `src/cli.ts` does, so a single
+ * relative path answers for the published CLI and for the suite, which runs the source.
+ *
+ * A version it could not read is not a version: rather than print an "unknown" nobody can act
+ * on, this throws and leaves through the same catch as every other refusal here.
+ */
+function version(): string {
+  const at = new URL('../package.json', import.meta.url);
+  const pkg = JSON.parse(fs.readFileSync(at, 'utf8')) as { version?: unknown };
+  if (typeof pkg.version !== 'string' || pkg.version === '') throw new Error(`${at.href} carries no version`);
+  return pkg.version;
+}
+
 try {
   // Parsing is inside the try so that a refusal — a typo'd flag, a duration nobody can read,
   // a config file with a key that does not exist — reaches the user as one line naming the
@@ -63,6 +81,13 @@ try {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || args.command === 'help') {
     process.stdout.write(USAGE);
+    process.exit(0);
+  }
+  // After `--help`, which answers the wider question, and before any command has begun: a
+  // `tarmac install --version` that printed a plan and then waited for a typed word would be
+  // a one-line question that hangs a script. Bare, so something other than a person can read it.
+  if (args.version) {
+    process.stdout.write(`${version()}\n`);
     process.exit(0);
   }
 
