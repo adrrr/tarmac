@@ -21,6 +21,17 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   into the code, so what it reports is the build in hand — which is the whole question when
   `npx` may have served a cached one. (#110)
 
+### Fixed
+
+- **The page keeps one clock, and names it.** The summary line dated the fleet with an ISO
+  instant in UTC while the replay banner, the line under the handle and the scrubber's
+  `aria-valuetext` spelled their minute on the machine's clock. Nothing contradicted itself on
+  screen — replay hides the live fragment — but the first surface carrying both, an export or a
+  screenshot with the header in it, showed a fleet apparently living in two time zones. Every
+  minute the replay prints is UTC now, "yesterday" counts UTC's midnight, and each of them says
+  `UTC` where a reader meets it: an unlabelled one reads as the reader's own clock, which is the
+  same lie facing the other way. (#40)
+
 ## [0.6.0] — 2026-08-23
 
 ### Added

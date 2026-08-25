@@ -603,6 +603,10 @@ A replay is never allowed to pass for the present:
 - the banner carries `role="status"` and the minute travels with the handle as its
   `aria-valuetext`, because a yellow box is nothing at all to a reader who cannot see it
 
+Every minute the replay spells — the banner, the line under the handle, the `aria-valuetext` the
+handle carries — is UTC, the clock the summary line already dates the fleet on, and each of them
+says `UTC` rather than leaving a reader to assume it is their own.
+
 The range says what it really covers. A serve ten minutes old offers ten minutes, and a record
 whose every reading failed says *that* rather than reading like a serve which has just started.
 The handle steps through readings, not minutes, so the line under it also names how many

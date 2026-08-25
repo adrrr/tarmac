@@ -1393,12 +1393,20 @@ function pageScript(view: View): string {
   }
 
   function two(n) { return (n < 10 ? '0' : '') + n; }
-  function hhmm(t) { var d = new Date(t); return two(d.getHours()) + ':' + two(d.getMinutes()); }
+  // One page, one clock, and it is the one the summary line already dates the fleet on: an ISO
+  // instant in UTC. Spelled on the machine's own clock, these minutes and that stamp are the
+  // same fleet apparently living in two time zones, the first time anything shows both — an
+  // export, a log line, a screenshot with the header in it. Every minute below carries UTC
+  // where a reader meets it, because an unlabelled one reads as the reader's own clock and is
+  // the same lie facing the other way.
+  function hhmm(t) { var d = new Date(t); return two(d.getUTCHours()) + ':' + two(d.getUTCMinutes()); }
 
   // A day-long ring can straddle one midnight, and "09:14 – 08:59" reads as a span running
-  // backwards until the older edge says which day it is.
+  // backwards until the older edge says which day it is. Which midnight is UTC's, like the
+  // minutes it separates: counted otherwise, "yesterday" turns up between two minutes of one
+  // UTC day and goes missing across the midnight it exists for.
   function edge(t, ref) {
-    return hhmm(t) + (new Date(t).getDate() === new Date(ref).getDate() ? '' : ' yesterday');
+    return hhmm(t) + (new Date(t).getUTCDate() === new Date(ref).getUTCDate() ? '' : ' yesterday');
   }
 
   // What the range covers, in the record's own terms. Never "a day": that is the size of the
@@ -1410,13 +1418,13 @@ function pageScript(view: View): string {
       // this was the one branch that threw that away: ten hours of a collector that could not
       // run read exactly like a serve thirty seconds old.
       return record.missed
-        ? 'Nothing recorded — this serve started at ' + hhmm(record.since) + ' and '
+        ? 'Nothing recorded — this serve started at ' + hhmm(record.since) + ' UTC and '
           + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' were due and never read.'
-        : 'Nothing recorded yet — this serve started at ' + hhmm(record.since)
+        : 'Nothing recorded yet — this serve started at ' + hhmm(record.since) + ' UTC'
           + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
     }
     var last = record.samples[n - 1].t;
-    return 'Covering ' + edge(record.since, last) + ' – ' + hhmm(last)
+    return 'Covering ' + edge(record.since, last) + ' – ' + hhmm(last) + ' UTC'
       // Not "when the page loaded": the record is asked for again when a tab that has been
       // away comes back, so the sentence names the last time this page asked rather than a
       // moment it may be hours past.
@@ -1651,8 +1659,9 @@ function pageScript(view: View): string {
     scrub.value = String(i);
     // The handle's own value is an index, so a reader who cannot see the banner would be read
     // "3" while the fleet on screen is three hours old. The minute travels with the handle.
-    scrub.setAttribute('aria-valuetext', hhmm(s.t));
-    atEl.textContent = hhmm(s.t);
+    var minute = hhmm(s.t) + ' UTC';
+    scrub.setAttribute('aria-valuetext', minute);
+    atEl.textContent = minute;
     rmeta.textContent = metaOf(s);
     rmap.innerHTML = nodesOf(s);
     // The account of that minute, in the place the live pair occupies — which the body class

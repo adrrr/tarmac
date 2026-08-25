@@ -16,6 +16,13 @@ import type { MountOptions } from './page-dom.ts';
 import { health, row } from './fleet-fixtures.ts';
 import type { HistoryPayload, HistorySession } from '../src/history.ts';
 
+// Every minute this page spells is UTC — the clock the summary's ISO stamp already speaks —
+// and the assertions below only say that where the machine running them is somewhere else.
+// Nine hours off, so a minute read off the local clock lands on another hour and, for the
+// hours around midnight UTC, another day. Set before the page is built, since the whole file
+// is one process and this is what its `Date` answers with.
+process.env.TZ = 'Asia/Tokyo';
+
 const PAGE = renderPage({ rows: [row()], health: health() }, 'map');
 const SCRIPT = scriptOf(PAGE);
 /**
@@ -32,7 +39,7 @@ const MIN = 60_000;
 
 const hhmm = (t: number): string => {
   const d = new Date(t);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 };
 
 const session = (over: Partial<HistorySession> = {}): HistorySession => ({
@@ -83,8 +90,26 @@ test('the record is fetched once at load, and the range says what it really cove
   assert.equal(page.el('scrub').disabled, false, 'and it can be moved');
   assert.equal(page.el('scrub').max, '9', 'one position per reading held');
   assert.match(page.el('covers').textContent, new RegExp(hhmm(CLOCK - 10 * MIN)), 'from when this serve started');
-  assert.match(page.el('covers').textContent, new RegExp(hhmm(CLOCK)), 'to the last reading it took');
+  assert.match(page.el('covers').textContent, new RegExp(`${hhmm(CLOCK)} UTC`), 'to the last reading it took, on the clock it names');
   assert.match(page.el('covers').textContent, /10 reading/);
+});
+
+// "yesterday" is what keeps "09:14 – 08:59" from reading as a span running backwards, so the
+// day it counts has to be the day the minutes beside it are on. Counted on the machine's own
+// clock it does both wrong at once: it appears between two minutes of a single UTC day, and it
+// stays silent across the midnight it exists for. Both cases are ordinary nine hours east.
+test('the day the range names is the day its minutes are on', async () => {
+  const covering = async (since: number, last: number): Promise<string> => {
+    const page = mount({ since, cadence: MIN, samples: [{ t: last, sessions: [session()], rateLimits: null }], missed: 0 });
+    await page.advance(0);
+    return page.el('covers').textContent;
+  };
+  // 13:00 and 22:00 of one UTC day — 22:00 and 07:00, over two days, where this file runs.
+  const oneDay = await covering(Date.parse('2023-11-14T13:00:00Z'), Date.parse('2023-11-14T22:00:00Z'));
+  assert.doesNotMatch(oneDay, /yesterday/, 'one day, however it reads locally');
+  // 23:00 and 13:00 across midnight UTC — 08:00 and 22:00 of one day where this file runs.
+  const twoDays = await covering(Date.parse('2023-11-13T23:00:00Z'), Date.parse('2023-11-14T13:00:00Z'));
+  assert.match(twoDays, /23:00 yesterday/, 'and the midnight it does cross is named');
 });
 
 // Move the handle and the grouping the live map draws is gone: the nodes come back ungrouped,
@@ -124,6 +149,7 @@ test('a record with nothing in it yet says so, and leaves no dead handle', async
   assert.equal(page.el('scrub').disabled, true);
   assert.equal(page.el('play').disabled, true);
   assert.match(page.el('covers').textContent, /nothing recorded yet/i);
+  assert.match(page.el('covers').textContent, new RegExp(`${hhmm(CLOCK)} UTC`), 'the minute it does have names its clock');
 });
 
 // The one case where `missed` is the only thing there is to say, and the only branch that
@@ -133,6 +159,7 @@ test('a record empty because every reading failed says that, not that it just st
   const page = mount({ since: CLOCK - 600 * MIN, cadence: MIN, samples: [], missed: 600 });
   await page.advance(0);
   assert.match(page.el('covers').textContent, /600 minute/, 'the failures are named');
+  assert.match(page.el('covers').textContent, new RegExp(`${hhmm(CLOCK - 600 * MIN)} UTC`), 'and the one minute it holds names its clock');
 });
 
 test('a record that cannot be read says why, instead of offering a handle that does nothing', async () => {
@@ -160,7 +187,7 @@ test('dragging the handle draws that minute, and the page says which minute it i
   page.el('scrub').drag(3);
   assert.equal(page.el('replaying').hidden, false, 'the banner is up');
   assert.equal(page.el('replay-view').hidden, false, 'and the past is on screen');
-  assert.equal(page.el('replay-at').textContent, hhmm(CLOCK - 6 * MIN));
+  assert.equal(page.el('replay-at').textContent, `${hhmm(CLOCK - 6 * MIN)} UTC`);
   assert.match(page.el('replay-map').innerHTML, /p3/);
   assert.equal(page.body.classes.has('replaying'), true, 'and the live map is hidden by the body class');
 });
@@ -172,7 +199,7 @@ test('the minute travels with the handle, for a reader who cannot see the banner
   const page = mount(record(10));
   await page.advance(0);
   page.el('scrub').drag(3);
-  assert.equal(page.el('scrub').getAttribute('aria-valuetext'), hhmm(CLOCK - 6 * MIN));
+  assert.equal(page.el('scrub').getAttribute('aria-valuetext'), `${hhmm(CLOCK - 6 * MIN)} UTC`);
   page.el('to-live').fire('click');
   assert.equal(page.el('scrub').getAttribute('aria-valuetext'), null, 'and goes when the past does');
 });
