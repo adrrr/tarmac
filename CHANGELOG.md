@@ -31,6 +31,16 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   minute the replay prints is UTC now, "yesterday" counts UTC's midnight, and each of them says
   `UTC` where a reader meets it: an unlabelled one reads as the reader's own clock, which is the
   same lie facing the other way. (#40)
+- **A long project name no longer cuts the session name in half on a phone.** The strip flexed
+  the session onto the first line on a basis of 0, so a 40-character project left it 44.6px of
+  column at 390px: the id broke across two lines, the state pill dropped alone underneath, and a
+  strip nominally 63px tall stood at 105.7 — on exactly the fleets whose checkout names are
+  long. Nothing overflowed and no promise was broken; what degraded was the triage density the
+  strip exists for. The name's own width is the floor it wraps at now — beside the project where
+  it fits on one line, under it whole where it does not — which is 84.7px measured in the same
+  place. The trade, measured rather than assumed: a session name longer than one full line, the
+  background-agent case, now keeps a line of its own at every width where it used to compress
+  back beside the project. Names that fit on one line are unchanged. (#108)
 
 ## [0.6.0] — 2026-08-23
 

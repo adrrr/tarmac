@@ -1055,7 +1055,19 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
        word. min-width:0 for the same reason the berths carry it: a flex item's automatic
        minimum is its min-content width, which without this is the whole unbroken string. */
     td[data-label="Project"] .v { order:1; font-weight:600; min-width:0; overflow-wrap:anywhere; }
-    td[data-label="Session"] .v { order:2; flex:1 1 0; min-width:0; color:var(--dim);
+    /* The basis is auto and not 0, which is what decides whether the name breaks INSIDE
+       itself. A basis of 0 puts it on the first line however little is left of one: at 390px
+       beside a 40-character project that is 44.6px of column, a session id cut across two
+       lines, the pill dropped alone underneath and a 63px strip standing at 105.7 — on
+       exactly the fleets whose checkout names are long. Its own width is the floor it wraps
+       at instead: beside the project where it fits, on the next line whole where it does not.
+       That floor is a trade, not a free fix: a name longer than one full line keeps a line of
+       its own at EVERY width, where a basis of 0 let it compress back beside the project as
+       the screen widened. The accepted side of #108: never cut a name mid-word, at the price
+       of a taller strip for prompt-named agents.
+       min-width:0 is what still lets it shrink once it is the widest thing on a line of its
+       own, which is the wrap the rule above is written for. */
+    td[data-label="Session"] .v { order:2; flex:1 1 auto; min-width:0; color:var(--dim);
          white-space:normal; overflow-wrap:anywhere; }
     /* The third value that can arrive as one unbroken token, and the one the two rules above
        missed: a waiting reason is FREE TEXT, so "permission prompt: /Users/…/foo.ts" is a path

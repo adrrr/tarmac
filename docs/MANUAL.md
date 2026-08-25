@@ -640,7 +640,12 @@ affordable. The labels that go are the ones whose values wear their own name, a 
 model, a state that is a word. Nothing is dropped and nothing moves: the columns appear in the
 order the table emits them, and every `data-label` a desktop reads is still on the cell. A
 session costs 63px of phone instead of 234, so eight of them fit one screen rather than two and
-a half.
+a half. A project name long enough to leave nothing beside it costs that strip a line: the
+session name moves under it whole, rather than being cut in half inside a sliver of column.
+The same floor cuts the other way: a session name too long for one full line, the way a
+background agent is named after its prompt, keeps its own line at every width instead of
+compressing back beside the project as the screen widens. A line of extra height on those
+strips is the price of never cutting a name mid-word.
 
 What the fold costs, said plainly: the column names are on the screen at every other width and
 not at this one, and no pseudo-element hides them for a screen reader. Both ways of doing that

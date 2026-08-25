@@ -478,6 +478,22 @@ test('a prompt with no length limit wraps rather than taking the page sideways',
   assert.match(decls, /min-width:\s*0/, 'so the flex item may be narrower than its text');
 });
 
+// The rule above is for a name too long for the strip. This one is for the name that is merely
+// beside a long project: laid out at 390px against a 40-character one, the session was flexed
+// onto the first line on a basis of 0 and squeezed into the 44.6px left of it — `quarry-1b`
+// broken into `quarry-` and `1b`, the state pill dropped alone below, a strip nominally 63px
+// tall standing at 105.7. Nothing overflowed, so no promise was broken; the triage density the
+// strip exists for was, on exactly the fleets whose checkout names are long. A basis of `auto`
+// makes the name's own width the floor it wraps at: beside the project where it fits, under it
+// whole where it does not — 84.7px measured, and every shorter name laid out to the pixel it
+// already did.
+test('the session name is never squeezed into a column narrower than itself', () => {
+  const decls = /td\[data-label="Session"\] \.v\s*\{([^}]*)\}/.exec(PHONE())![1];
+  const flex = /(?:^|;)\s*flex:\s*([^;]+)/.exec(decls)?.[1].trim();
+  assert.ok(flex, 'the session value is laid out with a basis of its own');
+  assert.match(flex, /\bauto$/, 'and that basis is its own width, never a zero it is squeezed from');
+});
+
 // The state travels in a pill with a border round it, and the reason a session is waiting is
 // free text: `permission prompt` fits, a sentence does not. Left `nowrap` it is one unbreakable
 // item on the strip's first line, which is the same scroll bar by another road.
