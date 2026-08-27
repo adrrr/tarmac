@@ -9,7 +9,7 @@ release by accident, and this package has one maintainer.
 ## The command
 
 ```bash
-npm login                      # once per machine
+npm login                      # sessions expire; expect to run it before each release
 npm publish --access public
 ```
 
