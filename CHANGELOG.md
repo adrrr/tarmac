@@ -11,6 +11,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.7.0] — 2026-08-27
+
 ### Added
 
 - **`--version` (`-v`), on any command.** It is the first thing anyone types to find out what
@@ -20,6 +24,18 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   typed word. The number is read from the `package.json` beside the CLI rather than written
   into the code, so what it reports is the build in hand — which is the whole question when
   `npx` may have served a cached one. (#110)
+
+### Changed
+
+- **The README, the manual and `PUBLISHING.md` were rewritten sentence by sentence.** The pages
+  were accurate and slow to read: sentences carrying three clauses apiece, and dashes standing in
+  for the punctuation that would have said what each clause was doing. No claim moved and no code
+  fence changed a byte; what changed is how long it takes to reach the claim. The README is the
+  npm page, so it is the half of this a reader of the registry ever sees. `PUBLISHING.md` lost
+  its first-publish checklist along the way, which demanded the version be `0.1.0` and asserted
+  that `package.json` carries no `repository`, `homepage` or `bugs` field, all three of which it
+  has. `REPORT.md` went with it: a self-declared history of the repository naming twelve paths
+  that no longer exist.
 
 ### Fixed
 
