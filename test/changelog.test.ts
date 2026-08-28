@@ -111,8 +111,9 @@ function scan(changelog: string): { lines: string[]; isHeading: boolean[]; fence
  *
  * `findIndex` takes the FIRST heading a version owns, so a second copy of one — what a botched
  * merge or a revert leaves behind — is never read, and an edit sitting in it never compared.
- * Nothing here closes that; the duplicate-heading assertion in the second test below is what
- * does. Weaken that one and this reader silently gets its blind spot back.
+ * Nothing here closes that; two duplicate-heading assertions do, one per tree — the count beside
+ * the `git show` in the first test for the tagged side, the `duplicated` check in the second for
+ * the working tree. Weaken either and this reader gets its blind spot back on that side.
  */
 function section(changelog: string, version: string): string | null {
   const { lines, isHeading } = scan(changelog);
@@ -212,6 +213,17 @@ test('every published CHANGELOG section still says what it said when it was tagg
     const now = section(current, version);
 
     assert.ok(was !== null, `${tag} shipped without a \`## [${version}]\` section of its own — nothing records what it released`);
+    // The blind spot the second test closes for the working tree, on the side it cannot see:
+    // `section()` reads the first heading and stops, so a doubled `## [x.y.z]` in a tagged file
+    // leaves its second copy unread, and the comparison below then reports agreement about half
+    // a release. Tagged history is immutable, so this cannot start failing on its own — it fires
+    // on a tag that shipped doubled, or on a checkout serving something other than what it says.
+    const copies = datedVersions(taggedFile).filter((v) => v === version).length;
+    assert.equal(
+      copies,
+      1,
+      `${tag} carries ${copies} \`## [${version}]\` sections and only the first is read, so what it published is compared in part`,
+    );
     assert.ok(
       now !== null,
       `the \`## [${version}]\` section has disappeared from the CHANGELOG, but ${tag} is published and said something`,
@@ -245,9 +257,10 @@ test('every dated section since tagging began carries the tag that published it'
 
   // A duplicated heading is broken for a reader whatever this file thinks, and it also splits a
   // version in two, of which only the first is ever compared — a merge or a revert can leave
-  // exactly that, with the pristine copy on top and the rewritten one below. This assertion is
-  // the only thing standing in front of that: `section()` reads the first heading and stops, so
-  // weakening the line below hands the test above a blind spot rather than a failure.
+  // exactly that, with the pristine copy on top and the rewritten one below. This assertion
+  // stands in front of that for the working tree, its counterpart beside the `git show` above
+  // covering the tagged side: `section()` reads the first heading and stops, so weakening the
+  // line below hands the test above a working-tree blind spot rather than a failure.
   const counted = new Map<string, number>();
   for (const v of dated) counted.set(v, (counted.get(v) ?? 0) + 1);
   const duplicated = [...counted].filter(([, n]) => n > 1).map(([v]) => v);
