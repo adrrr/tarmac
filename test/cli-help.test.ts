@@ -10,6 +10,10 @@
 // unmentioned on it. The check asks the parser (`accepts`) rather than reading the wording
 // of its refusals — an error message someone rewords must not turn this into a test that
 // greens on everything.
+//
+// A flag every command takes is exempt from the second direction, on the grounds that the
+// option list documents it once. A third check holds the exemption to those grounds, so it
+// cannot go on excusing a flag no list names — which is where `--help` itself sat (#113).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +31,22 @@ const help = (): string => {
   return r.stdout;
 };
 
-const flagsIn = (s: string): string[] => [...s.matchAll(/--[a-z-]+/g)].map((f) => f[0]);
+/**
+ * The flags a line names. Short spellings count: matching `--` only left `-v` invisible in both
+ * directions — a synopsis line could offer `-x` to a parser that refuses it and nothing here
+ * would look (#113).
+ *
+ * The lookbehind is what keeps that widening honest. `-[a-z]` on its own matches inside any
+ * hyphenated word, so `one-shot` in a description would read as a flag named `-shot`.
+ */
+const flagsIn = (s: string): string[] => [...s.matchAll(/(?<![\w-])--?[a-z][a-z-]*/g)].map((f) => f[0]);
+
+// Both directions below rest on this regex, and neither would notice it reading wrong: a flag
+// it cannot see is a flag nothing checks, which is the silence this file exists to break.
+test('a flag is read in either spelling, and a hyphenated word is not one', () => {
+  assert.deepEqual(flagsIn('[--home DIR] [-v]'), ['--home', '-v']);
+  assert.deepEqual(flagsIn('one-shot fleet table — with --watch'), ['--watch']);
+});
 
 /**
  * The synopsis block: `  tarmac <command> …`, plus the indented `[--flag]` continuation
@@ -40,7 +59,7 @@ function synopsis(text: string): Array<{ command: string; flags: string[] }> {
   for (const line of text.split('\n')) {
     const m = line.match(/^ {2}tarmac (\w+)\s+(.*)$/);
     if (m) out.push({ command: m[1], flags: flagsIn(m[2]) });
-    else if (out.length > 0 && /^\s+\[--/.test(line)) out[out.length - 1].flags.push(...flagsIn(line));
+    else if (out.length > 0 && /^\s+\[-/.test(line)) out[out.length - 1].flags.push(...flagsIn(line));
   }
   return out;
 }
@@ -57,10 +76,26 @@ test('every flag the synopsis offers is one that command really accepts', () => 
 });
 
 /**
+ * The option list: `  --flag[, -x]   what it does`, the block under the synopsis where a flag
+ * is described once. Two spaces of indent and at least two before the description is what
+ * tells it apart from the synopsis lines above, which are indented the same and continue with
+ * a command rather than a flag.
+ */
+function optionList(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split('\n')) {
+    const m = line.match(/^ {2}(-\S+(?:, -\S+)*) {2,}\S/);
+    if (m) out.push(...flagsIn(m[1]));
+  }
+  return out;
+}
+
+/**
  * The flags that are not about a command at all — every command takes them, and repeating
  * them on four synopsis lines would say four times what belongs in the option list once.
  * They are exempt from the check below and from nothing else: the forward direction still
- * holds a synopsis that offers one to the parser that has to accept it.
+ * holds a synopsis that offers one to the parser that has to accept it, and the option-list
+ * check that follows holds the exemption itself to the sentence above.
  */
 const ANSWERED_EVERYWHERE = new Set(['--help', '--version', '-v']);
 
@@ -78,5 +113,20 @@ test('every flag a command accepts is shown on that command in --help', () => {
       if (ANSWERED_EVERYWHERE.has(flag) || !accepts(command as Command, flag)) continue;
       assert.ok(flags.includes(flag), `\`tarmac ${command}\` accepts ${flag} and no synopsis line for it says so`);
     }
+  }
+});
+
+// The exemption above is a claim, and until #113 nothing held it: `--version, -v` has been
+// named in the option list since #110, `--help` was named in no option list and on no synopsis
+// line at all — the flag a reader reaches for before any other, absent from the help's own
+// account of itself, and hidden from the check above by the set that excuses it.
+test('every flag the synopsis is excused from naming is named in the option list', () => {
+  const listed = optionList(help());
+  assert.ok(listed.length > 0, 'no option list found in --help — the assertion below would pass on nothing');
+  for (const flag of ANSWERED_EVERYWHERE) {
+    assert.ok(
+      listed.includes(flag),
+      `\`${flag}\` is exempt from the synopsis check because the option list documents it, and the option list does not name it`,
+    );
   }
 });

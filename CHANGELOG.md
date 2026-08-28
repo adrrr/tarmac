@@ -11,7 +11,16 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **`--help` now says that it exists.** It is answerable on every command, and it appeared in no
+  option list and on no synopsis line: the flag a reader reaches for before any other was, in the
+  help's own account of itself, not a flag. The parity check between the help and the parser
+  exempts the flags every command takes, on the stated grounds that the option list documents them
+  once — and nothing held that claim, so the exemption hid exactly the defect the check exists to
+  catch. It is asserted now. The same check could not see a short spelling at all, in either
+  direction, which is why `-v` sat inside the exemption alongside it; it reads both spellings.
+  (#113)
 
 ## [0.7.0] — 2026-08-27
 

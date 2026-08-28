@@ -35,6 +35,7 @@ const USAGE = `tarmac — fleet observability for Claude Code
   tarmac uninstall  [--home DIR] [--yes]
         restore the statusline exactly
 
+  --help           print this text and exit — on any command
   --version, -v    print the version of this build and exit — on any command
   --watch          redraw the table every 5s until ^C, dating every reading
   --home           whose .claude to read or change (default: this home)
