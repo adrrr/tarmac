@@ -209,6 +209,17 @@ test('every published CHANGELOG section still says what it said when it was tagg
     const taggedFile = git('show', `${tag}:CHANGELOG.md`);
     assert.ok(taggedFile !== null, `${tag} has no CHANGELOG.md, so what it published cannot be read`);
 
+    // The working tree's fence check above, on the side it cannot see, and ahead of the
+    // `was !== null` line below because that one would otherwise tell the lie `scan()` reports
+    // `fenceLeftOpen` to prevent: a fence left open in a tagged file hides the heading beneath
+    // it, and a section that is plainly there is then reported as never having shipped.
+    // Tagged history is immutable, so a failure here never fixes itself in place: the only
+    // remedy is the working-tree check above, which keeps a tag from being cut this way.
+    assert.ok(
+      !scan(taggedFile).fenceLeftOpen,
+      `the CHANGELOG ${tag} published leaves a code fence open: every heading after it stops being read as one, so a section below it is reported as never having shipped when it is plainly there`,
+    );
+
     const was = section(taggedFile, version);
     const now = section(current, version);
 
