@@ -80,7 +80,15 @@ export interface HistoryPayload {
 }
 
 export interface FleetHistory {
-  record(fleet: Fleet): void;
+  /**
+   * Records the reading, and hands back the sample it kept.
+   *
+   * Returned rather than recomputed by the caller, because there is exactly one other thing
+   * that may want it: the journal on disk. Two calls to `sampleOf` would be two chances for
+   * the file and the route to disagree about the same minute, and the omissions this sample
+   * is built around, the names above all, would then have two places to be got right.
+   */
+  record(fleet: Fleet): HistorySample;
   /** `t` is the tick's own clock: a reading that failed left no reading to date the slot by. */
   miss(t: number): void;
   read(): HistoryPayload;
@@ -115,9 +123,10 @@ export function createHistory({ since, cadence }: HistoryOptions): FleetHistory 
   };
 
   return {
-    record(fleet: Fleet): void {
+    record(fleet: Fleet): HistorySample {
       const sample = sampleOf(fleet);
       push({ t: sample.t, sample });
+      return sample;
     },
     miss(t: number): void {
       push({ t, sample: null });

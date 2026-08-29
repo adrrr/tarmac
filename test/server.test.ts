@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import net from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Server } from 'node:http';
@@ -14,6 +16,9 @@ import { NET_DEADLINE_MS, rawGet, rawGetText } from './bounded.ts';
 import type { FleetServerDeps } from '../src/server.ts';
 import { HISTORY_CADENCE_MS } from '../src/history.ts';
 import type { HistoryPayload } from '../src/history.ts';
+import { createHistoryStore } from '../src/history-store.ts';
+import type { HistoryStore, JournalRecord } from '../src/history-store.ts';
+import { tempDir } from './sandbox.ts';
 import type { Fleet, FleetRow } from '../src/fleet.ts';
 
 // ── render ────────────────────────────────────────────────────────────────────────────
@@ -1397,4 +1402,206 @@ test('a failure that is not a busy port is reported as itself, without walking t
     // stays open, and `node --test` — which has no per-file timeout — hangs instead of saying so.
     await close(server);
   }
+});
+
+// ── the journal, when a reader has asked for one ──────────────────────────────────────
+// The tick is the seam: `serve` samples once a minute for the ring whether or not anyone
+// asked for a journal, and a store that saw anything other than that same reading would be a
+// second sampler, spawning `claude agents --json` on its own schedule. So the store is handed
+// the object the ring was handed, and that is what these hold.
+
+/**
+ * The day the store will open a file for: LOCAL, exactly as `history-store.ts` computes it.
+ *
+ * `toISOString().slice(0, 10)` is the UTC day, and it is the same string only where the machine
+ * runs on UTC. It was here, and it made the two tests below green on this developer's machine
+ * for 22 hours a day and on CI for ever (both runners are UTC), while turning red between
+ * midnight and 02:00 in Paris: the directory meant to block the write wore the wrong name, the
+ * write succeeded, and nothing was reported. The suite runs in `prepublishOnly`, so the hour it
+ * failed at was the hour a release was cut.
+ */
+function today(): string {
+  const d = new Date();
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** A journal in a directory of its own, with the store's own clock. */
+const journal = (opts: { maxBytes?: number } = {}): { dir: string; store: HistoryStore } => {
+  const dir = path.join(tempDir('tarmac-serve-hist-'), 'history');
+  return { dir, store: createHistoryStore({ dir, days: 30, ...opts }) };
+};
+
+const journalLines = (dir: string): JournalRecord[] =>
+  fs
+    .readdirSync(dir)
+    .flatMap((name) => fs.readFileSync(path.join(dir, name), 'utf8').split('\n'))
+    .filter((l) => l !== '')
+    .map((l) => JSON.parse(l) as JournalRecord);
+
+test('what the ring records is what the journal writes, down to the field', async () => {
+  const { dir, store } = journal();
+  await withServer(
+    collectOk,
+    async (base) => {
+      const h = await historyUntil(base, (x) => x.samples.length >= 1, 'a sample');
+      const written = journalLines(dir)[0];
+      // Field by field, with the one omission named. `deepEqual` against the ring's own sample
+      // would say "the journal is the ring", which is exactly the claim that stopped being true
+      // the day `waitingFor` was held back: an assertion has to state the difference it allows.
+      assert.equal(written.t, h.samples[0].t, 'the same minute, dated by the same reading');
+      assert.deepEqual(written.rateLimits, h.samples[0].rateLimits);
+      assert.deepEqual(
+        written.sessions,
+        h.samples[0].sessions.map(({ waitingFor, ...kept }) => kept),
+        'every field the ring kept except the reason, which is the whole of the difference',
+      );
+    },
+    { sampleEveryMs: 20, store },
+  );
+});
+
+// A missed reading is a slot the ring counts and a line the file does not have. Writing a zero
+// there, or the previous reading again, would be a journal that quietly invents a fleet.
+test('a reading that failed leaves no line in the journal', async () => {
+  const { dir, store } = journal();
+  const boom = async (): Promise<Fleet> => {
+    throw new Error('claude: not found');
+  };
+  await withServer(
+    boom,
+    async (base) => {
+      await historyUntil(base, (x) => x.missed >= 2, 'two missed slots');
+      assert.equal(fs.existsSync(dir), false, 'nothing was written at all, not even an empty file');
+    },
+    { sampleEveryMs: 20, store },
+  );
+});
+
+// A journal that stopped and said nothing is worse than no journal: the reader believes they
+// have a week of history and finds four hours of it. `serve` runs unattended, so the one place
+// it can say so is its own output.
+test('a write the journal could not make is said out loud', async () => {
+  const { dir, store } = journal();
+  fs.mkdirSync(dir, { recursive: true });
+  // A directory wearing the day's name, so every append fails whatever the platform.
+  fs.mkdirSync(path.join(dir, `${today()}.jsonl`));
+  const said: string[] = [];
+  await withServer(
+    collectOk,
+    async (base) => {
+      // The tick records, appends and reports with no await between them, so a sample visible
+      // on the route is a tick whose journal write has already been tried and answered for.
+      await historyUntil(base, (x) => x.samples.length >= 1, 'a reading');
+      assert.equal(said.length, 1, `the failure never reached the output: ${said.join(' | ')}`);
+      assert.match(said[0], /history/i);
+      assert.match(said[0], new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'and where to go and look');
+    },
+    { sampleEveryMs: 20, store, report: (line) => said.push(line) },
+  );
+});
+
+test('a journal stopped by its own cap says so, rather than filling up in silence', async () => {
+  const { store } = journal({ maxBytes: 1 });
+  const said: string[] = [];
+  await withServer(
+    collectOk,
+    async (base) => {
+      await historyUntil(base, (x) => x.samples.length >= 1, 'a reading');
+      assert.equal(said.length, 1, 'the cap stopped the journal and nobody was told');
+      assert.match(said[0], /cap/i);
+    },
+    { sampleEveryMs: 20, store, report: (line) => said.push(line) },
+  );
+});
+
+// Once, not once a minute. A line a minute for the rest of the day is a log a reader learns to
+// scroll past, which is the same as not printing it.
+test('a journal that keeps failing says so once, not on every tick', async () => {
+  const { dir, store } = journal();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(path.join(dir, `${today()}.jsonl`));
+  const said: string[] = [];
+  await withServer(
+    collectOk,
+    async (base) => {
+      await historyUntil(base, (x) => x.samples.length >= 4, 'four readings');
+      assert.equal(said.length, 1, `four ticks, one line: ${said.join(' | ')}`);
+    },
+    { sampleEveryMs: 20, store, report: (line) => said.push(line) },
+  );
+});
+
+// The privacy line, on the one surface where losing it is permanent. `claude agents --json`
+// names a background session after the PROMPT it was given, and the row carries the directory
+// it was read in; the ring keeps neither, and the live views show them only because someone is
+// looking at their own screen in the present tense. A file that outlives the process is a
+// different object, and this is the assertion that holds it: over the real sampler, so a leak
+// in `sampleOf` reddens it. Asserted inside the store's own suite it could not, because the
+// store writes whatever object it is handed.
+test("a background agent's name never reaches the journal either", async () => {
+  const PROMPT = 'audit the payroll export for the Q3 board memo';
+  const { dir, store } = journal();
+  const withAgent = async (): Promise<Fleet> => ({
+    rows: [row(), row({ sessionId: 's2', name: PROMPT, kind: 'background', status: 'running', busy: true })],
+    health: health({ sessions: 2, busy: 1 }),
+  });
+  await withServer(
+    withAgent,
+    async (base) => {
+      await historyUntil(base, (x) => x.samples.length >= 1, 'a sample');
+      const raw = fs.readFileSync(path.join(dir, fs.readdirSync(dir)[0]), 'utf8');
+      assert.equal(raw.includes(PROMPT), false, 'not under any field');
+      assert.equal(raw.includes('payroll'), false, 'nor a word of it');
+      assert.equal(raw.includes('/Users/jane/alpha'), false, 'and not the directory it was read in');
+      // The agent is IN the file. This is an omitted field, not an omitted session, and a
+      // journal that dropped the row would be a different promise than the one made.
+      const [record] = raw
+        .split('\n')
+        .filter((l) => l !== '')
+        .map((l) => JSON.parse(l) as JournalRecord);
+      assert.equal(record.sessions.length, 2);
+      assert.equal(record.sessions[1].sid, 's2');
+      assert.equal(record.sessions[1].kind, 'background');
+    },
+    { sampleEveryMs: 20, store },
+  );
+});
+
+// The second omission, and the one that had to be argued for rather than inherited. `waitingFor`
+// is the reason a halted session gave, and `history.ts` keeps it in the ring on the grounds that
+// it is a closed vocabulary the surface publishes. It is not: it is free text off
+// `claude agents --json`, and what Claude Code puts there names the command a permission prompt
+// is asking about. In the ring, on loopback, dying with the process, that is the live view of
+// one's own screen. Graved into a file for thirty days it is a different object, so the journal
+// writes every other field and not that one.
+test('the reason a waiting session gave stays in the ring and never reaches the journal', async () => {
+  const MARKER = 'payroll';
+  const REASON = `Bash(psql -c "select * from ${MARKER}")`;
+  const { dir, store } = journal();
+  const halted = async (): Promise<Fleet> => ({
+    rows: [row({ busy: null, status: 'waiting', waitingFor: REASON })],
+    health: health(),
+  });
+  await withServer(
+    halted,
+    async (base) => {
+      const h = await historyUntil(base, (x) => x.samples.length >= 1, 'a sample');
+      // The ring still has it, or the rest of this test would pass on a fleet that never said it.
+      assert.equal(h.samples[0].sessions[0].waitingFor, REASON, 'the live record keeps the reason');
+
+      const raw = fs.readFileSync(path.join(dir, fs.readdirSync(dir)[0]), 'utf8');
+      assert.equal(raw.includes(MARKER), false, 'not a word of it on disk');
+      assert.equal(raw.includes('waitingFor'), false, 'and not the field either, not even emptied');
+
+      // A field omitted, never a fact omitted: the session is on disk, and it is still waiting.
+      const [record] = raw
+        .split('\n')
+        .filter((l) => l !== '')
+        .map((l) => JSON.parse(l) as JournalRecord);
+      assert.equal(record.sessions[0].state, 'waiting');
+      assert.equal(record.sessions[0].sid, 's1');
+    },
+    { sampleEveryMs: 20, store },
+  );
 });

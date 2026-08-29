@@ -4,7 +4,7 @@
 // Unknown options and unknown commands are ERRORS. A typo silently ignored is how someone
 // ends up believing they pointed tarmac at a directory it never read.
 
-import { parsePort, parseTrustHost } from './config.ts';
+import { parseHistoryDays, parsePort, parseTrustHost } from './config.ts';
 
 export type Command = 'list' | 'serve' | 'install' | 'uninstall' | 'help';
 
@@ -25,6 +25,11 @@ export interface Options {
    * "none", so empty says "not passed" without ambiguity.
    */
   trustHost: string[];
+  /**
+   * How many days of fleet journal `serve` keeps on disk. `null` means "not passed", and with
+   * nothing set anywhere that is a journal that does not exist rather than one of length zero.
+   */
+  historyDays: number | null;
   home: string | null;
   claudeBin: string;
   json: boolean;
@@ -52,6 +57,7 @@ const OPTIONS: Record<string, OptionKey | undefined> = {
   '--stale-after': 'staleAfter',
   '--snapshots-dir': 'snapshotsDir',
   '--trust-host': 'trustHost',
+  '--history-days': 'historyDays',
   '--home': 'home',
   '--claude-bin': 'claudeBin',
   '--json': 'json',
@@ -79,7 +85,7 @@ const LISTS = new Set<OptionKey>(['trustHost']);
  */
 const ACCEPTS: Record<Command, ReadonlySet<OptionKey>> = {
   list: new Set<OptionKey>(['staleAfter', 'snapshotsDir', 'home', 'claudeBin', 'json', 'watch', 'help', 'version']),
-  serve: new Set<OptionKey>(['port', 'staleAfter', 'snapshotsDir', 'trustHost', 'home', 'claudeBin', 'help', 'version']),
+  serve: new Set<OptionKey>(['port', 'staleAfter', 'snapshotsDir', 'trustHost', 'historyDays', 'home', 'claudeBin', 'help', 'version']),
   install: new Set<OptionKey>(['home', 'yes', 'help', 'version']),
   uninstall: new Set<OptionKey>(['home', 'yes', 'help', 'version']),
   help: new Set<OptionKey>(['help', 'version']),
@@ -104,7 +110,7 @@ export function accepts(command: Command, flag: string): boolean {
 }
 
 export function parseArgs(argv: string[]): Options {
-  const out: Options = { command: 'list', port: null, staleAfter: null, snapshotsDir: null, trustHost: [], home: null, claudeBin: 'claude', json: false, watch: false, yes: false, help: false, version: false };
+  const out: Options = { command: 'list', port: null, staleAfter: null, snapshotsDir: null, trustHost: [], historyDays: null, home: null, claudeBin: 'claude', json: false, watch: false, yes: false, help: false, version: false };
   let i = 0;
 
   if (argv[0] && !argv[0].startsWith('-')) {
@@ -132,6 +138,10 @@ export function parseArgs(argv: string[]): Options {
       // Same validator the environment and the config file go through, so a port is refused
       // in the same words wherever it was set.
       out.port = parsePort(value, '--port');
+    } else if (key === 'historyDays') {
+      // Same validator the environment and the config file go through, so a retention is
+      // refused in the same words wherever it was set.
+      out.historyDays = parseHistoryDays(value, '--history-days');
     } else if (LISTS.has(key)) {
       // Same rule, for the same reason — and the value is kept as the guard will compare it,
       // so what `serve` prints on startup is what it will actually match against.

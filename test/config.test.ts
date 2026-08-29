@@ -15,6 +15,7 @@ import {
   hostName,
   parseDuration,
   parsePort,
+  parseHistoryDays,
   parseTrustHost,
   readConfigFile,
   resolveConfig,
@@ -276,14 +277,105 @@ test('an empty environment variable is unset, not an empty value', () => {
   assert.equal(c.trustHosts.source, 'default');
 });
 
+// ── the journal, which is off until someone asks for it ─────────────────────────────────
+// The one setting here whose default is not a number but a refusal to write anything at all.
+// Every other key changes how tarmac reads; this one is the reader lifting, for their own
+// machine, the promise the README makes to everybody else.
+
+test('a retention is a whole number of days, one or more', () => {
+  assert.equal(parseHistoryDays('30', '--history-days'), 30);
+  assert.equal(parseHistoryDays('1', '--history-days'), 1, 'a day of journal is a legal thing to want');
+});
+
+// Zero is the spelling a reader reaches for to mean "off", and it would be read as a retention
+// that keeps nothing while a file grows all day. Off is the ABSENCE of the key, which is also
+// what deleting it does, so the two ways to stop are the same way.
+test('a retention of zero is refused rather than read as "off"', () => {
+  const err = failure(() => parseHistoryDays('0', 'history.days'));
+  assert.match(err, /history\.days/, 'the knob to go and turn');
+  assert.match(err, /\b0\b/, 'what it was actually set to');
+});
+
+test('a retention that is negative, fractional or not a number at all is refused by name', () => {
+  assert.throws(() => parseHistoryDays('-1', '--history-days'), /--history-days.*-1/s);
+  assert.throws(() => parseHistoryDays('1.5', '--history-days'), /--history-days.*1\.5/s);
+  assert.throws(() => parseHistoryDays('thirty', 'TARMAC_HISTORY_DAYS'), /TARMAC_HISTORY_DAYS.*thirty/s);
+});
+
+test('the config file carries the retention under a key of its own', () => {
+  assert.deepEqual(readConfigFile(writeConfig({ history: { days: 30 } })).history, { days: 30 });
+});
+
+test('a retention the config file cannot mean is refused, and the message names history.days', () => {
+  assert.throws(() => readConfigFile(writeConfig({ history: { days: 0 } })), /history\.days/);
+  assert.throws(() => readConfigFile(writeConfig({ history: { days: -1 } })), /history\.days/);
+  assert.throws(() => readConfigFile(writeConfig({ history: { days: 1.5 } })), /history\.days.*1\.5/s);
+  assert.throws(() => readConfigFile(writeConfig({ history: { days: '30' } })), /history\.days.*30/s);
+  assert.throws(() => readConfigFile(writeConfig({ history: 30 })), /history/);
+  assert.throws(() => readConfigFile(writeConfig({ history: [30] })), /history/);
+});
+
+// `"history": {}` is a key someone wrote and left unfinished. Reading it as "off" would be a
+// setting the tool appears to have taken and silently never applies, which is the one thing
+// this module exists to prevent.
+test('a history key with no days in it is refused, not read as off', () => {
+  const err = failure(() => readConfigFile(writeConfig({ history: {} })));
+  assert.match(err, /history\.days/);
+});
+
+test('a key inside history that does not exist is refused like any other', () => {
+  const err = failure(() => readConfigFile(writeConfig({ history: { days: 30, weeks: 4 } })));
+  assert.match(err, /weeks/, 'the key the user actually wrote');
+  assert.match(err, /days/, 'and the only one there is');
+});
+
+test('history is one of the keys the config file names as known', () => {
+  assert.match(failure(() => readConfigFile(writeConfig({ histroy: { days: 30 } }))), /history/);
+});
+
+test('with nothing set anywhere, no journal is kept and nothing is written', () => {
+  assert.deepEqual(resolve({}).historyDays, { value: null, source: 'default' });
+});
+
+test('the retention follows the same precedence as every other setting', () => {
+  assert.deepEqual(resolve({ file: { history: { days: 30 } } }).historyDays, { value: 30, source: 'file' });
+  assert.deepEqual(
+    resolve({ file: { history: { days: 30 } }, env: { TARMAC_HISTORY_DAYS: '7' } }).historyDays,
+    { value: 7, source: 'env' },
+  );
+  assert.deepEqual(
+    resolve({ file: { history: { days: 30 } }, env: { TARMAC_HISTORY_DAYS: '7' }, flags: { historyDays: 2 } }).historyDays,
+    { value: 2, source: 'flag' },
+  );
+});
+
+test('a retention in the environment is refused by the name the user would export', () => {
+  assert.throws(() => resolve({ env: { TARMAC_HISTORY_DAYS: 'thirty' } }), /TARMAC_HISTORY_DAYS.*thirty/s);
+  assert.throws(
+    () => resolve({ env: { TARMAC_HISTORY_DAYS: '0' }, flags: { historyDays: 30 } }),
+    /TARMAC_HISTORY_DAYS/,
+    'and refused even when a flag was going to beat it',
+  );
+});
+
+test('an empty TARMAC_HISTORY_DAYS is unset, and leaves the journal off', () => {
+  assert.deepEqual(resolve({ env: { TARMAC_HISTORY_DAYS: '' } }).historyDays, { value: null, source: 'default' });
+});
+
 /** `resolveConfig` with everything defaulted, so each test states only what it is about. */
 function resolve(input: {
-  flags?: { staleAfter?: string | null; port?: number | null; snapshotsDir?: string | null; trustHosts?: string[] };
+  flags?: {
+    staleAfter?: string | null;
+    port?: number | null;
+    snapshotsDir?: string | null;
+    trustHosts?: string[];
+    historyDays?: number | null;
+  };
   env?: Record<string, string | undefined>;
   file?: FileConfig;
 }) {
   return resolveConfig({
-    flags: { staleAfter: null, port: null, snapshotsDir: null, trustHosts: [], ...(input.flags ?? {}) },
+    flags: { staleAfter: null, port: null, snapshotsDir: null, trustHosts: [], historyDays: null, ...(input.flags ?? {}) },
     env: input.env ?? {},
     file: input.file ?? {},
     defaultSnapshotsDir: '/default/snaps',

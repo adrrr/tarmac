@@ -249,6 +249,102 @@ test('serve opens by printing the effective settings and where each came from', 
   }
 });
 
+// The journal is the one setting that writes to the reader's disk. Off is what every serve
+// nobody configured does, and it says so; on, the first three lines carry the retention, the
+// ceiling nobody set and the directory, so a reader can go and look before it has grown.
+test('a serve nobody configured says the journal is off, and writes nothing', async () => {
+  const h = fakeHome();
+  const { child, out } = await serve(h);
+  try {
+    assert.match(out, /history +off/, 'the line is there, saying there is no journal');
+    assert.match(out, /history\.days/, 'and which key would start one');
+    assert.equal(fs.existsSync(path.join(h.home, '.local', 'state', 'tarmac', 'history')), false);
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+test('a retention on the command line reaches the settings block and names its directory', async () => {
+  const h = fakeHome();
+  const { child, out } = await serve(h, { TARMAC_PORT: '0' }, ['--history-days', '7']);
+  try {
+    assert.match(out, /history +7 days/);
+    assert.match(out, /256 MB/, 'the ceiling the flag did not set');
+    assert.match(out, new RegExp(`${escapeRe(path.join(h.home, '.local', 'state', 'tarmac', 'history'))}.*\\(flag\\)`));
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+// The unit suites prove the store, the retention and the tick. This proves the WIRING, which
+// is the part that rots in silence: a settings block announcing `30 days` over a serve holding
+// no store at all would look perfectly healthy for a week and have nothing to show for it.
+//
+// The retention is what it is asserted through, because it is the one thing a journal does
+// that a test can see without waiting for a tick: the sampler runs once a minute, and the
+// suite may not spend a minute proving it. A serve that reached its `listening` and swept the
+// day out of that directory is a serve that built the store, resolved its path and handed it
+// over. What happens on the tick itself is `test/server.test.ts`, with a real store.
+test('a serve told to keep a journal applies the retention to the directory it named', async () => {
+  const h = fakeHome();
+  const dir = path.join(h.home, '.local', 'state', 'tarmac', 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '2020-01-01.jsonl'), '{"t":0,"sessions":[],"rateLimits":null}\n');
+  fs.writeFileSync(path.join(dir, 'notes.txt'), 'not ours\n');
+  const { child, out } = await serve(h, { TARMAC_PORT: '0', TARMAC_HISTORY_DAYS: '30' });
+  try {
+    assert.match(out, /history +30 days.*\(env\)/, 'the settings block said 30 days');
+    assert.equal(fs.existsSync(path.join(dir, '2020-01-01.jsonl')), false, 'and 30 days is what the directory got');
+    assert.ok(fs.existsSync(path.join(dir, 'notes.txt')), 'only what tarmac wrote, as everywhere else');
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+// Off is off all the way down: no store, no directory, and a `serve` that never touches the
+// reader's disk. The line in the settings block is not evidence of that on its own.
+test('a serve with no retention set makes no journal directory at all', async () => {
+  const h = fakeHome();
+  const { child } = await serve(h);
+  try {
+    assert.equal(fs.existsSync(path.join(h.home, '.local', 'state', 'tarmac', 'history')), false);
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+// The one above cannot see a store that was built anyway: the writing starts on the first tick,
+// a minute later, and this suite reads the disk a second after startup. The SWEEP is what a
+// store betrays itself by, because it runs the moment `serve` listens. So a `serve` that built
+// one while announcing `off` leaves this directory alone, or it did not announce `off`.
+test('a serve with no retention set sweeps no journal directory either', async () => {
+  const h = fakeHome();
+  const dir = path.join(h.home, '.local', 'state', 'tarmac', 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '2020-01-01.jsonl'), '{"t":0,"sessions":[],"rateLimits":null}\n');
+  const { child } = await serve(h);
+  try {
+    assert.ok(fs.existsSync(path.join(dir, '2020-01-01.jsonl')), 'no store was built, so nothing was swept');
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+// `list` is one-shot and samples nothing, so there is no reading for it to journal. A flag it
+// accepted and never acted on would be indistinguishable, from the outside, from a journal
+// that silently stopped working.
+test('the retention flag belongs to serve, and list says so rather than ignoring it', () => {
+  const h = fakeHome();
+  const r = spawnSync(process.execPath, [CLI, 'list', '--home', h.home, '--claude-bin', h.bin, '--history-days', '7'], {
+    encoding: 'utf8',
+    timeout: 20000,
+    env: childEnv(),
+  });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /--history-days/);
+  assert.match(r.stderr, /serve/, 'and where it does belong');
+});
+
 // The dashboard's own API is a separate wiring from `list`, and the criterion names it. A
 // settings block that says `90s` over a `/api/fleet` still judging by the default would be
 // the exact lie this issue is about, and it would look perfectly healthy.

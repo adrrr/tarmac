@@ -14,6 +14,12 @@
 //     that same constant: writer and deleter cannot drift apart.
 //   • only what is finished. A frame takes milliseconds; anything recent may be a write
 //     in flight, and deleting it would be the reaper causing the corruption it prevents.
+//
+// `history/` is not ours. The fleet journal a reader may opt into lives in a SIBLING directory
+// of the snapshots, and `history-store.ts` is its only writer and its only sweeper. Nothing
+// here reaches outside the directory it is handed, and that is why the journal is beside the
+// payloads rather than among them: three sweepers deciding by name over one directory is how a
+// file comes to be deleted by whoever matched it last.
 
 import fs from 'node:fs';
 import path from 'node:path';

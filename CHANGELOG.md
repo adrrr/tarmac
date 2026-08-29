@@ -11,6 +11,28 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **A fleet journal on disk, off unless you ask for it.** `serve` has always held 24 hours of
+  readings in memory and lost them with the process, so the questions that are about movement
+  rather than about now, whether a context is climbing fast enough to recycle a session tonight,
+  what last week cost, which project burns the most, had nowhere to be asked. Set
+  `history.days` and `serve` appends one JSON line a minute to
+  `<state>/tarmac/history/YYYY-MM-DD.jsonl`, beside the snapshots in a directory nothing else
+  writes to or sweeps. The line is the sample the in-memory record keeps, out of the same
+  serialiser minus one field: session id, project basename, kind, state, context and cost, plus
+  the account's rate limits. No session name, no working directory, and not the reason a waiting
+  session gave, which is free text off `claude agents --json`: the ring may hold it in memory on
+  loopback, a file that sits in a home directory for thirty days may not. The line is built by an
+  allowlist naming each field, so a field added to the ring does not reach the disk until someone
+  decides it should. It is bounded by the retention you set, applied at startup and once a local
+  day, and by a hard cap of 256 MB that nothing configures: past it the journal stops rather
+  than fills a disk, and says so. A write it could not make costs one line, is reported once
+  rather than once a minute, and never brings down a serve that runs unattended for hours.
+  The default does not move: with no key set, nothing of the fleet is written down, which is
+  what the README promises everyone who never asked otherwise. `TARMAC_HISTORY_DAYS` and
+  `--history-days N` set it too, on `serve` alone, since `list` samples nothing. (#3)
+
 ### Fixed
 
 - **`--help` now says that it exists.** It is answerable on every command, and it appeared in no

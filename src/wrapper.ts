@@ -188,6 +188,11 @@ if [ -n "$sid" ] && mkdir -p "$TARMAC_DIR" 2>/dev/null; then
 fi
 
 # --- prune the snapshots of sessions that stopped rendering (amortized) ---
+# \`history/\` is not ours either: the journal a reader may opt into is a SIBLING directory of
+# this one, swept by \`history-store.ts\` alone. The find below is bounded to \`\$TARMAC_DIR\` and
+# matches the session-id shape, so it cannot reach it, and that is the point of the two
+# directories being separate.
+#
 # Nothing else would ever remove them: \`reap.ts\` collects this script's own temp litter and
 # refuses to touch a \`<sid>.json\`. A fleet that recycles its sessions nightly leaves one dead
 # file behind per session per night, forever. A LIVE session restamps its own snapshot on

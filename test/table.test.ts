@@ -222,8 +222,10 @@ test('the settings block states each effective value and where it came from', ()
       port: { value: 8080, source: 'file' },
       snapshotsDir: { value: '/x/snaps', source: 'env' },
       trustHosts: { value: [], source: 'default' },
+      historyDays: { value: null, source: 'default' },
     },
     '/x/.claude/tarmac/config.json',
+    '/x/history',
   );
   assert.match(out, /90s.*flag/, 'the value in the units it would be set in, and its source');
   assert.match(out, /8080.*file/);
@@ -240,8 +242,10 @@ test('a long snapshots path does not push the sources off the screen', () => {
       port: { value: 4477, source: 'default' },
       snapshotsDir: { value: `/Users/someone/${'nested/'.repeat(12)}snapshots`, source: 'file' },
       trustHosts: { value: [], source: 'default' },
+      historyDays: { value: null, source: 'default' },
     },
     '/x/.claude/tarmac/config.json',
+    '/x/history',
   );
   const portLine = out.split('\n').find((l) => l.includes('4477'))!;
   assert.ok(portLine.length < 40, `the port line rides on the path's width: ${portLine.length} chars`);
@@ -255,8 +259,10 @@ test('the settings block spells out the precedence it applied', () => {
       port: { value: 4477, source: 'default' },
       snapshotsDir: { value: '/x/snaps', source: 'default' },
       trustHosts: { value: [], source: 'default' },
+      historyDays: { value: null, source: 'default' },
     },
     '/x/.claude/tarmac/config.json',
+    '/x/history',
   );
   assert.match(out, /flag.*env.*file.*default/, 'the order, not just the winner');
 });
@@ -272,12 +278,58 @@ test('the settings block names the hosts trusted beyond loopback, and only when 
         port: { value: 4477, source: 'default' },
         snapshotsDir: { value: '/x/snaps', source: 'default' },
         trustHosts,
+        historyDays: { value: null, source: 'default' },
       },
       '/x/.claude/tarmac/config.json',
+      '/x/history',
     );
   assert.doesNotMatch(settings({ value: [], source: 'default' }), /trusted/i, 'nothing to attribute');
   const out = settings({ value: ['one.example', 'two.example'], source: 'flag' });
   assert.match(out, /trusted.*one\.example.*two\.example.*flag/, 'every name, and who let them in');
+});
+
+// The journal is the one setting that writes to the reader's disk, so the run that has it on
+// says so in its first three lines, with the retention, the ceiling nobody set and the
+// directory to go and look in. A serve that quietly started keeping files would be the README
+// made false by a config key.
+test('the settings block states the retention, the cap and where the journal is written', () => {
+  const out = renderSettings(
+    {
+      staleAfterMs: { value: 600_000, source: 'default' },
+      port: { value: 4477, source: 'default' },
+      snapshotsDir: { value: '/x/snaps', source: 'default' },
+      trustHosts: { value: [], source: 'default' },
+      historyDays: { value: 30, source: 'file' },
+    },
+    '/x/.claude/tarmac/config.json',
+    '/x/history',
+  );
+  const line = out.split('\n').find((l) => l.includes('history'))!;
+  assert.match(line, /30 days/, 'the retention, in the units it was set in');
+  assert.match(line, /256 MB/, 'the ceiling the reader did not set and cannot raise');
+  assert.match(line, /\/x\/history/, 'and the directory to go and look in');
+  assert.match(line, /\(file\)/, 'on whose authority');
+});
+
+// Off is the default and the product, and it still gets a line: a reader looking for their day
+// of history must be able to see, in the same block as everything else, that there is none and
+// which key turns it on.
+test('with no retention set, the settings block says the journal is off and how to turn it on', () => {
+  const out = renderSettings(
+    {
+      staleAfterMs: { value: 600_000, source: 'default' },
+      port: { value: 4477, source: 'default' },
+      snapshotsDir: { value: '/x/snaps', source: 'default' },
+      trustHosts: { value: [], source: 'default' },
+      historyDays: { value: null, source: 'default' },
+    },
+    '/x/.claude/tarmac/config.json',
+    '/x/history',
+  );
+  const line = out.split('\n').find((l) => l.includes('history'))!;
+  assert.match(line, /\boff\b/);
+  assert.match(line, /history\.days/, 'the key that turns it on');
+  assert.doesNotMatch(line, /\/x\/history/, 'and no directory, because nothing is written to one');
 });
 
 // M4: two files claiming the same session id. The freshest is kept — and the reader is told

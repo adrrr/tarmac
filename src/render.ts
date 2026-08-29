@@ -8,6 +8,7 @@
 // they are written side by side, and the suite can reach both.
 
 import { formatDuration } from './config.ts';
+import { HISTORY_MAX_BYTES } from './history-store.ts';
 import type { Config, Source } from './config.ts';
 import { buildMap, INTERACTIVE, stateOf } from './map.ts';
 import type { Berth, MapNode, NodeState } from './map.ts';
@@ -146,11 +147,24 @@ export const servingLine = ({ port, movedFrom }: { port: number; movedFrom: numb
  * one nobody can go and correct — and pointing at an empty snapshots directory looks exactly
  * like a fleet with no statusline chained.
  */
-export function renderSettings(config: Config, configFile: string): string {
+export function renderSettings(config: Config, configFile: string, historyDir: string): string {
+  const days = config.historyDays.value;
   const rows: Array<[string, string, Source]> = [
     ['freshness', formatDuration(config.staleAfterMs.value), config.staleAfterMs.source],
     ['port', String(config.port.value), config.port.source],
     ['snapshots', config.snapshotsDir.value, config.snapshotsDir.source],
+    // Unlike the trusted hosts below, this line is printed either way. Off is the default and
+    // the product, and a reader who came looking for their week of history has to be able to
+    // read, in the same block as everything else, that there is none and which key starts it.
+    // On, it is the only setting here that writes to their disk, so it says all of it at once:
+    // how long it keeps, the ceiling they did not set, and the directory to go and look in.
+    [
+      'history',
+      days === null
+        ? 'off  (set history.days to keep more than 24 h)'
+        : `${days} days  (about 2 MB a day at 8 sessions, hard cap ${HISTORY_MAX_BYTES / (1024 * 1024)} MB)  ${historyDir}`,
+      config.historyDays.source,
+    ],
   ];
   // Only when there are any. An empty list is what every other run has, chosen by nobody —
   // a `(default)` line saying "none" on every serve is noise, and this line has to read as

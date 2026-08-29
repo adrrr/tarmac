@@ -146,9 +146,9 @@ and tarmac keeps reporting. The full state-by-state table is in
 
 ## Configuration
 
-Three numbers here are judgement calls, so all three are yours to set, and behind a reverse
-proxy the hosts `serve` answers to are yours as well. Everything else is deliberately not
-configurable, and all of it works with no configuration at all.
+The settings below are judgement calls, so they are yours: three numbers, the hosts `serve`
+answers to behind a reverse proxy, and whether it keeps a journal on disk. Everything else is
+deliberately not configurable, and all of it works with no configuration at all.
 
 | Setting | Flag | Default |
 |---|---|---|
@@ -156,6 +156,7 @@ configurable, and all of it works with no configuration at all.
 | port | `--port 8080` | `4477` |
 | snapshots dir (read side) | `--snapshots-dir DIR` | the wrapper's frozen path when installed, else the XDG state directory |
 | trusted hosts | `--trust-host HOST`, once per host | none, so loopback only |
+| journal retention | `--history-days 30`, on `serve` | none, so nothing is written to disk |
 
 Each also has an environment variable and a key in `<home>/.claude/tarmac/config.json`.
 Flag beats environment beats config file beats default, settled per setting. `serve` opens by
@@ -171,10 +172,23 @@ and what would have worked. Spellings, edge cases and the two health fields
   the map. It does not guess at the rest. A session that asked you a question in prose still
   reports `idle`, because the only way to know better is to read a transcript, and this tool
   does not read transcripts.
-- **No history on disk.** `tarmac list` is a snapshot in time. A running `serve` holds the
-  last 24 hours of the readings it took itself, in memory, so the page can replay them. That
-  record reaches no further back than the serve that took it, and goes when it goes. None of
-  it is written down.
+- **Nothing on disk unless you ask for it.** `tarmac list` is a snapshot in time. A running
+  `serve` holds the last 24 hours of the readings it took itself, in memory, so the page can
+  replay them. That record reaches no further back than the serve that took it, and goes when
+  it goes. Nothing of it is written down, and that is what every install that never asked
+  otherwise does.
+
+  Set `history.days` and `serve` also appends one JSON line a minute to
+  `~/.local/state/tarmac/history/YYYY-MM-DD.jsonl`, beside the snapshots. The line is the same
+  record the page replays, minus one field: per session, the session id, the project basename,
+  the kind, the state, the context percentage and the cost, plus the account's rate limits. No
+  session name, no working directory, and not the reason a waiting session gave, which is free
+  text off `claude agents --json` and does not belong in a file that outlives the process.
+  About 2 MB a day at eight sessions. Files older than the retention you set are removed when
+  `serve` starts and once a day after that, and writing stops altogether at 256 MB, which is
+  not a number you can raise. `serve` names the retention, the cap and the directory in its
+  settings block, before it serves anything. To stop it, unset the retention wherever you set
+  it; to erase what is there, remove the directory.
 - **No Windows.** The generated wrapper is POSIX `sh`.
 - **No remote fleets.** It watches the machine it runs on.
 

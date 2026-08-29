@@ -8,7 +8,7 @@ the test suite, so none of it is aspiration.
 | Command | What it does | Options |
 |---|---|---|
 | `tarmac list` | one-shot fleet table, and the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
-| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host` |
+| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host`, `--history-days` |
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
@@ -698,11 +698,12 @@ the oldest minute falls off. `GET /api/history` hands that ring back.
 }
 ```
 
-**In memory, and nowhere else.** A fleet journal on disk is the one file this tool promised
-never to write: it would outlive the process that made it and sit in a home directory carrying
-session ids, working directories and costs. So the record starts when the serve starts, and
-`since` says so. A page that needs to state what it covers reads that field rather than
-assuming a full day. Restarting `serve` is how you clear it.
+**In memory, unless you ask otherwise.** A fleet journal on disk is the one file this tool
+refused to write on its own: it outlives the process that made it and sits in a home directory
+carrying session ids and costs. So the ring starts when the serve starts, `since` says so, and
+restarting `serve` is how you clear it. A page that needs to state what it covers reads that
+field rather than assuming a full day. With no `history.days` set, that ring is the whole of
+what tarmac remembers, and nothing of it reaches the disk.
 
 `since` is the oldest minute the record still holds, not the oldest it ever held: for the
 first day it is the moment `serve` started, and from the first eviction on it moves with the
@@ -715,10 +716,11 @@ screen in the present tense. A day of them, retained by a process and served on 
 different object, so no name enters the ring, for any kind of session. The agent is still
 there, with its `sid`, its project and its state. What is missing is the field, not the row.
 
-`waitingFor` is the one string off the source that the ring does keep. It is a closed vocabulary
-the surface publishes, five words about the fleet's own machinery, rather than a sentence
-somebody typed. "Blocked on a permission prompt at 14:02" is the reason to keep a day of
-readings at all.
+`waitingFor` is the one string off the source that the ring does keep. "Blocked on a permission
+prompt at 14:02" is the reason to keep a day of readings at all. It is FREE TEXT, not a closed
+vocabulary: `claude agents --json` writes what it likes there, and what it writes today can name
+the command a permission prompt is asking about. That is bearable in the ring, which is in
+memory, on loopback, and dies with the process. It is why the journal below does not keep it.
 
 **A reading that failed is a counted slot.** `missed` is how many minutes were due and never
 filled: a collector that threw, or a fleet still being read when the next tick came (only one
@@ -728,16 +730,80 @@ names, not since the process booted. The 1440 slots hold minutes, and a minute n
 read is one of them, taking a slot from the samples and ageing out with them.
 
 **One minute and one day are the product.** There is no flag, no environment variable and no
-config key for the cadence or the retention, and none is planned. A cadence knob is a way to
-ask this process to spawn `claude agents --json` every second, and a retention knob is a way to
-ask it to hold a week of fleets in RAM. `/api/history` carries the same `X-Tarmac: 1` identity
-header and `Cache-Control: no-store` as every other answer, and alone among the routes it
-never reads the fleet to answer: it serves what was already read.
+config key for either, and none is planned. A cadence knob is a way to ask this process to
+spawn `claude agents --json` every second, and a knob on the RING is a way to ask it to hold a
+week of fleets in RAM. `history.days` is not that knob: it sets how long the journal below keeps
+its FILES, and it leaves this ring at one minute and one day whatever it is set to.
+`/api/history` carries the same `X-Tarmac: 1` identity header and `Cache-Control: no-store` as
+every other answer, and alone among the routes it never reads the fleet to answer: it serves
+what was already read.
+
+### The journal on disk
+
+The ring is 24 hours and it dies with the process. To keep more than that, set a retention:
+
+```json
+{ "history": { "days": 30 } }
+```
+
+`serve` then appends one line to `<state>/tarmac/history/YYYY-MM-DD.jsonl` on every tick, in
+the local day's file, beside the snapshots and never among them.
+
+What it carries, since this is the one copy that outlives the process: per session, the session
+id, the project basename, the kind, the state, the context percentage and the cost, and the
+account's rate limits alongside them. That is the sample above minus one field. There is no
+session NAME and no working directory, on disk any more than in the ring. And there is no
+`waitingFor`: the reason a halted session gave is free text, as the ring's own note above says,
+and a file that sits in a home directory for thirty days is not where free text off another
+program belongs. The field is absent rather than emptied, and the session is still there, still
+`waiting`. What is missing is the field, not the row.
+
+The line is written by an allowlist that names each field, not by copying the sample and
+removing one, so a field added to the ring tomorrow does not reach the disk until somebody has
+decided that it should.
+
+`days` counts CALENDAR days, not rolling 24-hour windows: `days: 1` keeps today's file, so at
+00:01 there is one minute of journal, not yesterday evening.
+
+```
+$ tail -f ~/.local/state/tarmac/history/$(date +%F).jsonl | jq -c '[.t, (.sessions | length)]'
+$ jq -s 'map(.sessions[] | select(.ctxPct > 80) | .project) | unique' ~/.local/state/tarmac/history/*.jsonl
+```
+
+It is bounded twice. By the retention you set, applied when `serve` starts and once a local day
+after that. And by a hard cap of 256 MB on the directory, which nothing configures: past it the
+journal stops rather than fills a disk, and `serve` says so. Measured on a real line, eight
+sessions cost about 2 MB a day and 63 MB over thirty, so the cap is out of reach at that size
+and is there for the fleet several times larger than the one the startup line quoted.
+
+The retention deletes the `YYYY-MM-DD.jsonl` files in that directory and nothing else, by name,
+which is why the journal has a directory to itself. It is a property of the DIRECTORY, not of a
+process: a second `serve` started on the same machine walks to the next free port and journals
+to the same place, and applies its own retention there. So a `tarmac serve --history-days 1`
+run to try something out deletes, at startup, everything the thirty-day serve had kept. It says
+what it removed on stderr as it does it, and there is no undoing it. Two serves also write two
+lines a minute rather than one, which double-counts under any aggregation. Until this is
+arbitrated between them, run one journaling serve per machine, and give a second one either the
+same retention or none.
+
+Everything about it is best effort. A write that fails costs one line and is reported once, not
+once a minute; it never brings down a `serve` that has been running unattended for hours. A
+minute nobody could read is a minute with no line, never a line of zeroes.
+
+The directory follows the snapshots, so `--snapshots-dir` moves it: the journal is always the
+`history/` sibling of whatever directory the snapshots are read from, and a RELATIVE
+`--snapshots-dir snaps` therefore puts the journal in `history/`, relative to the working
+directory `serve` was started in.
+
+`list` writes nothing: it is one-shot and samples nothing, so `--history-days` belongs to
+`serve` alone and `list` refuses it by name. Turning the journal off is removing the key.
+Erasing it is removing the directory; nothing else in tarmac reads or writes there.
 
 ## Configuration
 
 Three of tarmac's numbers are judgement calls, so all three are yours to set. The hosts `serve`
-answers to are the fourth setting and the only one that is not a number. It has a default nobody
+answers to are the fourth setting and the only one that is not a number, and whether it keeps a
+journal on disk is the fifth. It has a default nobody
 should have to change, and a documented reason to change it. Nothing else is configurable, and
 every one of them keeps working with no configuration at all.
 
@@ -747,6 +813,7 @@ every one of them keeps working with no configuration at all.
 | port | where `serve` listens | `4477` |
 | snapshots directory | where `list` and `serve` **read** payloads from | the path frozen into the installed wrapper, so the reader follows the writer; with no install to ask, `$XDG_STATE_HOME/tarmac/snapshots`, else `<home>/.local/state/tarmac/snapshots` |
 | trusted hosts | which `Host` values `serve` answers to besides loopback (see [putting it behind a reverse proxy](#putting-it-behind-a-reverse-proxy)) | none |
+| journal retention | how many days of readings `serve` keeps on disk, today included (see [the journal on disk](#the-journal-on-disk)) | none, so nothing is written |
 
 Flag beats environment beats config file beats default, settled per setting. A port pinned in
 the file and a threshold tightened for one run is the normal case.
@@ -757,6 +824,7 @@ the file and a threshold tightened for one run is the normal case.
 | port | `--port 8080` | `TARMAC_PORT` | `"port": 8080` |
 | snapshots | `--snapshots-dir DIR` | `TARMAC_SNAPSHOTS_DIR` | `"snapshotsDir": "DIR"` |
 | trusted hosts | `--trust-host HOST`, once per host | `TARMAC_TRUST_HOST`, comma-separated | `"trustHosts": ["HOST"]` |
+| journal retention | `--history-days 30`, on `serve` only | `TARMAC_HISTORY_DAYS` | `"history": {"days": 30}` |
 
 ```json
 { "staleAfterMs": 900000, "port": 8080 }

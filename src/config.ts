@@ -81,6 +81,29 @@ function checkPort(n: unknown, label: string, shown: unknown = n): number {
 }
 
 /**
+ * How many local days of fleet journal to keep on disk, today included.
+ *
+ * The one setting here whose absence is the product: with no `history` key there is no journal,
+ * which is what every install that never asked for one gets. So ZERO is refused rather than read
+ * as "off". It is the number a reader reaches for to mean off, and reading it that way would
+ * leave a file growing all day under a retention that keeps none of it. Off is the absence of
+ * the key, which is also what deleting it does: one way to stop, not two.
+ *
+ * @param label how the source spells this setting, so the refusal names the knob to turn
+ */
+export function parseHistoryDays(text: string, label: string): number {
+  const trimmed = text.trim();
+  return checkHistoryDays(/^\d+$/.test(trimmed) ? Number(trimmed) : NaN, label, text);
+}
+
+function checkHistoryDays(n: unknown, label: string, shown: unknown = n): number {
+  if (typeof n !== 'number' || !Number.isInteger(n) || n < 1) {
+    throw new Error(`${label} must be a whole number of days, 1 or more, got: ${format(shown)}`);
+  }
+  return n;
+}
+
+/**
  * The name out of a `Host` header, or out of a setting that has to match one: the port
  * dropped, the brackets of an IPv6 literal dropped with it.
  *
@@ -124,9 +147,15 @@ export interface FileConfig {
   port?: number;
   snapshotsDir?: string;
   trustHosts?: string[];
+  /**
+   * Nested, alone among these keys, because it is the one that will grow: the journal has a
+   * retention today and the shape leaves room for what a range API needs tomorrow, without a
+   * second top-level key called `historyDays` sitting next to it forever.
+   */
+  history?: { days: number };
 }
 
-const KNOWN_KEYS = ['staleAfterMs', 'port', 'snapshotsDir', 'trustHosts'] as const;
+const KNOWN_KEYS = ['staleAfterMs', 'port', 'snapshotsDir', 'trustHosts', 'history'] as const;
 
 /**
  * `~/.claude/tarmac/config.json`, if there is one.
@@ -195,6 +224,27 @@ export function readConfigFile(file: string): FileConfig {
       return parseTrustHost(h, where('trustHosts'));
     });
   }
+  if ('history' in body) {
+    const v = body.history;
+    if (typeof v !== 'object' || v === null || Array.isArray(v)) {
+      throw new Error(`${where('history')} must be an object like {"days": 30}, got: ${format(v)}`);
+    }
+    const inner = v as Record<string, unknown>;
+    const unknownInner = Object.keys(inner).filter((k) => k !== 'days');
+    if (unknownInner.length > 0) {
+      throw new Error(
+        `unknown key(s) in ${file}: ${unknownInner.map((k) => `history.${k}`).join(', ')} (the only key of history is days)`,
+      );
+    }
+    // An unfinished key, not an off switch. `"history": {}` reads as a setting the tool took
+    // and silently never applied, which is the one thing this module exists to prevent.
+    if (!('days' in inner)) {
+      throw new Error(
+        `${where('history.days')} must be set to a whole number of days; remove the history key to keep nothing on disk`,
+      );
+    }
+    out.history = { days: checkHistoryDays(inner.days, where('history.days')) };
+  }
   return out;
 }
 
@@ -222,6 +272,12 @@ export interface Config {
   snapshotsDir: Resolved<string>;
   /** Empty is the default and the product: loopback, and nothing else. */
   trustHosts: Resolved<string[]>;
+  /**
+   * How many days of fleet journal `serve` keeps on disk. `null` is the default and the
+   * product: nothing is written down, which is what the README promises everyone who never
+   * asked otherwise.
+   */
+  historyDays: Resolved<number | null>;
 }
 
 export interface ResolveInput {
@@ -230,7 +286,13 @@ export interface ResolveInput {
    * the repeatable one, where an empty list says it and no value can be confused with it:
    * `--trust-host` cannot be typed to mean "none".
    */
-  flags: { staleAfter: string | null; port: number | null; snapshotsDir: string | null; trustHosts: string[] };
+  flags: {
+    staleAfter: string | null;
+    port: number | null;
+    snapshotsDir: string | null;
+    trustHosts: string[];
+    historyDays: number | null;
+  };
   env: Record<string, string | undefined>;
   file: FileConfig;
   /**
@@ -260,6 +322,7 @@ export function resolveConfig({ flags, env, file, defaultSnapshotsDir }: Resolve
   const trustEnv = parseIfSet(env.TARMAC_TRUST_HOST, (v) =>
     v.split(',').map((h) => parseTrustHost(h, 'TARMAC_TRUST_HOST')),
   );
+  const historyEnv = parseIfSet(env.TARMAC_HISTORY_DAYS, (v) => parseHistoryDays(v, 'TARMAC_HISTORY_DAYS'));
 
   return {
     staleAfterMs:
@@ -297,6 +360,16 @@ export function resolveConfig({ flags, env, file, defaultSnapshotsDir }: Resolve
           : file.trustHosts !== undefined
             ? { value: file.trustHosts, source: 'file' }
             : { value: [], source: 'default' },
+    // The only default here that is not a number: no key anywhere means no journal, and that
+    // is the behaviour every install had before this setting existed.
+    historyDays:
+      flags.historyDays !== null
+        ? { value: flags.historyDays, source: 'flag' }
+        : historyEnv !== null
+          ? { value: historyEnv, source: 'env' }
+          : file.history !== undefined
+            ? { value: file.history.days, source: 'file' }
+            : { value: null, source: 'default' },
   };
 }
 

@@ -10,6 +10,8 @@ import { reason, renderLive, renderPage } from './render.ts';
 import type { View } from './render.ts';
 import { hostName, SOURCE_PHRASE } from './config.ts';
 import { createHistory, HISTORY_CADENCE_MS } from './history.ts';
+import type { HistorySample } from './history.ts';
+import type { HistoryStore } from './history-store.ts';
 import type { Source } from './config.ts';
 import type { Fleet } from './fleet.ts';
 
@@ -49,9 +51,30 @@ export interface FleetServerDeps {
    * lets in — may read this fleet's working directories, session ids and costs.
    */
   trustedHosts?: readonly string[];
+  /**
+   * Where each tick's reading is ALSO written down, when a reader set `history.days`. Absent
+   * is the default and the product: nothing on disk unless someone asked for it.
+   *
+   * The store is handed the sample the ring kept rather than a fleet of its own, so it cannot
+   * become a second sampler with a schedule of its own, and so the file and `/api/history`
+   * cannot disagree about the same minute.
+   */
+  store?: HistoryStore | null;
+  /**
+   * Where the journal's own troubles are said out loud. `serve` runs unattended for hours, so
+   * a journal that quietly stopped writing would leave a reader believing they have a week of
+   * history until the day they go looking for it.
+   */
+  report?: (line: string) => void;
 }
 
-export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS, trustedHosts = [] }: FleetServerDeps): Server {
+export function createFleetServer({
+  collect,
+  sampleEveryMs = HISTORY_CADENCE_MS,
+  trustedHosts = [],
+  store = null,
+  report = (line) => console.error(line),
+}: FleetServerDeps): Server {
   // Normalised HERE rather than trusted to arrive that way. This is the last thing between a
   // foreign origin and the fleet, so it owns both sides of its own comparison — the config
   // parser cuts a name the same way, and neither leans on the other having done it.
@@ -77,6 +100,37 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS,
   // than a slot would otherwise be answered with a queue of processes instead of one missed
   // minute — the tick that finds a read still running counts the slot and stands down.
   let reading = false;
+  // Said on the CHANGE, never on the tick. A read-only journal directory is a fact that holds
+  // for hours, and a line a minute about it is a log a reader learns to scroll past, which is
+  // the same as never having printed it. A failure that comes back after a run of good writes
+  // is a new fact and says so again, which is what the two flags below are for.
+  let misses = 0;
+  let failing = false;
+  let saidStopped: string | null = null;
+  const journal = (taken: HistorySample): void => {
+    if (store === null) return;
+    // Structurally best effort, not best effort by argument. The store swallows its own
+    // filesystem trouble, so nothing in here can throw today; but this is called from inside
+    // the sampler's try, where a throw would be caught as A FLEET READING THAT FAILED and
+    // counted as a missed minute in `/api/history` on top of the sample already pushed. The
+    // journal is not allowed to make the record of the fleet wrong, whatever it does to itself.
+    try {
+      store.append(taken);
+      const stats = store.stats();
+      if (stats.stopped !== saidStopped) {
+        saidStopped = stats.stopped;
+        if (stats.stopped !== null) report(`tarmac: the fleet journal has stopped, ${stats.stopped}`);
+      }
+      const missed = stats.misses > misses;
+      misses = stats.misses;
+      if (missed && !failing) {
+        report(`tarmac: could not write to the fleet journal in ${store.dir}; that reading is lost`);
+      }
+      failing = missed;
+    } catch {
+      // Including a `report` a caller wrote that throws: this one is not ours to be right.
+    }
+  };
   const sample = async (): Promise<void> => {
     if (reading) {
       history.miss(Date.now());
@@ -84,7 +138,7 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS,
     }
     reading = true;
     try {
-      history.record(await collect());
+      journal(history.record(await collect()));
     } catch {
       // A collector that throws is the normal weather here: `claude` missing, a laptop that
       // was asleep. It costs a slot and nothing else — a throw out of this timer would be an
@@ -197,6 +251,15 @@ export function createFleetServer({ collect, sampleEveryMs = HISTORY_CADENCE_MS,
   let sampler: NodeJS.Timeout | null = null;
   server.on('listening', () => {
     if (sampler !== null) return;
+    // The journal's retention, applied before the first line of this run is written and once a
+    // local day after that (the store keeps that half itself). Here rather than in the CLI so
+    // that the store `serve` prunes with is, provably, the store `serve` writes with: a `serve`
+    // that built one and forgot to hand it over would otherwise sweep and journal nothing.
+    if (store !== null) {
+      const { removed, failed } = store.prune();
+      if (removed > 0) report(`tarmac: removed ${removed} journal file(s) older than ${store.days} days from ${store.dir}`);
+      if (failed > 0) report(`tarmac: could not remove ${failed} journal file(s) under ${store.dir}`);
+    }
     sampler = setInterval(() => void sample(), sampleEveryMs);
     sampler.unref();
   });

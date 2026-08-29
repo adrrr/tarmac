@@ -19,6 +19,7 @@ import { createFleetServer, listenFleetServer } from './server.ts';
 import { install, uninstall, paths, planInstall, planUninstall, installedSnapshotsDir, wrapperIsOurs } from './install.ts';
 import { confirmTyped } from './prompt.ts';
 import { reapOrphanedTemps } from './reap.ts';
+import { createHistoryStore, historyDirFor } from './history-store.ts';
 import { renderPlan, renderSettings, renderTable, restoreMeaning, servingLine } from './render.ts';
 import { runWatch } from './watch.ts';
 
@@ -28,7 +29,7 @@ const USAGE = `tarmac — fleet observability for Claude Code
                     [--claude-bin PATH] [--json] [--watch]
         one-shot fleet table — with --watch, redrawn every 5s until ^C
   tarmac serve      [--home DIR] [--port N] [--stale-after D] [--snapshots-dir DIR]
-                    [--claude-bin PATH] [--trust-host HOST]
+                    [--claude-bin PATH] [--trust-host HOST] [--history-days N]
         local dashboard
   tarmac install    [--home DIR] [--yes]
         chain the statusline
@@ -52,11 +53,17 @@ const USAGE = `tarmac — fleet observability for Claude Code
                    once per host (default: none). For a reverse proxy: give the name
                    your browser shows, without the port, and remember that whoever can
                    reach that name can read this fleet
+  --history-days   keep a fleet journal for N days, in a directory beside the snapshots
+                   (default: none, and nothing is written to disk). On \`serve\` only,
+                   which is the command that samples: one JSON line a minute, no session
+                   name and no working directory, about 2 MB a day at eight sessions,
+                   and writing stops at 256 MB whatever N says
 
-  Those four settings can also be set, in decreasing order of precedence, by the
-  environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR, TARMAC_TRUST_HOST)
-  and by <home>/.claude/tarmac/config.json ({"staleAfterMs": …, "port": …,
-  "snapshotsDir": …, "trustHosts": […]}). \`serve\` prints which one won.
+  Those five settings can also be set, in decreasing order of precedence, by the
+  environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR, TARMAC_TRUST_HOST,
+  TARMAC_HISTORY_DAYS) and by <home>/.claude/tarmac/config.json ({"staleAfterMs": …,
+  "port": …, "snapshotsDir": …, "trustHosts": […], "history": {"days": …}}). \`serve\`
+  prints which one won.
 `;
 
 /**
@@ -141,7 +148,7 @@ try {
         `tarmac: ${p.wrapper} is ours but does not say where it writes — falling back to ${p.snapshots}`,
       );
     const config = resolveConfig({
-      flags: { staleAfter: args.staleAfter, port: args.port, snapshotsDir: args.snapshotsDir, trustHosts: args.trustHost },
+      flags: { staleAfter: args.staleAfter, port: args.port, snapshotsDir: args.snapshotsDir, trustHosts: args.trustHost, historyDays: args.historyDays },
       env: process.env,
       file: readConfigFile(p.config),
       // The installed wrapper's own path, when there is one: the default is where the
@@ -153,12 +160,16 @@ try {
     const staleAfterMs = config.staleAfterMs.value;
 
     if (args.command === 'serve') {
+      // Beside the snapshots, never among them: `reap.ts`, the wrapper's own sweep and the
+      // legacy purge in `install.ts` all decide by name inside that directory.
+      const historyDir = historyDirFor(snapshotsDir);
       // Unattended for hours, so it opens by saying what it decided and on whose authority.
-      process.stdout.write(renderSettings(config, p.config));
+      process.stdout.write(renderSettings(config, p.config, historyDir));
 
-      // The one place the CLI deletes anything: temp files its own wrapper left behind when a
-      // terminal died mid-write. Best effort, and it says what it did rather than doing it
-      // quietly — this is the user's directory.
+      // Temp files its own wrapper left behind when a terminal died mid-write. Best effort, and
+      // it says what it did rather than doing it quietly, this being the user's directory. It
+      // is no longer the only deletion a `serve` makes: a journal that was asked for applies
+      // its retention on `listening`, and says that too. Nothing else here removes anything.
       const { reaped, failed } = reapOrphanedTemps(snapshotsDir);
       if (reaped > 0) console.log(`tarmac: reaped ${reaped} orphaned snapshot temp file(s)`);
       if (failed > 0) console.error(`tarmac: could not remove ${failed} orphaned temp file(s) under ${snapshotsDir}`);
@@ -166,6 +177,12 @@ try {
       const server = createFleetServer({
         collect: () => collectFleet({ claudeBin: args.claudeBin, snapshotsDir, staleAfterMs, snapshotsDirSource: config.snapshotsDir.source, installed: frozen !== null }),
         trustedHosts: config.trustHosts.value,
+        // No key anywhere is no store, which is no directory and no file: the default is that
+        // nothing of this fleet is written down, and it is the default that is the product.
+        store:
+          config.historyDays.value === null
+            ? null
+            : createHistoryStore({ dir: historyDir, days: config.historyDays.value }),
       });
       // A port nobody chose is not worth failing over: this walks past a busy 4477 and says
       // where it landed. A port that WAS chosen refuses instead, and the refusal leaves
