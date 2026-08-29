@@ -8,7 +8,7 @@ the test suite, so none of it is aspiration.
 | Command | What it does | Options |
 |---|---|---|
 | `tarmac list` | one-shot fleet table, and the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
-| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host`, `--history-days` |
+| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran, or `?range=7d` and `?range=30d` for the journal on disk | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host`, `--history-days` |
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
@@ -798,6 +798,67 @@ directory `serve` was started in.
 `list` writes nothing: it is one-shot and samples nothing, so `--history-days` belongs to
 `serve` alone and `list` refuses it by name. Turning the journal off is removing the key.
 Erasing it is removing the directory; nothing else in tarmac reads or writes there.
+
+### Reading the journal back
+
+`GET /api/history?range=7d` and `?range=30d` read those files. It is the same route the ring is
+served on: with no `range`, or with `range=24h`, the answer is the ring in memory and no file is
+opened. Any other value is refused with a `400` naming the three that work. A `serve` that keeps
+no journal answers `{"enabled": false, "range": "7d"}` rather than an empty week, so a page can
+tell a journal that is off from a fleet that did nothing.
+
+What comes back is aggregated, a month of minutes being a size nobody reads:
+
+- `hours`, one entry per local hour that has readings in it, and `n` readings behind it. An hour
+  built from one reading and an hour built from sixty are drawn the same and are not the same
+  fact. Per session in that hour: the highest context it reached, the last cost measured for it,
+  the last state it was seen in, its project and its kind. The highest context rather than the
+  last, because a session compacted at ten to the hour still went to 91, and that is the fact a
+  question about recycling is asked of. Each hour also carries the highest each plan window
+  reached in it.
+- `days`, one entry per day file read, and per project what its sessions spent on that day. The
+  cost of a project on a day is, for each session id, the highest cost read that day less the
+  lowest, summed, most expensive first. A total would be wrong twice: a session recycled at three
+  in the morning is two ids under one project, and a session still open at midnight begins the new
+  day carrying everything it spent on the old one. Highest less lowest rather than last less
+  first, so the figure is never negative: a counter that drops mid-day, which is a payload nobody
+  promised would only climb, is then billed as though it had only climbed. The day's cost is a
+  floor either way. What a session spends between the last reading of one day and the first of the
+  next belongs to neither of them.
+- `resets`, the readings where a plan window fell by more than five points, which is a window that
+  turned over rather than one sagging as its oldest usage ages out. Each carries `sinceMs`, how
+  long since the reading it fell from. That is the difference between a turnover this serve
+  watched happen and one it found on its way back: a window that rolls while `serve` is off is
+  dated at the minute the record RESUMES, not the minute it actually rolled, and if usage climbed
+  back past where it was before the gap, the fall never appears in the file and no reset is
+  reported at all. Several turnovers inside one gap are at most one marker. And a fall from the
+  very first reading of a range has nothing to fall from, so `7d` and `30d` can disagree about a
+  reset at the edge of the shorter one.
+- `coverage`, what was asked for against what was found: `daysRequested`, `lines` read and used,
+  `skipped`, `outOfRange`, `droppedSessions`, and `capped`. How many days had a file is
+  `days.length`. `capped` is true when the journal had stopped at its 256 MB cap, which the reader
+  cannot see for itself: a journal that stopped has the shape of a fleet that went quiet.
+
+A line is skipped when it will not parse, when it parses into something that is not a reading, or
+when the clock it carries falls outside the range asked for, and skipping it is the point.
+`appendFileSync` loops on `writeSync`, so a volume that fills in the middle of a record leaves the
+front of it behind and the next minute glues itself on; and the file is named by the writer's
+clock while each line carries the reading's own, so a clock corrected overnight can date a line in
+1970 or in the year 41000. One such line costs one minute rather than the range. The two are counted apart:
+`coverage.skipped` is the corrupted ones, which is a filesystem event worth seeing, and
+`coverage.outOfRange` the ones whose clock puts them somewhere else.
+
+Inside a reading, what cannot be read costs itself and nothing around it. A `rate_limits` the
+source did not shape as two windows, which is a shape it does send, costs the two window figures
+for that minute and leaves the sessions alone. A session entry with no id of its own, or one that is
+not an object at all, is dropped and counted in `coverage.droppedSessions`: two nameless readings
+cannot be known to be one session, and an id that is the empty string is a missing id wearing
+another type. A project or a kind a reading could not name does not rename anything: those are
+identities rather than measurements, and the day and the hour keep the name they were given.
+
+Each range is read at most once a minute, held for that long and shared between requests, so a
+page that polls, or a reader moving between 7d and 30d, does not put a month of files through the
+thread that also samples the fleet. `list` never comes here at all.
 
 ## Configuration
 

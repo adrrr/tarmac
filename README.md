@@ -187,8 +187,10 @@ and what would have worked. Spellings, edge cases and the two health fields
   About 2 MB a day at eight sessions. Files older than the retention you set are removed when
   `serve` starts and once a day after that, and writing stops altogether at 256 MB, which is
   not a number you can raise. `serve` names the retention, the cap and the directory in its
-  settings block, before it serves anything. To stop it, unset the retention wherever you set
-  it; to erase what is there, remove the directory.
+  settings block, before it serves anything. `GET /api/history?range=7d`, or `30d`, reads those
+  files back aggregated by hour and by project, where the same route with no range is the last
+  24 hours out of memory. To stop it, unset the retention wherever you set it; to erase what is
+  there, remove the directory.
 - **No Windows.** The generated wrapper is POSIX `sh`.
 - **No remote fleets.** It watches the machine it runs on.
 

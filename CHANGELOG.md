@@ -13,6 +13,26 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The journal, read back by range.** `GET /api/history?range=7d` and `?range=30d` read the day
+  files `serve` writes and answer with them aggregated: one entry per local hour, carrying the
+  highest context each session reached in it, the last cost measured for it and the state it was
+  left in, plus the highest each plan window reached; one entry per day, carrying what each
+  project spent on it; the readings where a plan window turned over; and what the range covered.
+  A project's cost for a day is, per session id, the highest cost read that day less the lowest,
+  which is the only figure a session recycled at three in the morning and a session left open
+  across midnight both agree on, and which a cost that drops mid-day cannot turn negative. A line that will not parse, that parses into something which is
+  not a reading, or that carries a clock outside the range asked for is counted and stepped over
+  rather than failing the whole range: a volume that fills mid-record leaves half a line behind
+  and the next minute glues itself on, and one torn line may not cost a reader the month. Inside
+  a reading the same rule holds one level down, so a `rate_limits` the source did not shape as
+  two windows costs that minute its two window figures and not the fleet written beside them.
+  The route is unchanged without a `range`, and
+  `range=24h` is the name of that: the ring, in memory, no file opened. An unknown range is
+  refused and the refusal names the ones that work; a `serve` keeping no journal answers
+  `{"enabled": false}` rather than an empty week, so a page can tell an off journal from a quiet
+  fleet. Each range is read at most once a minute and shared between requests, so a page that
+  polls does not put a month of files through the thread that samples the fleet. (#3, #134)
+
 - **A fleet journal on disk, off unless you ask for it.** `serve` has always held 24 hours of
   readings in memory and lost them with the process, so the questions that are about movement
   rather than about now, whether a context is climbing fast enough to recycle a session tonight,

@@ -11,6 +11,8 @@ import type { View } from './render.ts';
 import { hostName, SOURCE_PHRASE } from './config.ts';
 import { createHistory, HISTORY_CADENCE_MS } from './history.ts';
 import type { HistorySample } from './history.ts';
+import { HISTORY_RANGES, readRange } from './history-range.ts';
+import type { HistoryRange, RangeHistory } from './history-range.ts';
 import type { HistoryStore } from './history-store.ts';
 import type { Source } from './config.ts';
 import type { Fleet } from './fleet.ts';
@@ -61,6 +63,12 @@ export interface FleetServerDeps {
    */
   store?: HistoryStore | null;
   /**
+   * How long a range read off that journal is worth serving again. A parameter for the same one
+   * reason `sampleEveryMs` is one: a suite that waited a minute to watch a cache expire would
+   * not be run. One minute is the product, and it is not a flag, a variable or a config key.
+   */
+  rangeCacheMs?: number;
+  /**
    * Where the journal's own troubles are said out loud. `serve` runs unattended for hours, so
    * a journal that quietly stopped writing would leave a reader believing they have a week of
    * history until the day they go looking for it.
@@ -73,6 +81,7 @@ export function createFleetServer({
   sampleEveryMs = HISTORY_CADENCE_MS,
   trustedHosts = [],
   store = null,
+  rangeCacheMs = 60_000,
   report = (line) => console.error(line),
 }: FleetServerDeps): Server {
   // Normalised HERE rather than trusted to arrive that way. This is the last thing between a
@@ -131,6 +140,56 @@ export function createFleetServer({
       // Including a `report` a caller wrote that throws: this one is not ours to be right.
     }
   };
+  // A week or a month of journal, held for a minute after it was read.
+  //
+  // The entry is the READING, not the answer, and it is stored before anything is awaited: two
+  // requests that arrive together, or a page that asks for the week and the month at once, share
+  // one pass over the files rather than starting a second one behind the first. The files are
+  // tens of megabytes and the thread they are read on is the thread that samples the fleet.
+  //
+  // A minute, because the journal gains one line a minute: a cache that lived longer would be a
+  // page showing an hour that has already been written to.
+  // `at` is when the read FINISHED, and `null` while it has not: a read dated by its start goes
+  // stale on a slow disk while it is still running, and the next request then opens the same
+  // month a second time, in parallel, which is the one thing this exists to prevent.
+  //
+  // That half is held by construction rather than by a test in this suite, which is worth knowing
+  // before editing it: the TTL below has tests, and "one read, however many requests arrive during
+  // it" is this shape, kept simple enough to read. The entry goes in the map before anything is
+  // awaited, and nothing takes it out while it is running. It IS measurable, by counting the calls
+  // a request makes to `fs/promises.readFile`, which is how the regression this comment used to
+  // deny was found; what a test for it costs is a module-wide patch of `node:fs`, and that is the
+  // trade this file made rather than the impossibility it claimed.
+  interface Cached {
+    at: number | null;
+    reading: Promise<RangeHistory>;
+  }
+  const ranges = new Map<HistoryRange, Cached>();
+  const rangeOf = (store: HistoryStore, range: HistoryRange): Promise<RangeHistory> => {
+    const now = Date.now();
+    const held = ranges.get(range);
+    if (held !== undefined && (held.at === null || now - held.at < rangeCacheMs)) return held.reading;
+    const entry: Cached = { at: null, reading: undefined as unknown as Promise<RangeHistory> };
+    // Read once per range per minute rather than per request: `stats()` walks the directory, and
+    // a journal that stopped at its cap stays stopped for hours, so a minute-old answer to that
+    // question is the same answer.
+    entry.reading = readRange({ dir: store.dir, range, now, capped: store.stats().stopped !== null }).then(
+      (answer) => {
+        entry.at = Date.now();
+        return answer;
+      },
+      (e) => {
+        // A read that failed leaves nothing behind to be served for the rest of the minute. Only
+        // its own entry, though: a slow failure that cleared the map would drop the good answer a
+        // later request had already put there.
+        if (ranges.get(range) === entry) ranges.delete(range);
+        throw e;
+      },
+    );
+    ranges.set(range, entry);
+    return entry.reading;
+  };
+
   const sample = async (): Promise<void> => {
     if (reading) {
       history.miss(Date.now());
@@ -196,6 +255,41 @@ export function createFleetServer({
     // Served out of the ring, above the collect below and never through it: this route is
     // what the serve has ALREADY read, and one that collected would let a scrubber spawn
     // `claude agents --json` on every drag of its handle.
+    // The same route, one question further back: `range` sends it to the journal on disk for the
+    // week or the month the ring cannot hold. No range is the ring, and `24h` is the name of
+    // that, so a page may say which one it wants without asking for a different route.
+    if (url.pathname === '/api/history' && url.searchParams.has('range')) {
+      const asked = url.searchParams.get('range')!;
+      if (asked !== '24h') {
+        if (!isRange(asked)) {
+          // The value is not quoted back, for the reason the refused Host is not: it is a string
+          // the caller wrote, and the page swaps a refusal's text into `innerHTML` as its reason.
+          res.writeHead(400, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+          res.end(`tarmac serves /api/history for 24h, ${HISTORY_RANGES.join(' and ')}; no range is the last 24h\n`);
+          return;
+        }
+        // Off is not the same answer as an empty week: a page that could not tell them apart
+        // would draw a flat line over a month the fleet was busy for.
+        let body: object;
+        try {
+          body = store === null ? { enabled: false, range: asked } : { enabled: true, ...(await rangeOf(store, asked)) };
+        } catch (e) {
+          // Nothing in `readRange` is allowed to throw, and this is the seam that keeps a day
+          // when something does from being a request that hangs instead of an answer.
+          res.writeHead(500, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
+          res.end(`tarmac could not read the fleet journal:\n${reason(e)}\n`);
+          return;
+        }
+        res.writeHead(200, {
+          ...IDENTITY,
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        });
+        res.end(JSON.stringify(body));
+        return;
+      }
+    }
+
     if (url.pathname === '/api/history') {
       res.writeHead(200, {
         ...IDENTITY,
@@ -366,6 +460,9 @@ function attempt(server: Server, port: number, host: string): Promise<NodeJS.Err
     server.listen(port, host);
   });
 }
+
+/** One of the ranges the journal reader knows, matched whole. */
+const isRange = (asked: string): asked is HistoryRange => (HISTORY_RANGES as readonly string[]).includes(asked);
 
 function isLoopbackHost(host: string | undefined): boolean {
   if (!host) return false;

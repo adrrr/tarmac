@@ -1605,3 +1605,172 @@ test('the reason a waiting session gave stays in the ring and never reaches the 
     { sampleEveryMs: 20, store },
   );
 });
+
+// ── the journal, read back by range ───────────────────────────────────────────────────
+// `/api/history` answers out of the ring: 24 hours, in memory, no disk. A `range` sends the
+// same route to the journal instead, for the week or the month the ring cannot hold. The two
+// answers must stay two answers: a page that asks for nothing gets exactly what it always got.
+
+/** A day file written by hand, in the journal's own format, for the day a range will look in. */
+function journalDay(dir: string, records: Array<Record<string, unknown>>): string {
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${today()}.jsonl`);
+  fs.writeFileSync(file, records.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  return file;
+}
+
+const journalled = (t: number, costUsd: number): Record<string, unknown> => ({
+  t,
+  sessions: [{ sid: 's1', project: 'alpha', kind: 'interactive', state: 'idle', ctxState: 'ok', ctxPct: 26, costUsd }],
+  rateLimits: { five_hour: { used_percentage: 17 } },
+});
+
+test('a request with no range is the ring, and asking for 24h is the same answer to the byte', async () => {
+  await withServer(collectOk, async (base) => {
+    const text = async (at: string): Promise<string> =>
+      (await fetch(base + at, { signal: AbortSignal.timeout(NET_DEADLINE_MS) })).text();
+    const ring = await text('/api/history');
+    const asked = await text('/api/history?range=24h');
+    assert.equal(asked, ring, 'the ring is what 24h has always meant, and nothing about it moved');
+    assert.equal(/enabled/.test(ring), false, 'and it did not grow a field on the way past');
+  });
+});
+
+// The default is that nothing is on disk, so the route says so rather than answering with an
+// empty week: a page that cannot tell "off" from "nothing happened" would draw a flat line
+// across a fleet that was busy all month.
+test('a range asked of a serve that keeps no journal says the journal is off', async () => {
+  await withServer(collectOk, async (base) => {
+    const res = await fetch(base + '/api/history?range=30d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-tarmac'), '1');
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await res.json(), { enabled: false, range: '30d' });
+  });
+});
+
+test('a range nobody defined is refused, and the refusal names the ones that exist', async () => {
+  await withServer(collectOk, async (base) => {
+    const res = await fetch(base + '/api/history?range=1y', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+    assert.equal(res.status, 400);
+    assert.equal(res.headers.get('x-tarmac'), '1');
+    const body = await res.text();
+    for (const known of ['24h', '7d', '30d']) assert.match(body, new RegExp(known), `it names ${known}`);
+    // The one string on this request the caller wrote, and this page swaps a refusal's text
+    // into `innerHTML` as the reason. Quoted back it would be a payload; the Host is refused
+    // without being repeated for the same reason.
+    assert.equal(body.includes('1y'), false, 'and never quotes back what the caller sent');
+  });
+});
+
+test('a range reads the journal on disk and aggregates it by hour and by day', async () => {
+  const { dir, store } = journal();
+  const now = Date.now();
+  journalDay(dir, [journalled(now - 3600_000, 1), journalled(now, 4)]);
+  await withServer(
+    collectOk,
+    async (base) => {
+      const res = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+      assert.equal(res.status, 200);
+      assert.match(res.headers.get('content-type')!, /application\/json/);
+      assert.equal(res.headers.get('cache-control'), 'no-store');
+      const body = (await res.json()) as {
+        enabled: boolean;
+        range: string;
+        hours: Array<{ sessions: Array<{ sid: string; costUsd: number }> }>;
+        days: Array<{ date: string; byProject: Array<{ project: string; costUsd: number }> }>;
+        coverage: Record<string, number | boolean>;
+      };
+      assert.equal(body.enabled, true);
+      assert.equal(body.range, '7d');
+      assert.deepEqual(body.coverage, {
+        daysRequested: 7,
+        lines: 2,
+        skipped: 0,
+        outOfRange: 0,
+        droppedSessions: 0,
+        capped: false,
+      });
+      assert.equal(body.days[0].date, today());
+      assert.deepEqual(body.days[0].byProject, [{ project: 'alpha', costUsd: 3 }], '4 spent, 1 of it before');
+      assert.equal(body.hours.at(-1)!.sessions[0].sid, 's1');
+    },
+    { store },
+  );
+});
+
+/** How many records a range answer says it read. */
+async function linesOf(base: string, range: string): Promise<number> {
+  const res = await fetch(`${base}/api/history?range=${range}`, { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+  return ((await res.json()) as { coverage: { lines: number } }).coverage.lines;
+}
+
+// A month of journal is tens of megabytes off the disk, on the thread that also samples the
+// fleet. A page that polls, or a reader dragging a selector between 7d and 30d, must not turn
+// that into a read a second. The file is removed between the two requests: the second answer
+// can only come from a cache.
+test('a range read once is not read again inside its minute', async () => {
+  const { dir, store } = journal();
+  const file = journalDay(dir, [journalled(Date.now(), 1)]);
+  await withServer(
+    collectOk,
+    async (base) => {
+      assert.equal(await linesOf(base, '7d'), 1);
+      fs.rmSync(file);
+      assert.equal(await linesOf(base, '7d'), 1, 'the second answer never went back to the disk');
+    },
+    { store },
+  );
+});
+
+test('a cached range is dropped once its minute is up, and the next request reads the disk again', async () => {
+  const { dir, store } = journal();
+  const file = journalDay(dir, [journalled(Date.now(), 1)]);
+  await withServer(
+    collectOk,
+    async (base) => {
+      assert.equal(await linesOf(base, '7d'), 1);
+      fs.rmSync(file);
+      await sleep(40);
+      assert.equal(await linesOf(base, '7d'), 0, 'past the window it is read again, and the file is gone');
+    },
+    { store, rangeCacheMs: 20 },
+  );
+});
+
+// A journal at its cap writes nothing more, and what it already wrote reads like a fleet that
+// went quiet on the hour it stopped. Only the writer knows the difference, so the answer carries
+// it: the alternative is a curve that flattens for a fortnight with nothing to say why.
+test('a range served off a journal that hit its cap says so', async () => {
+  const { dir, store } = journal({ maxBytes: 1 });
+  journalDay(dir, [journalled(Date.now(), 1)]);
+  // One refused append is what sets it, and the sampler's own is a minute away at this cadence.
+  store.append({ t: Date.now(), sessions: [], rateLimits: null });
+  assert.notEqual(store.stats().stopped, null, 'the store really did stop');
+  await withServer(
+    collectOk,
+    async (base) => {
+      const res = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+      const body = (await res.json()) as { coverage: { capped: boolean; lines: number } };
+      assert.equal(body.coverage.capped, true);
+      assert.equal(body.coverage.lines, 1, 'and what it did write is still served');
+    },
+    { store },
+  );
+});
+
+// Two ranges are two answers. One cache entry for both would serve a month where a week was
+// asked for, which is the same number under a label that says otherwise.
+test('the week and the month are cached apart', async () => {
+  const { dir, store } = journal();
+  const file = journalDay(dir, [journalled(Date.now(), 1)]);
+  await withServer(
+    collectOk,
+    async (base) => {
+      assert.equal(await linesOf(base, '7d'), 1);
+      fs.rmSync(file);
+      assert.equal(await linesOf(base, '30d'), 0, 'the month was never read, so it has nothing to serve');
+    },
+    { store },
+  );
+});
