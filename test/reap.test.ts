@@ -257,7 +257,13 @@ test('a directory that does not exist is not an error', () => {
   assert.equal(res.failed, 0);
 });
 
-test('counts a file it could not delete instead of throwing', () => {
+test('counts a file it could not delete instead of throwing', (t) => {
+  // 0555 does not stop root, so under a root container this fixture is not the state it
+  // claims to build. Saying that out loud beats a green tick that proved nothing.
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: 0555 does not deny anything, the case cannot be built here');
+    return;
+  }
   const dir = snapDir({ [TEMP]: 4 * HOUR });
   fs.chmodSync(dir, 0o555); // removing an entry needs write on the directory
   try {

@@ -223,7 +223,13 @@ test('a missing directory reads as empty rather than throwing', () => {
 
 // I3: "empty" and "I was not allowed to look" must not render identically — the second
 // used to produce "0/7 chained, run tarmac install", blaming the user for a permission bug.
-test('an unreadable directory is reported, not silently empty', () => {
+test('an unreadable directory is reported, not silently empty', (t) => {
+  // 0000 does not stop root, so under a root container this fixture is not the state it
+  // claims to build. Saying that out loud beats a green tick that proved nothing.
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: 0000 does not deny anything, the case cannot be built here');
+    return;
+  }
   const dir = snapDir({ 'a.json': JSON.stringify({ session_id: 'a', context_window: { used_percentage: 1 } }) });
   fs.chmodSync(dir, 0o000);
   try {
