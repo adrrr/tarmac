@@ -173,7 +173,7 @@ export function createFleetServer({
     // Read once per range per minute rather than per request: `stats()` walks the directory, and
     // a journal that stopped at its cap stays stopped for hours, so a minute-old answer to that
     // question is the same answer.
-    entry.reading = readRange({ dir: store.dir, range, now, capped: store.stats().stopped !== null }).then(
+    entry.reading = readRange({ dir: store.dir, range, now, capped: store.stats().capped }).then(
       (answer) => {
         entry.at = Date.now();
         return answer;
@@ -191,6 +191,10 @@ export function createFleetServer({
   };
 
   const sample = async (): Promise<void> => {
+    // First, and outside the try: the journal's lock says this process is alive, which is a
+    // fact about the tick and not about the reading. A collector that has been throwing for
+    // five minutes would otherwise leave the lock looking abandoned to the next serve.
+    store?.heartbeat();
     if (reading) {
       history.miss(Date.now());
       return;

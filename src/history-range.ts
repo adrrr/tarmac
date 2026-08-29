@@ -148,9 +148,11 @@ export interface ReadRangeOptions {
    */
   now: number;
   /**
-   * Whether the store has stopped writing, which only the writer knows. A journal at its cap
-   * has the shape of a fleet that went quiet, files and lines and then nothing, and the reader
-   * cannot tell those apart from the disk alone.
+   * Whether the store stopped AT ITS CAP, which only the writer knows. A journal at its cap has
+   * the shape of a fleet that went quiet, files and lines and then nothing, and the reader cannot
+   * tell those apart from the disk alone. Not "the store stopped", which has another cause since
+   * the journal directory got an owner: a serve that lost the directory to another one has filled
+   * nothing, and this field is rendered as "journal capped".
    */
   capped?: boolean;
 }

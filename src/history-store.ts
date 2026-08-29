@@ -18,6 +18,9 @@
 // inside it. Three things already delete under the snapshots directory (`reap.ts`, the
 // wrapper's own sweep, the legacy purge in `install.ts`) and each of them decides by name.
 // A journal living among the payloads would be one glob away from being someone else's litter.
+// That owner is literal as well as architectural: `acquireJournalLock` below gives the directory
+// one writing `serve`, and a second one journals nothing rather than sweeping files it did not
+// write (#133).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -47,6 +50,144 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
  * (the installed path frozen at install time) covers both by covering one.
  */
 export const historyDirFor = (snapshotsDir: string): string => path.join(path.dirname(snapshotsDir), 'history');
+
+/** The lock, named so `DAY_FILE` cannot mistake it for a day and delete it. */
+const LOCK_FILE = '.lock';
+
+/**
+ * How long a lock may go without a heartbeat before the next `serve` takes the directory.
+ *
+ * The pid answers the ordinary death (a `kill -9`, a machine that lost power) and it cannot
+ * answer the other one: pids are REUSED, so the number in a file abandoned last week can name a
+ * stranger who is alive and has never heard of this directory. Five minutes is four missed
+ * heartbeats, which a laptop that slept or a fleet read that took its whole deadline can spend,
+ * and short enough that nobody who rebooted sits waiting for their journal to come back.
+ */
+const LOCK_STALE_MS = 5 * 60_000;
+
+export interface JournalLock {
+  /** The file that holds the directory, so whoever refuses can point at something. */
+  readonly file: string;
+  /**
+   * The heartbeat, pushed forward on every tick, answering whether this process still holds the
+   * directory. It reads the file rather than trusting the take: a blind `utimes` succeeds on a
+   * lock somebody else has since taken, which would refresh THEIR heartbeat and leave this
+   * process writing into a directory it no longer owns.
+   */
+  touch(): boolean;
+  /** Given back on the way out, and only if it is still ours. */
+  release(): void;
+}
+
+export interface JournalLockResult {
+  /** The lock this process took, `null` when it took none, which is when it journals nothing. */
+  lock: JournalLock | null;
+  /** The live pid that holds the directory, when that is the reason. `null` otherwise. */
+  heldBy: number | null;
+}
+
+/** The pid a lock file names, or `null` for one that is gone or says something else. */
+const lockPid = (file: string): number | null => {
+  try {
+    const text = fs.readFileSync(file, 'utf8').trim();
+    return /^\d+$/.test(text) ? Number(text) : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Whether a pid is a process. `EPERM` is one this user may not signal, which is still one. */
+const running = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+};
+
+/**
+ * One owner for the directory, taken at startup and given back on the way out.
+ *
+ * Retention is a property of the DIRECTORY and the process applying it was whichever `serve`
+ * started last: a `serve --history-days 1` started to try the setting out swept twenty-nine days
+ * a thirty-day serve had kept, in four seconds, and both then wrote a line a minute into the
+ * same files. That is not a contract this ships, and a second serve is now told to journal
+ * nothing rather than arbitrated with (#133).
+ *
+ * `wx`, so taking it is one atomic filesystem operation rather than a read followed by a write
+ * that a second serve can land inside. Everything else here is about the locks nobody released:
+ * a dead pid, or five minutes of silence from a live one.
+ */
+export function acquireJournalLock({ dir, now = Date.now }: { dir: string; now?: () => number }): JournalLockResult {
+  const file = path.join(dir, LOCK_FILE);
+  const touch = (): boolean => {
+    if (lockPid(file) !== process.pid) return false;
+    const t = now() / 1000;
+    try {
+      fs.utimesSync(file, t, t);
+      return true;
+    } catch {
+      // Gone between the read and the write. Not ours either way, and the caller stops.
+      return false;
+    }
+  };
+  const release = (): void => {
+    // Ours only. A process the kernel stopped for five minutes has its lock legitimately taken
+    // off it; removing the new owner's file on the way out would hand the directory to a third.
+    try {
+      if (lockPid(file) === process.pid) fs.unlinkSync(file);
+    } catch {
+      // A directory already gone, or one we may no longer write. Either way it is not held.
+    }
+  };
+  const take = (): JournalLock | null => {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file, `${process.pid}\n`, { flag: 'wx' });
+      return { file, touch, release };
+    } catch {
+      return null;
+    }
+  };
+
+  const taken = take();
+  if (taken !== null) return { lock: taken, heldBy: null };
+
+  const pid = lockPid(file);
+  let beat: number | null;
+  try {
+    beat = fs.statSync(file).mtimeMs;
+  } catch {
+    // No file to read a heartbeat off, so nothing holds this: it went between the two calls.
+    beat = null;
+  }
+  // A fresh heartbeat holds the directory whether or not the pid can be read, and that order
+  // matters: taking the lock is `open(O_CREAT|O_EXCL)` and THEN a write, so between the two the
+  // file exists and is empty. Reading no pid as "nothing holds this" let a second serve remove
+  // the lock of a serve in the middle of taking it, which is two owners on a window one syscall
+  // wide. An unreadable lock is not unbreakable either: with no heartbeat for five minutes it
+  // goes the same way a dead pid's does.
+  if (beat !== null && now() - beat <= LOCK_STALE_MS && (pid === null || running(pid))) return { lock: null, heldBy: pid };
+
+  // Only the file that was JUDGED, never whatever is there now: two serves reclaiming the same
+  // abandoned lock together would otherwise both remove one and both create one, and the second
+  // create is the one on disk. Re-reading the pid and the heartbeat costs two syscalls and takes
+  // that from six rounds in twelve to none, measured on eight processes released off a barrier.
+  //
+  // It is a narrowing and not a proof: the read and the unlink are still two operations. What
+  // closes it is one level up, where every tick re-reads the lock before writing, so a directory
+  // that ended up with two owners has one again within the minute.
+  try {
+    if (lockPid(file) === pid && fs.statSync(file).mtimeMs === beat) fs.unlinkSync(file);
+  } catch {
+    // Already gone, or not ours to remove. The retry below is what decides either way.
+  }
+  const reclaimed = take();
+  // A lock we could not take and could not reclaim. `heldBy` is read again rather than
+  // remembered: the serve that won the race in between is the one worth naming.
+  return reclaimed !== null ? { lock: reclaimed, heldBy: null } : { lock: null, heldBy: lockPid(file) };
+}
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
@@ -131,6 +272,13 @@ export interface HistoryStats {
   misses: number;
   /** Why nothing more is being written, in words fit to print. `null` while it is. */
   stopped: string | null;
+  /**
+   * Whether THE CAP is what stopped it. `stopped` is a sentence with two causes now (the cap, and
+   * a directory that turned out to belong to another serve) and `/api/history` carries this one
+   * into `coverage.capped`, which a page renders as "journal capped". A serve that lost its
+   * directory has filled nothing, and a reader must not be sent looking at a 256 MB ceiling for it.
+   */
+  capped: boolean;
 }
 
 export interface HistoryPruned {
@@ -143,6 +291,12 @@ export interface HistoryStore {
   /** Where it writes. Reported by `serve` on startup, so a reader can go and look. */
   readonly dir: string;
   readonly days: number;
+  /**
+   * The tick, whether or not a reading came back. It is what keeps the directory's lock alive,
+   * and the lock is about this PROCESS being here: a `claude` that has been missing for five
+   * minutes must not cost a running serve the journal it is holding.
+   */
+  heartbeat(): void;
   append(sample: HistorySample): void;
   prune(): HistoryPruned;
   stats(): HistoryStats;
@@ -156,6 +310,12 @@ export interface HistoryStoreOptions {
   now?: () => number;
   /** For the suite. The product's ceiling is `HISTORY_MAX_BYTES` and nothing sets it. */
   maxBytes?: number;
+  /**
+   * The directory's lock, held by whoever built this store. Refreshed on every append, which is
+   * the whole heartbeat: a serve that has been up for an hour and never touched it reads as
+   * abandoned, and the next `serve` on the machine takes the directory and sweeps it.
+   */
+  lock?: JournalLock | null;
 }
 
 export function createHistoryStore({
@@ -163,13 +323,43 @@ export function createHistoryStore({
   days,
   now = Date.now,
   maxBytes = HISTORY_MAX_BYTES,
+  lock = null,
 }: HistoryStoreOptions): HistoryStore {
   let misses = 0;
   let stopped: string | null = null;
+  // The cause behind `stopped`, when it is the ceiling. Kept apart from the sentence because one
+  // of them is read by a page and the other by a person.
+  let capped = false;
+  // Reassigned when the directory is erased under a running serve and this store takes its own
+  // lock back, which is the one case where losing it is not losing the journal.
+  let held = lock;
   // The last local day a prune ran for, so the store keeps its own retention while `serve` runs
   // for weeks. `null` until the first append or the startup prune: a store that has never
   // written has nothing to prune, and inventing a day here would make the first append sweep.
   let prunedDay: string | null = null;
+
+  /**
+   * Whether this store still owns its directory, and the heartbeat that says it is alive.
+   *
+   * Read on every tick rather than trusted from startup, because both ways of losing a directory
+   * are silent. Another `serve` reclaims a lock this one let go quiet, and a blind writer then
+   * appends into somebody else's journal and sweeps it with a retention nobody there set: #133,
+   * one heartbeat later. Or the reader erases the directory, which the manual invites them to do,
+   * and the lock goes with it; nobody took anything, so the lock is simply taken back. The
+   * acquire is what tells the two apart, since it refuses one a live process is touching.
+   */
+  const owns = (): boolean => {
+    // No lock is the suite, and a store nobody gave a directory to has none to lose.
+    if (held === null) return true;
+    if (held.touch()) return true;
+    const { lock: again, heldBy } = acquireJournalLock({ dir, now });
+    if (again === null) {
+      stopped = heldBy === null ? `the lock in ${dir} could not be taken back` : `another serve (pid ${heldBy}) holds ${dir}`;
+      return false;
+    }
+    held = again;
+    return true;
+  };
 
   /**
    * What the directory holds right now, read rather than remembered.
@@ -205,6 +395,9 @@ export function createHistoryStore({
   };
 
   const prune = (): HistoryPruned => {
+    // Here as well as in `append`, because this is the OTHER path to a deletion: the startup
+    // sweep runs on `listening`, before any tick, and it is the destructive half of #133.
+    if (!owns()) return { removed: 0, failed: 0 };
     prunedDay = dayOf(now());
     const keep = oldestKept(now(), days);
     let removed = 0;
@@ -234,14 +427,23 @@ export function createHistoryStore({
     }
     // The cap is a stop, not a verdict: the retention that made room is what lifts it, and a
     // store that stayed stopped until the next restart would keep a promise nobody made.
-    if (stopped !== null && measure().bytes < maxBytes) stopped = null;
+    if (stopped !== null && capped && measure().bytes < maxBytes) {
+      stopped = null;
+      capped = false;
+    }
     return { removed, failed };
   };
 
   return {
     dir,
     days,
+    heartbeat(): void {
+      void owns();
+    },
     append(sample: HistorySample): void {
+      // Before the day-turn prune below and before any write: a store that no longer owns its
+      // directory may not sweep it, and the sweep is the destructive half of #133.
+      if (!owns()) return;
       const day = dayOf(now());
       // Its own retention, kept as the day turns rather than only at startup. A machine left up
       // since March would otherwise hold every day since March under a config that says thirty.
@@ -252,12 +454,14 @@ export function createHistoryStore({
       // process killed between two appends leaves the last one complete.
       const line = JSON.stringify(lineOf(sample)) + '\n';
       const bytes = Buffer.byteLength(line);
-      const held = measure().bytes;
-      if (held + bytes > maxBytes) {
+      const onDisk = measure().bytes;
+      if (onDisk + bytes > maxBytes) {
         stopped = `the journal is at its ${size(maxBytes)} cap, in ${dir}`;
+        capped = true;
         return;
       }
       stopped = null;
+      capped = false;
 
       try {
         fs.mkdirSync(dir, { recursive: true });
@@ -273,7 +477,7 @@ export function createHistoryStore({
     prune,
     stats(): HistoryStats {
       const { files, bytes } = measure();
-      return { files, bytes, misses, stopped };
+      return { files, bytes, misses, stopped, capped };
     },
   };
 }

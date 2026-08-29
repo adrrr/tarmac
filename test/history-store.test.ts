@@ -13,7 +13,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHistoryStore, historyDirFor, HISTORY_MAX_BYTES } from '../src/history-store.ts';
+import { spawnSync } from 'node:child_process';
+import { acquireJournalLock, createHistoryStore, historyDirFor, HISTORY_MAX_BYTES } from '../src/history-store.ts';
 import type { HistorySample } from '../src/history.ts';
 import { tempDir } from './sandbox.ts';
 
@@ -219,6 +220,7 @@ test('past the cap nothing more is written, and the store says why', () => {
   assert.ok(stats.bytes <= 400, `the cap held: ${stats.bytes} bytes`);
   assert.ok(stats.stopped !== null, 'and the reason is there to be printed');
   assert.match(stats.stopped!, /cap/i);
+  assert.equal(stats.capped, true, 'and the cap says so as a fact, not as a string to be read');
   assert.ok(lines(dir, '2026-08-07').length < 20, 'the later readings were refused, not written');
 });
 
@@ -287,7 +289,7 @@ test('a directory that cannot be read reports no journal rather than throwing', 
   const clock = { now: at(2026, 8, 7) };
   const s = store(dir, 30, clock);
 
-  assert.deepEqual(s.stats(), { files: 0, bytes: 0, misses: 0, stopped: null });
+  assert.deepEqual(s.stats(), { files: 0, bytes: 0, misses: 0, stopped: null, capped: false });
   assert.deepEqual(s.prune(), { removed: 0, failed: 0 });
 });
 
@@ -346,4 +348,305 @@ test('a retention too large for the calendar keeps everything, rather than delet
   assert.deepEqual(store(dir, 300_000_000, clock).prune(), { removed: 0, failed: 0 });
 
   assert.equal(fs.readdirSync(dir).length, 3, 'a journal asked to be kept for a million years is kept');
+});
+
+// ── one owner ─────────────────────────────────────────────────────────────────────────
+
+// The retention is a property of the DIRECTORY and the process that applies it is whichever
+// `serve` started last: a `--history-days 1` started to try the setting out swept twenty-nine
+// days a thirty-day serve had kept, in four seconds, and both then wrote a line a minute into
+// the same files (#133). The lock is what gives the directory one owner.
+
+const lockFile = (dir: string): string => path.join(dir, '.lock');
+
+/** The mtime the filesystem really gave a file, which is the heartbeat the lock is read by. */
+const beat = (dir: string): number => fs.statSync(lockFile(dir)).mtimeMs;
+
+/** The lock as another serve, alive and beating at that instant, would have left it. */
+const takenBy = (dir: string, pid: number, when: number): void => {
+  fs.writeFileSync(lockFile(dir), `${pid}\n`);
+  fs.utimesSync(lockFile(dir), when / 1000, when / 1000);
+};
+
+test('the first serve takes the directory, and the lock says which pid holds it', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+
+  const { lock, heldBy } = acquireJournalLock({ dir, now: () => clock.now });
+
+  assert.equal(heldBy, null, 'nobody held it');
+  assert.ok(lock, 'so this serve does');
+  assert.equal(fs.readFileSync(lockFile(dir), 'utf8').trim(), String(process.pid), 'and it is on disk to be read');
+});
+
+test('a second serve is refused, and told the pid that holds the directory', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const first = acquireJournalLock({ dir, now: () => clock.now });
+  assert.ok(first.lock);
+
+  const second = acquireJournalLock({ dir, now: () => clock.now });
+
+  assert.equal(second.lock, null, 'it journals nothing, so it sweeps nothing');
+  assert.equal(second.heldBy, process.pid, 'and it can name the process to go and look at');
+});
+
+// The ordinary way a lock outlives its owner: a machine that lost power, a `kill -9`. Nothing
+// released it, so the file is there and its heartbeat is as fresh as the moment it died. Only
+// the pid says the truth, and a journal nobody can ever write again is not a fix.
+test('a lock left behind by a dead pid is taken over', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  // A pid that really is gone: spawnSync returns having waited for it and reaped it.
+  const dead = spawnSync(process.execPath, ['-e', '']).pid;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(lockFile(dir), `${dead}\n`);
+  // Pinned to the heartbeat it just wrote, so age cannot be what reclaims this one.
+  const clock = { now: beat(dir) };
+
+  const { lock, heldBy } = acquireJournalLock({ dir, now: () => clock.now });
+
+  assert.equal(heldBy, null);
+  assert.ok(lock);
+  assert.equal(fs.readFileSync(lockFile(dir), 'utf8').trim(), String(process.pid), 'and the new owner signed it');
+});
+
+// The case the pid check cannot see, and the reason the heartbeat exists: pids are reused, so
+// the number in a lock file abandoned last week can name a stranger who is very much alive and
+// has never heard of this directory. Five minutes of silence is what settles it.
+test('a heartbeat five minutes old is taken over, however alive the pid in it is', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  // This process: alive by any test the lock can make, and not refreshing anything.
+  fs.writeFileSync(lockFile(dir), `${process.pid}\n`);
+  const clock = { now: beat(dir) + 5 * 60_000 + 1 };
+
+  const { lock, heldBy } = acquireJournalLock({ dir, now: () => clock.now });
+
+  assert.equal(heldBy, null);
+  assert.ok(lock);
+});
+
+test('a released lock leaves the directory free for the next serve', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const first = acquireJournalLock({ dir, now: () => clock.now });
+  assert.ok(first.lock);
+
+  first.lock.release();
+
+  assert.equal(fs.existsSync(lockFile(dir)), false, 'nothing left to reclaim');
+  assert.ok(acquireJournalLock({ dir, now: () => clock.now }).lock, 'and the next serve walks in');
+});
+
+// Without this, a serve that has been up for an hour is a serve whose lock reads as abandoned,
+// and the next `serve` on the machine takes the directory off it and sweeps it.
+test('every append pushes the heartbeat forward, so a long run keeps what it holds', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const { lock } = acquireJournalLock({ dir, now: () => clock.now });
+  const s = createHistoryStore({ dir, days: 30, now: () => clock.now, lock });
+
+  clock.now = at(2026, 8, 7, 18);
+  s.append(sample(clock.now));
+
+  assert.equal(beat(dir), clock.now, 'six hours later, and the lock says so');
+});
+
+// `DAY_FILE` is the name the writer uses and nothing else, which is what makes a directory of
+// its own worth having. Asserted rather than trusted: the lock is the first file to live in
+// there that the store did not write, and both the prune and the cap read that directory.
+test('the lock is not journal data: the prune leaves it and it weighs nothing', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  acquireJournalLock({ dir, now: () => clock.now });
+  given(dir, ['2026-08-07']);
+
+  clock.now = at(2026, 9, 7);
+  const pruned = store(dir, 1, clock).prune();
+
+  assert.deepEqual(pruned, { removed: 1, failed: 0 }, 'the day file fell out of the retention');
+  assert.ok(fs.existsSync(lockFile(dir)), 'the lock is not a day the retention may delete');
+  assert.deepEqual(store(dir, 1, clock).stats(), { files: 0, bytes: 0, misses: 0, stopped: null, capped: false }, 'nor a file the cap counts');
+});
+
+// The other way a serve ends up with no lock, and it names nobody: a directory it cannot create
+// or write in. Refusing there rather than journaling anyway costs nothing, since the day files
+// would not go in either, and it is said at startup instead of once the first write has failed.
+test('a directory it cannot write in leaves a serve with no lock and no pid to name', (t) => {
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: 0555 denies nothing, the case cannot be built here');
+    return;
+  }
+  const base = tempDir('tarmac-lock-');
+  const dir = path.join(base, 'history');
+  fs.chmodSync(base, 0o555);
+
+  try {
+    const { lock, heldBy } = acquireJournalLock({ dir, now: () => at(2026, 8, 7) });
+
+    assert.equal(lock, null, 'no lock, so no store, so nothing swept and nothing written');
+    assert.equal(heldBy, null, 'and no process to send the reader to look at');
+  } finally {
+    // Restored here, or the sandbox cannot remove what this test built.
+    fs.chmodSync(base, 0o755);
+  }
+});
+
+// Taking the directory at startup is half the promise; the other half is noticing it is gone.
+// A serve whose lock was reclaimed while it was quiet kept writing into a directory that is now
+// somebody else's, and swept it with a retention nobody there set, which is #133 arriving one
+// heartbeat later. Ownership is therefore re-read on every append, not assumed from startup.
+test('a store that lost its directory writes nothing more and sweeps nothing', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const { lock } = acquireJournalLock({ dir, now: () => clock.now });
+  const s = createHistoryStore({ dir, days: 1, now: () => clock.now, lock });
+  s.append(sample(clock.now));
+  given(dir, ['2026-07-01']);
+
+  clock.now = at(2026, 9, 7);
+  // Pid 1 is alive on any machine this runs on and it is not us, and the heartbeat is this
+  // instant: the directory belongs to a serve that is very much there.
+  takenBy(dir, 1, clock.now);
+  s.append(sample(clock.now));
+
+  assert.deepEqual(fs.readdirSync(dir).filter((n) => n.endsWith('.jsonl')).sort(), ['2026-07-01.jsonl', '2026-08-07.jsonl']);
+  assert.match(String(s.stats().stopped), /\bpid 1\b/, 'and it says who has it, once, through the line serve already prints');
+});
+
+// The other way a lock stops being ours, and the opposite answer: `rm -rf history/` is what the
+// manual tells a reader to do to erase the journal. Nobody took the directory, so this serve
+// takes its own lock back rather than falling silent until it is restarted.
+test('a store whose directory was erased takes its lock back and carries on', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const { lock } = acquireJournalLock({ dir, now: () => clock.now });
+  const s = createHistoryStore({ dir, days: 30, now: () => clock.now, lock });
+  s.append(sample(clock.now));
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  s.append(sample(clock.now));
+
+  assert.equal(fs.readFileSync(lockFile(dir), 'utf8').trim(), String(process.pid), 'the lock is ours again');
+  assert.equal(lines(dir, '2026-08-07').length, 1, 'and the journal picked up where the erasure left it');
+});
+
+test('a lock another serve has taken is not one this process releases', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const { lock } = acquireJournalLock({ dir, now: () => clock.now });
+  assert.ok(lock);
+  fs.writeFileSync(lockFile(dir), '1\n');
+
+  lock.release();
+
+  assert.equal(fs.readFileSync(lockFile(dir), 'utf8').trim(), '1', 'the new owner keeps its directory');
+});
+
+// A pid this user may not signal is a pid that exists: `kill(pid, 0)` answers EPERM there, and
+// reading that as "no such process" would hand a running serve's directory to the next one.
+test('a lock naming a process this user may not signal is a lock that is held', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  // Pid 1 is the one process every machine has, and on any of them but a root shell it is the
+  // one this user may not signal.
+  fs.writeFileSync(lockFile(dir), '1\n');
+  const clock = { now: beat(dir) };
+
+  const { lock, heldBy } = acquireJournalLock({ dir, now: () => clock.now });
+
+  assert.equal(lock, null);
+  assert.equal(heldBy, 1);
+});
+
+// Taking the lock is `open(O_CREAT|O_EXCL)` and then a write, and between the two the file
+// exists and is EMPTY. A second serve arriving in that window read no pid, so nothing looked
+// held, and it removed the lock of a serve that was in the middle of taking it: two owners, on a
+// window that is one syscall wide (11 rounds in 100 with two processes off a barrier). A fresh
+// heartbeat holds the directory whether or not the pid can be read yet.
+test('a lock still being written holds the directory, pid or no pid', () => {
+  for (const [what, write] of [
+    ['a file created and not yet written', (f: string) => fs.closeSync(fs.openSync(f, 'wx'))],
+    ['a file that says nothing a pid can be read from', (f: string) => fs.writeFileSync(f, '\n')],
+  ] as const) {
+    const dir = path.join(tempDir('tarmac-lock-'), 'history');
+    fs.mkdirSync(dir, { recursive: true });
+    write(lockFile(dir));
+    const clock = { now: beat(dir) };
+
+    const { lock, heldBy } = acquireJournalLock({ dir, now: () => clock.now });
+
+    assert.equal(lock, null, `${what}: the directory is somebody's`);
+    assert.equal(heldBy, null, `${what}: and there is no pid to name yet`);
+    assert.ok(fs.existsSync(lockFile(dir)), `${what}: the lock is still theirs`);
+  }
+});
+
+// The other side of that rule, so an unreadable lock is not an unbreakable one: a file nobody
+// can read a pid from is reclaimed on the heartbeat alone, five minutes after it went quiet.
+test('an unreadable lock nobody has touched for five minutes is taken over', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(lockFile(dir), 'not a pid\n');
+  const clock = { now: beat(dir) + 5 * 60_000 + 1 };
+
+  const { lock } = acquireJournalLock({ dir, now: () => clock.now });
+
+  assert.ok(lock, 'a corrupted lock costs five minutes, not a journal');
+  assert.equal(fs.readFileSync(lockFile(dir), 'utf8').trim(), String(process.pid));
+});
+
+// The startup sweep runs on `listening`, before the first tick, and it is the destructive half
+// of #133: `prune` is reached by two paths and only one of them passed through `append`.
+test('a store that lost its directory prunes nothing, on the path that does not go through append', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const { lock } = acquireJournalLock({ dir, now: () => clock.now });
+  const s = createHistoryStore({ dir, days: 1, now: () => clock.now, lock });
+  given(dir, ['2026-07-01', '2026-07-02']);
+  takenBy(dir, 1, clock.now);
+
+  assert.deepEqual(s.prune(), { removed: 0, failed: 0 });
+
+  assert.equal(fs.readdirSync(dir).filter((n) => n.endsWith('.jsonl')).length, 2, 'both days are somebody else\'s');
+});
+
+// The reclaim reads the lock twice: once to judge it abandoned, once to check that nothing
+// arrived in between. Standing inside that window from a test takes the injected clock, which is
+// called exactly once between the two reads: a lock that appeared there is not ours to remove.
+test('a lock that changed since it was judged is not the lock a reclaim removes', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  // Abandoned by a process that really is gone, so this acquire sets out to reclaim it.
+  const dead = spawnSync(process.execPath, ['-e', '']).pid;
+  fs.writeFileSync(lockFile(dir), `${dead}\n`);
+  const judged = beat(dir);
+  let arrived = false;
+  const now = (): number => {
+    // Another serve gets there first, between the judgement and the unlink.
+    if (!arrived) takenBy(dir, 1, judged + 1000);
+    arrived = true;
+    return judged;
+  };
+
+  const { lock, heldBy } = acquireJournalLock({ dir, now });
+
+  assert.equal(lock, null, 'the lock that arrived in the window is not the one that was judged');
+  assert.equal(heldBy, 1, 'and the serve that owns it now is the one to name');
+});
+
+// `stopped` is a sentence for a reader and it now has two causes; `capped` is the one a machine
+// reads. `/api/history` carries it into `coverage.capped`, which a page renders as "journal
+// capped": a serve that lost its directory has not filled anything, and must not say it has.
+test('a store that lost its directory says it stopped, and never that it was capped', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const { lock } = acquireJournalLock({ dir, now: () => clock.now });
+  const s = createHistoryStore({ dir, days: 30, now: () => clock.now, lock });
+  takenBy(dir, 1, clock.now);
+
+  s.append(sample(clock.now));
+
+  assert.match(String(s.stats().stopped), /\bpid 1\b/);
+  assert.equal(s.stats().capped, false, 'nothing here is full');
 });

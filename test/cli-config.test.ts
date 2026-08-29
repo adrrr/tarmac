@@ -16,6 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
+import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { NET_DEADLINE_MS, rawGet, waitForOutput } from './bounded.ts';
 import { tempDir } from './sandbox.ts';
@@ -328,6 +329,66 @@ test('a serve with no retention set sweeps no journal directory either', async (
   } finally {
     child.kill('SIGKILL');
   }
+});
+
+// ── one owner for the journal directory ───────────────────────────────────────────────
+// The retention is a property of the DIRECTORY, and the process applying it was whichever
+// `serve` started last: a `--history-days 1` started to try the setting out swept twenty-nine
+// days a thirty-day serve had kept, and both then wrote a line a minute into the same files
+// (#133). What follows is that reproduction, and the lock that ends it.
+
+/** The local day a moment falls on, as the journal names its files. */
+function localDay(t: number): string {
+  const d = new Date(t);
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+test('a second serve leaves the first one\'s journal alone, and names the pid that holds it', async () => {
+  const h = fakeHome();
+  fs.writeFileSync(h.config, JSON.stringify({ port: 0, history: { days: 30 } }));
+  const dir = path.join(h.home, '.local', 'state', 'tarmac', 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  // Yesterday: inside the thirty days the first serve was given, outside the one day the
+  // second is about to be given. The whole issue, in one file.
+  const kept = path.join(dir, `${localDay(Date.now() - 86_400_000)}.jsonl`);
+  fs.writeFileSync(kept, '{"t":0,"sessions":[],"rateLimits":null}\n');
+
+  const first = await serve(h);
+  try {
+    const second = await serve(h, {}, ['--history-days', '1']);
+    try {
+      assert.ok(fs.existsSync(kept), 'a serve that owns no journal applies its retention to nothing');
+      assert.match(second.out, new RegExp(`pid ${first.child.pid}\\b`), second.out);
+      assert.match(second.out, /journal/, 'and says what it is not doing, not just who holds what');
+    } finally {
+      second.child.kill('SIGKILL');
+    }
+  } finally {
+    first.child.kill('SIGKILL');
+  }
+});
+
+// A lock nothing gives back is a machine where the journal moves to the next serve five minutes
+// at a time, and where the first thing a reader is told is a pid that has been gone for hours.
+test('a serve gives the journal back when it is stopped', async () => {
+  const h = fakeHome();
+  fs.writeFileSync(h.config, JSON.stringify({ port: 0, history: { days: 30 } }));
+  const lock = path.join(h.home, '.local', 'state', 'tarmac', 'history', '.lock');
+  const { child } = await serve(h);
+
+  // Read, then stop it, then judge: an assertion between the two leaves a `serve` running on
+  // a failure, and a leaked child holds this file's process open long after it has reported.
+  const held = fs.existsSync(lock);
+  child.kill('SIGTERM');
+  const [code, signal] = (await once(child, 'exit', { signal: AbortSignal.timeout(NET_DEADLINE_MS) })) as [number | null, string | null];
+
+  assert.ok(held, 'held for as long as it runs');
+  assert.equal(fs.existsSync(lock), false, 'and handed back on the way out');
+  // Killed by the signal, not exited with a number standing in for it. A journaling serve that
+  // answered a supervisor `exited 143` where every other serve answers `killed by SIGTERM` would
+  // have taught systemd and launchd a new fact about a directory they know nothing about.
+  assert.deepEqual([code, signal], [null, 'SIGTERM'], 'and it died of the signal, as a serve without a journal does');
 });
 
 // `list` is one-shot and samples nothing, so there is no reading for it to journal. A flag it

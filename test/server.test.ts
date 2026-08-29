@@ -16,7 +16,7 @@ import { NET_DEADLINE_MS, rawGet, rawGetText } from './bounded.ts';
 import type { FleetServerDeps } from '../src/server.ts';
 import { HISTORY_CADENCE_MS } from '../src/history.ts';
 import type { HistoryPayload } from '../src/history.ts';
-import { createHistoryStore } from '../src/history-store.ts';
+import { acquireJournalLock, createHistoryStore } from '../src/history-store.ts';
 import type { HistoryStore, JournalRecord } from '../src/history-store.ts';
 import { tempDir } from './sandbox.ts';
 import type { Fleet, FleetRow } from '../src/fleet.ts';
@@ -1478,6 +1478,32 @@ test('a reading that failed leaves no line in the journal', async () => {
   );
 });
 
+// The heartbeat says this PROCESS is alive, not that this reading worked. `claude` missing for
+// five minutes (a shim that moved during an upgrade, a fleet read that spends its whole deadline)
+// would otherwise leave a live serve's lock looking abandoned, and the next serve on the machine
+// would take the directory off it and sweep it with a retention of its own.
+test('a reading that failed still refreshes the journal lock', async () => {
+  const dir = path.join(tempDir('tarmac-serve-hist-'), 'history');
+  const { lock } = acquireJournalLock({ dir });
+  assert.ok(lock);
+  const store = createHistoryStore({ dir, days: 30, lock });
+  // An hour ago, so nothing but a heartbeat can explain a fresh one.
+  const hourAgo = Date.now() - 3600_000;
+  fs.utimesSync(lock.file, hourAgo / 1000, hourAgo / 1000);
+  const boom = async (): Promise<Fleet> => {
+    throw new Error('claude: not found');
+  };
+
+  await withServer(
+    boom,
+    async (base) => {
+      await historyUntil(base, (x) => x.missed >= 2, 'two missed slots');
+      assert.ok(fs.statSync(lock.file).mtimeMs > hourAgo, 'the lock is beating on a serve that reads nothing');
+    },
+    { sampleEveryMs: 20, store },
+  );
+});
+
 // A journal that stopped and said nothing is worse than no journal: the reader believes they
 // have a week of history and finds four hours of it. `serve` runs unattended, so the one place
 // it can say so is its own output.
@@ -1754,6 +1780,32 @@ test('a range served off a journal that hit its cap says so', async () => {
       const body = (await res.json()) as { coverage: { capped: boolean; lines: number } };
       assert.equal(body.coverage.capped, true);
       assert.equal(body.coverage.lines, 1, 'and what it did write is still served');
+    },
+    { store },
+  );
+});
+
+// The other half of that: `coverage.capped` is the CAP, not "the journal stopped for some
+// reason". A serve whose directory was taken by another one has stopped writing and has filled
+// nothing, and the page renders this field as "journal capped".
+test('a range served off a journal another serve took is not a capped one', async () => {
+  const dir = path.join(tempDir('tarmac-serve-hist-'), 'history');
+  const { lock } = acquireJournalLock({ dir });
+  assert.ok(lock);
+  const store = createHistoryStore({ dir, days: 30, lock });
+  journalDay(dir, [journalled(Date.now(), 1)]);
+  // Pid 1 is alive and is not this process, and the heartbeat is now: the directory is taken.
+  fs.writeFileSync(lock.file, '1\n');
+  store.append({ t: Date.now(), sessions: [], rateLimits: null });
+  assert.notEqual(store.stats().stopped, null, 'the store really did stop');
+
+  await withServer(
+    collectOk,
+    async (base) => {
+      const res = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+      const body = (await res.json()) as { coverage: { capped: boolean; lines: number } };
+      assert.equal(body.coverage.capped, false, 'nothing here is full');
+      assert.equal(body.coverage.lines, 1, 'and what was written before it stopped is still served');
     },
     { store },
   );

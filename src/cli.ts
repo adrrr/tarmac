@@ -19,7 +19,7 @@ import { createFleetServer, listenFleetServer } from './server.ts';
 import { install, uninstall, paths, planInstall, planUninstall, installedSnapshotsDir, wrapperIsOurs } from './install.ts';
 import { confirmTyped } from './prompt.ts';
 import { reapOrphanedTemps } from './reap.ts';
-import { createHistoryStore, historyDirFor } from './history-store.ts';
+import { acquireJournalLock, createHistoryStore, historyDirFor } from './history-store.ts';
 import { renderPlan, renderSettings, renderTable, restoreMeaning, servingLine } from './render.ts';
 import { runWatch } from './watch.ts';
 
@@ -166,6 +166,43 @@ try {
       // Unattended for hours, so it opens by saying what it decided and on whose authority.
       process.stdout.write(renderSettings(config, p.config, historyDir));
 
+      // One journal, one owner (#133). The retention is a property of the DIRECTORY and the
+      // process applying it was whichever `serve` started last, so a `--history-days 1` run to
+      // try the setting out swept the thirty days another serve was keeping. A second serve
+      // journals nothing now, and serves everything else exactly as it did.
+      const days = config.historyDays.value;
+      const { lock, heldBy } = days === null ? { lock: null, heldBy: null } : acquireJournalLock({ dir: historyDir });
+      // On stdout, under the settings block it corrects: that block has just named a retention
+      // and a directory, and a reader piping it must not be left holding the half of it that
+      // did not happen. Same reason `serve` says on stdout which port it walked to.
+      if (days !== null && lock === null) {
+        const why = heldBy === null ? `could not take the journal lock in ${historyDir}` : `pid ${heldBy} holds the journal in ${historyDir}`;
+        console.log(`tarmac: ${why}, so this serve keeps no journal`);
+      }
+      // Given back on the way out, signals included: Node's default for each of these ends the
+      // process without running an exit hook, so a Ctrl-C would leave the lock behind and the
+      // next serve would wait five minutes for its heartbeat to go quiet. SIGHUP is in the list
+      // because closing the terminal, or losing the ssh session, is how a foreground serve
+      // usually dies.
+      //
+      // Each handler releases and then re-raises, rather than exiting with a number: a serve
+      // that answered a supervisor `exited 143` where every other serve answers `killed by
+      // SIGTERM` would have made the journal visible to systemd and launchd, which know nothing
+      // about it. Nothing about how this process ends may depend on a file in a directory.
+      if (lock !== null) {
+        process.on('exit', () => lock.release());
+        for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+          // Removing THIS handler rather than every handler for the signal: the next hand to
+          // register one here would otherwise be dropped by ours, in silence.
+          const bye = (): void => {
+            lock.release();
+            process.off(signal, bye);
+            process.kill(process.pid, signal);
+          };
+          process.on(signal, bye);
+        }
+      }
+
       // Temp files its own wrapper left behind when a terminal died mid-write. Best effort, and
       // it says what it did rather than doing it quietly, this being the user's directory. It
       // is no longer the only deletion a `serve` makes: a journal that was asked for applies
@@ -179,10 +216,8 @@ try {
         trustedHosts: config.trustHosts.value,
         // No key anywhere is no store, which is no directory and no file: the default is that
         // nothing of this fleet is written down, and it is the default that is the product.
-        store:
-          config.historyDays.value === null
-            ? null
-            : createHistoryStore({ dir: historyDir, days: config.historyDays.value }),
+        // No lock is no store either, and for the same reason: no store, no sweep, no line.
+        store: days === null || lock === null ? null : createHistoryStore({ dir: historyDir, days, lock }),
       });
       // A port nobody chose is not worth failing over: this walks past a busy 4477 and says
       // where it landed. A port that WAS chosen refuses instead, and the refusal leaves

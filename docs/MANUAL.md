@@ -777,14 +777,46 @@ sessions cost about 2 MB a day and 63 MB over thirty, so the cap is out of reach
 and is there for the fleet several times larger than the one the startup line quoted.
 
 The retention deletes the `YYYY-MM-DD.jsonl` files in that directory and nothing else, by name,
-which is why the journal has a directory to itself. It is a property of the DIRECTORY, not of a
-process: a second `serve` started on the same machine walks to the next free port and journals
-to the same place, and applies its own retention there. So a `tarmac serve --history-days 1`
-run to try something out deletes, at startup, everything the thirty-day serve had kept. It says
-what it removed on stderr as it does it, and there is no undoing it. Two serves also write two
-lines a minute rather than one, which double-counts under any aggregation. Until this is
-arbitrated between them, run one journaling serve per machine, and give a second one either the
-same retention or none.
+which is why the journal has a directory to itself. It says what it removed on stderr as it does
+it, and there is no undoing it.
+
+That retention is a property of the DIRECTORY rather than of a process, so the directory has ONE
+owner. The first journaling `serve` takes a `.lock` in it (creating the directory then, rather
+than at the first line), writes its pid there, and touches it on every tick, whether or not that
+tick could read the fleet. A second `serve` on the same directory keeps no journal at all, and
+says so on startup, under the settings block:
+
+```
+tarmac: pid 4242 holds the journal in /home/u/.local/state/tarmac/history, so this serve keeps no journal
+```
+
+It then serves the dashboard exactly as it always did, on the next free port: no line written, no
+retention applied, nothing swept, and `/api/history` answering as it does on a serve that was
+given no retention. That refusal lasts as long as the process: a serve started while the
+directory was taken does not pick the journal up when the holder leaves, it has to be restarted.
+What it stops is a `tarmac serve --history-days 1`, started to try the setting out, deleting
+everything a thirty-day serve was keeping, and two serves writing two lines a minute into one
+file.
+
+Ownership is re-read on every tick rather than assumed from startup. A serve whose lock was
+reclaimed while it was quiet stops writing, instead of appending into a directory that is now
+somebody else's and sweeping it with a retention nobody there set, and it says which pid has it.
+If the directory was simply erased, which is how a journal is thrown away, nobody took anything:
+the serve takes its own lock back and carries on.
+
+A lock is taken back when the pid in it is no longer a process, or when nothing has touched it for
+five minutes: pids are reused, so an abandoned lock can name a stranger who is alive, and the
+heartbeat is what tells the two apart. A lock file nobody can read a pid from, which is also what
+a lock looks like for the microsecond between its creation and its first write, is held by its
+heartbeat alone: it is somebody's until it goes quiet for those five minutes, and then it is
+taken over like any other. It is released on the way out, Ctrl-C, `SIGTERM` and
+`SIGHUP` included, so an ordinary restart hands the journal over at once. A `serve` killed with
+`SIGKILL`, or a machine that lost power, leaves the file behind and the next `serve` reclaims it
+on the pid.
+
+All of this assumes a local filesystem. On a network share `O_EXCL` is not the atomic operation
+the lock leans on, and the heartbeat compares one machine's clock with another's: keep the
+journal on the disk the serve runs on.
 
 Everything about it is best effort. A write that fails costs one line and is reported once, not
 once a minute; it never brings down a `serve` that has been running unattended for hours. A

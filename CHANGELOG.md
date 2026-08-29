@@ -13,6 +13,22 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **One owner for the journal directory.** The retention is a property of that directory and the
+  process applying it was whichever `serve` started last: a `serve --history-days 1` started to
+  try the setting out swept twenty-nine days a thirty-day serve was keeping, in four seconds, and
+  both of them then wrote a line a minute into the same files. The first journaling `serve` now
+  takes a `.lock` in `history/`, writes its pid there and touches it on every tick, whether or not
+  that tick could read the fleet. A second one keeps no journal at all: it names the pid holding
+  the directory, writes nothing, sweeps nothing, and serves the dashboard as it always did.
+  Ownership is re-read on every tick rather than assumed from startup, so a serve whose lock was
+  reclaimed while it was quiet stops writing instead of appending into somebody else's journal and
+  sweeping it with a retention nobody there set; a directory that was simply erased, which is how
+  a journal is thrown away, is taken back rather than lost. A lock is reclaimed when its pid is no
+  longer a process, or when nothing has touched it for five minutes, which is what tells a live
+  owner from a pid the machine has since handed to a stranger; and it is released on the way out,
+  Ctrl-C, `SIGTERM` and `SIGHUP` included, each of them re-raised so a supervisor still sees the
+  signal it sent rather than an exit code standing in for it. (#133)
+
 - **The journal, read back by range.** `GET /api/history?range=7d` and `?range=30d` read the day
   files `serve` writes and answer with them aggregated: one entry per local hour, carrying the
   highest context each session reached in it, the last cost measured for it and the state it was
