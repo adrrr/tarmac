@@ -11,6 +11,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.8.0] — 2026-08-29
+
 ### Added
 
 - **The curves.** A third view on `/history`, beside the table and the map, drawing what moved
