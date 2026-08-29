@@ -8,7 +8,7 @@ the test suite, so none of it is aspiration.
 | Command | What it does | Options |
 |---|---|---|
 | `tarmac list` | one-shot fleet table, and the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
-| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /live` for the fragment both refresh from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran, or `?range=7d` and `?range=30d` for the journal on disk | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host`, `--history-days` |
+| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /history` for the curves, `GET /live` for the fragment an open page refreshes from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran, or `?range=7d` and `?range=30d` for the journal on disk | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host`, `--history-days` |
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
@@ -429,7 +429,8 @@ account over its limit for a day that has already ended.
 `serve` has a second view of the same fleet, on `/map`, reached by the tab in the header. The
 tabs are links rather than script, so the view survives a reload and a bookmark. Both views
 are rendered into the same fragment, out of the same reading, which is why the two can never
-disagree about a session on the same screen.
+disagree about a session on the same screen. The third tab, [the curves](#the-curves), is not
+one of that pair: it draws a record rather than a reading, and ships only on its own address.
 
 One node per session, and the count matches the table's rows exactly. A session's node says
 five things at once, six when it is waiting, in channels that never rely on colour alone:
@@ -665,14 +666,99 @@ with it. Two of the three things it says are properties of the record rather tha
 that nothing replayed is dated and that the past is drawn ungrouped, and a phone replaying is
 exactly when a reader is looking at an ungrouped map.
 
-Independently of width, wherever the pointer is coarse, the four pills carry an invisible target
-of at least 44px: the two tabs, `Play`, and the way back out of a replay. The scrubber itself is
-not one of them. It is a range input, dragged by a thumb the browser sizes, and it is left
+The range bar of [the curves](#the-curves) pins the same way, for the same reason: the charts it
+changes are several screens tall, and a range switched blind is a chart nobody sees change.
+
+Independently of width, wherever the pointer is coarse, every pill carries an invisible target of
+at least 44px: the three tabs, `Play`, the way back out of a replay, the three range pills, the
+way back to now on each chart, and each key in a legend. The legend keys are the only stacked
+ones, so the row gap of the grid they sit in is at least the whole of what two of their overlays
+add: closer together, a tap meant for one project would isolate the one under it. The scrubber
+itself is not one of them. It is a range input, dragged by a thumb the browser sizes, and it is left
 alone. The overlay is drawn nowhere, so nothing it covers moves. Laid out at 1280px the table
 comes out box for box where it was, to two decimals, and the one node the page gained is a span
 wrapped round text already drawn in that place. What a desktop reader does see change is the
 scrubber's `REPLAY`, which is written above it at every width and not only on a phone. See
 [replaying the day](#replaying-the-day).
+
+## The curves
+
+The third tab, on `/history`, is the one view here that is not about now. It draws what moved:
+context per session, cost per project, and the account's two windows, over 24h out of the ring or
+7 and 30 days out of [the journal](#the-journal-on-disk). One fetch a range, everything after it
+local, and the drawing is `<canvas>` and the page's own script. Eight lines of 1440 points is
+eleven thousand nodes as SVG, and this package has no runtime dependency to hand that to.
+
+The range pills sit at the top on a laptop and at the foot of the screen on a phone. `24h` is
+always live, because the ring is always there. `7d` and `30d` need `history.days` set: without it
+they are greyed out and the view says so in place of the charts, naming the key and the file to
+put it in. That sentence is rendered by the server, which is the side that knows what the config
+says, so it is on the page before any script runs and a browser with JavaScript off still gets
+told why there is nothing to draw. Under the pills, what the range actually covers: how many of
+the days asked for had a file, whether the journal had stopped at its cap, and how many readings
+came back unusable.
+
+**Context.** At 24h, one line per session on the ring's minute grid. Per session and not per
+project, because that is what breaks the line: a session recycled at three in the morning is a
+different session, and joining its successor's 4% to its own 88% would draw a cliff that never
+happened. Both lines wear the project's colour, so the break is the thing that says the session
+changed. The legend has one key per project and it follows the newest session, including when
+the newest has taken no turn yet: the key is a dash then, not the dead session's last number.
+A minute nobody read is a hole in every line at once, never a fall to zero, and the holes
+survive the decimation the plot needs: 1440 points into three hundred pixels keeps the
+highest reading in each pixel, and a pixel holding a missing minute stays missing. Lines that
+gained fifteen points or more over the last three hours are drawn full and labelled; the rest of
+the fleet stays behind them as context. At 7d and 30d it is one band per project instead, each on
+its own scale, carrying the highest any of its sessions reached in each hour. A project the
+range has no context for at all gets no band: a row of nothing under a name reads as missing
+data rather than as data there never was. Background agents are off this chart, at both ranges,
+for the reason they get a strip and not a dial on the map: no terminal behind one to draw a
+statusline frame with, so no context to plot. The exception is the same one the map makes, and
+it is the honest one: until something in the range calls itself interactive, nothing is treated
+as background, because a fleet of agents alone would otherwise draw an empty chart.
+
+Climbing is fifteen points or more against the oldest reading in the last three hours, not
+against the reading exactly three hours back. Those are the same number for a session that has
+been up all day and very different for one that started after breakfast: measured at the edge of
+the window, a session that went from nothing to ninety since ten o'clock is invisible, because
+three hours ago it did not exist. It is also the session the chart exists to surface.
+
+**Cost.** Bars, stacked, one column an hour at 24h and one a day at 7d and 30d. The stack is
+built in the palette's order, the same order in every column, so a slab keeps its colour and its
+place from Monday to Sunday and can be followed across the week. The legend is the ranking the
+stack refuses: most expensive first, which is where "which project burns the most" is answered,
+and a project's colour does not move when its rank does. At 24h the wire carries a running total
+per session, so an hour is the difference between its ends: a session's first reading in the
+range is its baseline rather than a bar, since what it carries was spent before the window
+opened; a new session id starts its own baseline, or the nightly recycle would read as a refund
+of everything the old one spent; and the floor is zero, because a running total that falls is a
+payload nobody promised, not money coming back. At 7d and 30d the arithmetic is already done, in
+[the day sums](#reading-the-journal-back). Background agents ARE counted here: no terminal, but
+the same account.
+
+**Quota.** The seven-day window as a line, and the five-hour one as its sawtooth at 24h or as a
+skyline of window highs at the longer ranges, where a hundred and fifty sawteeth is a wall. A
+bar in that skyline is its own window's high: the reading a turnover is dated by is the first
+minute the NEW window was true of, so it belongs to the window that starts there and not to the
+one that ended. The seven-day turnovers are drawn as full lines with their name on them; the
+five-hour ones are the right edges of the skyline's bars and are not labelled, there being five
+a day. A turnover the serve watched happen is a firm line. One it slept through is faint and
+says `≈`: the marker sits where the record RESUMED and not where the window rolled, which is
+what `sinceMs` is for. Over a month the names are dropped, four of them saying the same word
+four times, but the `≈` is not: it is the one thing about a marker that cannot be inferred from
+looking at it.
+
+Percentages are floored here, as they are in the header's gauges. A reading of 87.9 rounded on
+one and floored on the other is a page disagreeing with itself about a single minute.
+
+No hover, because a phone has no pointer to hover with. A tap puts a cursor on a chart; the
+chart's subtitle becomes the moment under it, every number on the card becomes that moment's, and
+`Back to now` appears to undo it. A tap on a legend key isolates its series and dims the rest.
+Each chart keeps its own cursor.
+
+In the dark scheme the filled areas are drawn back to 55%, so the page's own ground shows through
+them: a stack of saturated slabs that reads as colour on white glares on near-black. Lines keep
+every bit of their colour, a hairline at 55% being a hairline nobody sees.
 
 ## What the serve remembers
 

@@ -16,7 +16,7 @@ documented surfaces only, never an internal format.
        alt="The tarmac map, live and then replayed. It opens on the live fleet, whose nodes are grouped into a frame per working directory, each labelled with its project. As the scrubber is dragged the frames give way to the flat record: sessions drawn as dials, each arc a context window, background agents as strips of text, with the account's five-hour and seven-day gauges above them. Sessions appear and disappear, the arcs fill and reset, the five-hour window fills and rolls over, and a banner names the minute being replayed until Back to live is pressed and the frames come back.">
 </picture>
 
-[Quickstart](#quickstart) · [The map](#the-map) · [Install](#install) ·
+[Quickstart](#quickstart) · [The map](#the-map) · [The curves](#the-curves) · [Install](#install) ·
 [Configuration](#configuration) · [Commands](docs/MANUAL.md#commands-and-options) ·
 [Manual](docs/MANUAL.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/adrrr/tarmac/issues)
 
@@ -79,10 +79,11 @@ listening rules are [there too](docs/MANUAL.md#what-serve-listens-on).
        alt="The tarmac map, live. Four framed groups, one per working directory and labelled with its project: beacon, holding a session halted on a permission prompt; harbor, holding a session busy with its context arc at 90% and a background agent docked under the cards of that frame as a strip named after its prompt; quay, reporting a status tarmac does not know; and atlas, idle at 36%. A frame says only that its nodes were read in the same directory. Nothing inside one claims that any node dispatched another. The account's five-hour and seven-day gauges sit above them, and one warning above the fleet names the unrecognised status rather than filing it as idle.">
 </picture>
 
-The tab in the header swaps the table for the same fleet drawn as nodes: one per session, the
+The tabs in the header swap the table for the same fleet drawn as nodes: one per session, the
 arc its context, the shape by the name its state. A background agent has no terminal behind it
 to draw a frame with, so it gets a strip of text rather than a dial that could never fill. Both
-views render the same reading into the same fragment, so they can never disagree.
+views render the same reading into the same fragment, so they can never disagree. A third tab
+draws the record rather than the reading: see [the curves](#the-curves) below.
 
 The nodes are grouped by working directory: a frame per directory, labelled with its project,
 the sessions inside it as cards and the agents docked underneath as strips. A frame claims one
@@ -107,6 +108,26 @@ snapshot for, nothing is drawn in its place: no dial, no dash. A word
 filed as `idle`, and raises one warning above the fleet naming it. The page is JSON
 underneath: `GET /api/fleet` and `GET /api/history` serve exactly what the map draws. Details
 are in [the manual](docs/MANUAL.md#the-map).
+
+## The curves
+
+The third tab draws what moved rather than what is: context per session, cost per project, and
+the account's two windows, over the last 24 hours out of the ring or over 7 and 30 days out of
+the journal, if you keep one. `<canvas>` and the page's own script, no library.
+
+A context line breaks where its session did, so a recycle at three in the morning reads as a
+break and not as a cliff, and a minute nobody read is a hole rather than a fall to zero. The
+lines that gained fifteen points or more in the last three hours are drawn full and labelled,
+which is the question the chart exists for: what has to be recycled tonight. Cost is stacked
+bars, built in a fixed order so a project keeps its place in the column all week, with the
+legend sorted by what each one spent. Quota is the seven-day line over the five-hour window,
+and a turnover the serve slept through is drawn faint and marked `≈` rather than as a firm line
+through a minute nobody measured.
+
+No hover: a tap puts a cursor on a chart and every number on it becomes that moment's, with
+`Back to now` to undo it. Without `history.days` the two longer ranges are greyed out and the
+view says which key turns them on. Details are in
+[the manual](docs/MANUAL.md#the-curves).
 
 ## Install
 
@@ -189,8 +210,8 @@ and what would have worked. Spellings, edge cases and the two health fields
   not a number you can raise. `serve` names the retention, the cap and the directory in its
   settings block, before it serves anything. `GET /api/history?range=7d`, or `30d`, reads those
   files back aggregated by hour and by project, where the same route with no range is the last
-  24 hours out of memory. To stop it, unset the retention wherever you set it; to erase what is
-  there, remove the directory.
+  24 hours out of memory, and the third tab of the page draws both. To stop it, unset the
+  retention wherever you set it; to erase what is there, remove the directory.
 - **No Windows.** The generated wrapper is POSIX `sh`.
 - **No remote fleets.** It watches the machine it runs on.
 

@@ -10,10 +10,64 @@
 // not a copy — so a rule that is removed from the page is a rule that goes red here. No
 // framework, no bundler, no dependency: about eighty lines of the four objects it calls.
 
+/**
+ * What a `<canvas>` hands back, reduced to a recorder.
+ *
+ * The history view draws with a 2d context, and no assertion can read a pixel. What CAN be
+ * asserted is that the drawing ran at all and did not throw halfway through, which is the whole
+ * failure mode of a chart fed the wrong shape — so the context accepts every call, keeps every
+ * property, and remembers the names in order for a test that wants to know a path was built.
+ */
+class Ctx2D {
+  /** Every call, in order, with what it was given. The names say a path was built; the
+   *  arguments are the only way a test can read a bar's height or a label's words. */
+  readonly calls: Array<{ name: string; args: unknown[] }> = [];
+  /** The names alone, for an assertion about the shape of a path rather than its geometry. */
+  get names(): string[] {
+    return this.calls.map((c) => c.name);
+  }
+  /** Every argument list one method was called with. */
+  argsOf(name: string): unknown[][] {
+    return this.calls.filter((c) => c.name === name).map((c) => c.args);
+  }
+  constructor() {
+    return new Proxy(this, {
+      get: (target, key: string) => {
+        if (key === 'calls') return target.calls;
+        if (key === 'names') return target.names;
+        if (key === 'argsOf') return target.argsOf.bind(target);
+        if (key in target) return (target as any)[key];
+        // Anything not set as a property is a method: record the call and answer plausibly.
+        return (...args: unknown[]): unknown => {
+          target.calls.push({ name: key, args: args });
+          return key === 'measureText' ? { width: 0 } : undefined;
+        };
+      },
+      set: (target, key: string, value: unknown) => {
+        (target as any)[key] = value;
+        return true;
+      },
+    });
+  }
+}
+
 class El {
   textContent = '';
   innerHTML = '';
   hidden = false;
+  /** What a canvas carries. `clientWidth` is what the drawing sizes itself off. */
+  clientWidth = 360;
+  width = 0;
+  height = 0;
+  readonly style: Record<string, string> = {};
+  private ctx: Ctx2D | null = null;
+  getContext(kind: string): Ctx2D | null {
+    if (kind !== '2d') return null;
+    return (this.ctx ??= new Ctx2D());
+  }
+  getBoundingClientRect(): { left: number; width: number } {
+    return { left: 0, width: this.clientWidth };
+  }
   /** What a range and a button carry. The script writes them; a test reads them back. */
   value = '';
   max = '';
@@ -37,15 +91,19 @@ class El {
   removeAttribute(name: string): void {
     this.attrs.delete(name);
   }
-  private readonly handlers = new Map<string, Array<() => void>>();
-  addEventListener(type: string, fn: () => void): void {
+  private readonly handlers = new Map<string, Array<(ev?: unknown) => void>>();
+  addEventListener(type: string, fn: (ev?: unknown) => void): void {
     const list = this.handlers.get(type) ?? [];
     list.push(fn);
     this.handlers.set(type, list);
   }
-  /** A reader's click, or a drag of the handle — from the test's side of the glass. */
-  fire(type: string): void {
-    for (const fn of this.handlers.get(type) ?? []) fn();
+  /**
+   * A reader's click, a tap on a chart, or a drag of the handle — from the test's side of the
+   * glass. The event is passed through because the page reads one: a tap carries the x it
+   * landed on, and a click on a legend is delegated and has to find its own target.
+   */
+  fire(type: string, ev: unknown = undefined): void {
+    for (const fn of this.handlers.get(type) ?? []) (fn as (e: unknown) => void)(ev);
   }
   /** Drag: the browser sets the value, then tells the page. */
   drag(value: number): void {
@@ -89,22 +147,44 @@ export interface MountOptions {
    * visible and enabled, and an assertion that the script REVEALED something passes whether
    * or not the script ran — which is how three tests of the replay banner turned out to be
    * pinning nothing at all.
+   *
+   * `text` is there for the same reason one step further on: the history view keeps the
+   * sentence the SERVER wrote about the ring rather than writing a second copy of it, so an
+   * element that starts empty here is a page that starts wrong.
    */
-  shell?: Record<string, { hidden: boolean; disabled: boolean }>;
+  shell?: Record<string, { hidden: boolean; disabled: boolean; text: string }>;
 }
 
 /**
  * What the served markup says about each element with an id, so the fake DOM starts where the
  * browser's would. Only the two attributes the script toggles are read.
  */
-export function shellState(html: string): Record<string, { hidden: boolean; disabled: boolean }> {
-  const state: Record<string, { hidden: boolean; disabled: boolean }> = {};
-  for (const m of html.matchAll(/<[a-z]+\s([^>]*\bid="([\w-]+)"[^>]*)>/g)) {
-    const [, attrs, id] = m;
-    state[id] = { hidden: /\bhidden\b/.test(attrs), disabled: /\bdisabled\b/.test(attrs) };
+export function shellState(html: string): Record<string, { hidden: boolean; disabled: boolean; text: string }> {
+  const state: Record<string, { hidden: boolean; disabled: boolean; text: string }> = {};
+  for (const m of html.matchAll(/<([a-z]+)\s([^>]*\bid="([\w-]+)"[^>]*)>([^<]*)/g)) {
+    const [, , attrs, id, text] = m;
+    state[id] = {
+      hidden: /\bhidden\b/.test(attrs),
+      disabled: /\bdisabled\b/.test(attrs),
+      // Only an element whose content is text and nothing else: anything with a child is
+      // markup this DOM does not model, and a partial string would be worse than none.
+      text: decode(text),
+    };
   }
   return state;
 }
+
+/** The handful of entities this page's own markup emits. */
+const ENTITIES: Record<string, string> = {
+  '&middot;': '·',
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&mdash;': '—',
+};
+const decode = (text: string): string => text.replace(/&[a-z#0-9]+;/g, (e) => ENTITIES[e] ?? e);
 
 export function mountPage(
   script: string,
@@ -129,6 +209,7 @@ export function mountPage(
       if (as) {
         e.hidden = as.hidden;
         e.disabled = as.disabled;
+        e.textContent = as.text;
       }
     }
     return e;
@@ -225,8 +306,15 @@ export function mountPage(
 }
 
 /** The script exactly as the browser receives it — extracted from the served page. */
-export function scriptOf(html: string): string {
-  const m = html.match(/<script>([\s\S]*?)<\/script>/);
-  if (!m) throw new Error('the page shipped no script');
-  return m[1];
+export function scriptOf(html: string, nth = 0): string {
+  const all = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  if (all.length <= nth) throw new Error(`the page shipped ${all.length} scripts, not ${nth + 1}`);
+  return all[nth][1];
 }
+
+/**
+ * The history view's own script, which is the SECOND the page carries and only on its own
+ * address. Named rather than left as `scriptOf(html, 1)` at every call site: which script is
+ * which is a fact about the page, not about each test that mounts one.
+ */
+export const historyScriptOf = (html: string): string => scriptOf(html, 1);

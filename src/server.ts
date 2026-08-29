@@ -31,6 +31,7 @@ const IDENTITY = { 'x-tarmac': '1' };
 const PAGES = new Map<string, View>([
   ['/', 'table'],
   ['/map', 'map'],
+  ['/history', 'history'],
 ]);
 
 export interface FleetServerDeps {
@@ -322,7 +323,13 @@ export function createFleetServer({
         body = JSON.stringify(fleet, null, 2);
       } else {
         type = 'text/html; charset=utf-8';
-        body = url.pathname === '/live' ? renderLive(fleet) : renderPage(fleet, PAGES.get(url.pathname)!);
+        // Whether there is a journal is the config's answer and the server is the one holding
+        // it, so the view ships knowing — rather than drawing three live ranges and taking two
+        // of them back once a fetch has been out and come home refused.
+        body =
+          url.pathname === '/live'
+            ? renderLive(fleet)
+            : renderPage(fleet, PAGES.get(url.pathname)!, { historyEnabled: store !== null });
       }
     } catch (e) {
       // Say why. A dashboard that goes blank when its source breaks teaches nothing.

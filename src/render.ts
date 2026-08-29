@@ -11,6 +11,14 @@ import { formatDuration } from './config.ts';
 import { HISTORY_MAX_BYTES } from './history-store.ts';
 import type { Config, Source } from './config.ts';
 import { buildMap, INTERACTIVE, stateOf } from './map.ts';
+import {
+  HISTORY_CSS,
+  HISTORY_PHONE_CSS,
+  HISTORY_PALETTE,
+  HISTORY_TOUCH_CSS,
+  historyScript,
+  renderHistoryView,
+} from './history-view.ts';
 import type { Berth, MapNode, NodeState } from './map.ts';
 import { schemaNotice } from './schema.ts';
 import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
@@ -639,10 +647,22 @@ function ago(ms: number): string {
   return m < 60 ? `${m}m` : `${Math.round(m / 60)}h`;
 }
 
-/** Which of the two surfaces the shell opens on. */
-export type View = 'table' | 'map';
+/** Which of the three surfaces the shell opens on. */
+export type View = 'table' | 'map' | 'history';
 
-export function renderPage(fleet: Fleet, view: View = 'table'): string {
+export interface PageOptions {
+  /**
+   * Whether `history.days` is set, which decides what the third tab can offer.
+   *
+   * Passed in rather than read here, and rendered rather than fetched: the config is the
+   * server's, so the sentence about a journal that is off and the two pills that need one
+   * ship in the markup. A reader with no journal never watches the ranges flicker from live
+   * to refused, and a browser with no JavaScript still gets told why the view is empty.
+   */
+  historyEnabled?: boolean;
+}
+
+export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled = false }: PageOptions = {}): string {
   // The header's copy. `renderLive` below renders its own, out of this same fleet and through
   // this same function — two calls of one pure renderer over one reading, which is what keeps
   // the pair the reader sees and the pair the script will copy up from being two accounts.
@@ -657,6 +677,9 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      a fault, and painting it amber puts it in the same column as "tarmac cannot read this". */
   :root { color-scheme: light dark; --fg:#111; --dim:#6b7280; --line:#e5e7eb; --bg:#fff; --warn:#b45309; --warnbg:#fffbeb; --busy:#047857; --wait:#1d4ed8; }
   @media (prefers-color-scheme: dark) { :root { --fg:#e5e7eb; --dim:#9ca3af; --line:#374151; --bg:#0b0f14; --warn:#fbbf24; --warnbg:#231a06; --busy:#34d399; --wait:#93c5fd; } }
+  /* Eight categorical hues for the history view, kept apart from the four above: those four
+     say what a session is DOING, and a chart that borrowed one would be colouring a project
+     with the word for busy. */${HISTORY_PALETTE}
   body { margin:0; padding:2rem 1.25rem; background:var(--bg); color:var(--fg);
          font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",sans-serif; }
   header { display:flex; align-items:baseline; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
@@ -733,13 +756,13 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
      Map, is 50), so a horizontal inset buys nothing — and at .3rem against a .15rem gap between
      the tabs it made their two overlays overlap by 7px, where a tap meant for Table landed on
      Map because Map's pseudo paints later. */
-  nav a, .replay button, .replaying-note button { position:relative; }
+  nav a, .replay button, .replaying-note button, .hist-range button, .to-now, .key { position:relative; }
   @media (pointer: coarse) {
     nav a::after, .replay button::after { content:''; position:absolute; inset:-.7rem 0; }
-    .replaying-note button::after { content:''; position:absolute; inset:-.85rem 0; }
-  }
+    .replaying-note button::after { content:''; position:absolute; inset:-.85rem 0; }${HISTORY_TOUCH_CSS}  }
   body[data-view="table"] .view-map { display:none; }
   body[data-view="map"] .view-table { display:none; }
+${HISTORY_CSS}
 
   /* ── the account's two windows ───────────────────────────────────────────────────────
      In the header, because a rate limit is the account's and not a node's. Slim on purpose:
@@ -1136,7 +1159,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
     td[data-label="Effort"] .v:has(.dim)::before { content:'· effort '; }
     td[data-label="Cost"] .v:has(.dim)::before { content:'· cost '; }
     .bar { display:none; }
-  }
+${HISTORY_PHONE_CSS}  }
 </style>
 </head><body data-view="${view}">
 <header>
@@ -1148,6 +1171,7 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   <nav>
     <a href="/"${view === 'table' ? ' aria-current="page"' : ''}>Table</a>
     <a href="/map"${view === 'map' ? ' aria-current="page"' : ''}>Map</a>
+    <a href="/history"${view === 'history' ? ' aria-current="page"' : ''}>History</a>
   </nav>
   <!-- The account's two windows, page-level because that is what they are: a limit belongs to
        the account every session below is spending from, not to any one of them. Their VALUES
@@ -1199,7 +1223,8 @@ export function renderPage(fleet: Fleet, view: View = 'table'): string {
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
 </div>
-<script>${pageScript(view)}</script>
+${view === 'history' ? renderHistoryView({ historyEnabled }) : ''}
+<script>${pageScript(view)}</script>${view === 'history' ? `\n<script>${historyScript()}</script>` : ''}
 </body></html>
 `;
 }

@@ -803,6 +803,43 @@ test('GET /map serves the page opened on the map', async () => {
   });
 });
 
+// The third surface, and the one that is not about now. It ships on its own address rather
+// than in the shell of the other two: it carries a script and three canvases nobody reading a
+// table has a use for.
+test('GET /history serves the page opened on the curves', async () => {
+  await withServer(collectOk, async (base) => {
+    const res = await fetch(base + '/history', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /<!doctype/i, 'the shell, not the fragment');
+    assert.match(body, /<body data-view="history"/);
+    assert.match(body, /id="ctx-canvas"/, 'and the charts came with it');
+  });
+});
+
+// Whether there is a journal is the config's answer, and this route is where the page is told.
+// Rendered rather than fetched: a reader with no journal must not watch the two long ranges
+// flicker from live to refused, and a browser with no script still has to be told why.
+test('the curves ship knowing whether there is a journal, without asking for it', async () => {
+  const off = async (base: string): Promise<void> => {
+    const body = await (await fetch(base + '/history', { signal: AbortSignal.timeout(NET_DEADLINE_MS) })).text();
+    assert.match(body, /History is off/);
+    assert.match(body, /id="range-7d"[^>]*\bdisabled\b/);
+  };
+  await withServer(collectOk, off);
+
+  const { store } = journal();
+  await withServer(
+    collectOk,
+    async (base) => {
+      const body = await (await fetch(base + '/history', { signal: AbortSignal.timeout(NET_DEADLINE_MS) })).text();
+      assert.equal(/History is off/.test(body), false, 'a serve that keeps one must not say it does not');
+      assert.equal(/id="range-7d"[^>]*\bdisabled\b/.test(body), false);
+    },
+    { store },
+  );
+});
+
 test('an unknown path is a 404, not the dashboard', async () => {
   await withServer(collectOk, async (base) => {
     assert.equal((await fetch(base + '/nope', { signal: AbortSignal.timeout(NET_DEADLINE_MS) })).status, 404);

@@ -278,17 +278,26 @@ test('the cards of a berth come before its strips, in the markup as on the scree
   assert.ok(html.indexOf('harbor-3f') < html.indexOf('sweep-01'), 'the card first, whatever order they arrived in');
   // `order` moves a flex item past its siblings, and nothing this view draws may be moved.
   //
-  // The sheet is allowed exactly one declarer of it, and it is not this view: the table's phone
-  // strip, which uses it to wedge a line break between the state and the first number and never
-  // to reorder (`phone-view` pins that against the columns the table emits). Listing what MAY
-  // declare it rather than what may not, because a node is an `<article>` and a berth is a
-  // `<section>` — a rule written on the element name would walk past a list of class names.
+  // Three selectors may declare it, named in the pattern below, and every rule that declares it
+  // has to be one of them. That is a dozen rules, not three: the table's phone strip numbers
+  // each value of a row and wedges a zero-height `tr::after` between them for a line break, and
+  // the numbers follow the columns the table emits, which `phone-view` pins. Nothing there
+  // reorders anything a reader reads.
+  //
+  // `.hist-range` does reorder, and is meant to. It lifts the curves' range bar above the charts
+  // on a laptop. The bar has to be last in the markup for the phone's sticky bottom offset to
+  // reach it, and a range a reader has to scroll past three charts to change is a range nobody
+  // changes. It moves a control, never a reading, which is the line this test draws.
+  //
+  // Listing what MAY declare it rather than what may not, because a node is an `<article>` and
+  // a berth is a `<section>` — a rule written on the element name would walk past a list of
+  // class names.
   let declarers = 0;
   for (const [, raw, declarations] of mapCss().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (!/(?:^|;)\s*order\s*:/.test(declarations)) continue;
     declarers++;
     const selector = raw.slice(raw.lastIndexOf('}') + 1).trim();
-    assert.match(selector, /^td\[data-label="[A-Za-z]+"\] \.v$|^tr::after$/, `${selector} may not reorder anything`);
+    assert.match(selector, /^td\[data-label="[A-Za-z]+"\] \.v$|^tr::after$|^\.hist-range$/, `${selector} declares order, and these three selectors are the whole of what may`);
   }
   assert.ok(declarers > 0, 'the rule this is about was found at all');
   assert.doesNotMatch(mapCss(), /flex-direction:\s*\w+-reverse/);

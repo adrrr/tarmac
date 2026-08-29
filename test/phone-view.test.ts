@@ -68,10 +68,12 @@ function cssOutsideMedia(css: string = sheet()): string {
 
 // ── a finger is not a cursor ─────────────────────────────────────────────────────────────
 //
-// The three controls this page has are pills sized for a pointer that lands on a single
-// pixel: the two tabs, the scrubber's Play, and the way back out of a replay. Apple asks for
-// 44pt of tappable box and the pills are around 26 — so the TAPPABLE box grows and the drawn
-// one does not, through an overlay that only exists where the pointer is coarse.
+// Every control this page has is a pill sized for a pointer that lands on a single pixel: the
+// tabs, the scrubber's Play, the way back out of a replay, and — since the history view — the
+// three range pills, the way back to now on each chart, and the legend keys that isolate a
+// series. Apple asks for 44pt of tappable box and the pills are around 26 — so the TAPPABLE box
+// grows and the drawn one does not, through an overlay that only exists where the pointer is
+// coarse.
 
 const REM = 16;
 /**
@@ -126,12 +128,36 @@ function tapHeight(selector: string): number {
   return fontSize * lineHeight(selector) + 2 * padding + 2 * Math.abs(inset);
 }
 
-const CONTROLS = ['nav a', '.replay button', '.replaying-note button'];
+// The legend keys are the one set of these that are stacked: their overlay reaches half of 44
+// above and below each key, so the grid's ROW GAP has to be at least the whole of what the two
+// overlays add, or a tap meant for one project isolates the one under it. That sum is pinned
+// below the height check.
+const CONTROLS = ['nav a', '.replay button', '.replaying-note button', '.hist-range button', '.to-now', '.key'];
 
 test('every control a thumb has to hit is at least 44px tall on a coarse pointer', () => {
   for (const selector of CONTROLS) {
     assert.ok(tapHeight(selector) >= 44, `${selector} is only ${tapHeight(selector)}px of tappable box`);
   }
+});
+
+// Stacked targets, which none of the older three are: the keys sit in a grid two columns wide,
+// and two rows of them are separated by the legend's row gap alone. Overlays that reach further
+// than half that gap overlap, and the key underneath wins because it paints later — a reader
+// isolating `portfolio` gets `research`. The tabs learned this at .3rem of horizontal inset and
+// 7px of overlap; the same trade, on the other axis.
+test('two rows of legend keys have targets that do not overlap each other', () => {
+  const gap = px(declaredEverywhere('.legend:not([hidden])', 'gap', cssOutsideMedia()).at(-1)!.split(/\s+/)[0]);
+  const inset = Math.abs(shorthandY(declaredEverywhere('.key::after', 'inset', atMedia('(pointer: coarse)')).at(-1)!));
+  assert.ok(2 * inset <= gap, `two key targets overlap by ${2 * inset - gap}px`);
+});
+
+// The way back to now sits directly above a canvas that takes taps of its own, and its overlay
+// is drawn downwards into whatever space the head leaves. Past that margin the target is over
+// the chart, and a tap meant for the top of the plot lands on a button instead.
+test('the way back to now does not lay its target over the chart underneath it', () => {
+  const inset = Math.abs(shorthandY(declaredEverywhere('.to-now::after', 'inset', atMedia('(pointer: coarse)')).at(-1)!));
+  const clearance = px(declaredEverywhere('.chart-head', 'margin-bottom', cssOutsideMedia()).at(-1)!);
+  assert.ok(inset <= clearance, `the target reaches ${inset - clearance}px onto the canvas`);
 });
 
 // The height above is the half a stylesheet can answer for. The other axis is the width of a

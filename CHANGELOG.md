@@ -13,6 +13,37 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The curves.** A third view on `/history`, beside the table and the map, drawing what moved
+  rather than what is: context per session, cost per project, and the account's two windows, over
+  24h out of the ring or 7 and 30 days out of the journal. One fetch per range and `<canvas>`
+  after that, no library and no runtime dependency. A context line is per session and breaks where
+  the session did, so a recycle at three in the morning reads as a break and never as a cliff; a
+  minute nobody read is a hole rather than a fall to zero, and stays one through the decimation
+  the plot needs, which keeps the highest reading in each pixel and leaves a pixel holding a
+  missing minute missing. Lines that gained fifteen points or more over the last three hours are
+  drawn full and labelled and the rest of the fleet stays behind them, climbing being measured
+  against the oldest reading in that window rather than the one at its edge, so a session that
+  started after breakfast is not hidden by its own age. Over a week or a month it is one band per
+  project instead, on the hour maxima, and a project the range has no context for gets no band. Cost is stacked bars built in a fixed
+  order, so a project keeps its colour and its place in the column from Monday to Sunday, with the
+  legend ranked by what each one spent; at 24h the ring's running totals are differenced per
+  session id, from each session's own first reading in the range, floored at zero and started
+  again at every new id, so neither a pre-existing session nor the nightly recycle can draw a
+  spike or a refund. Background agents are counted in the cost and left off the context, having no
+  terminal to draw a statusline frame with. Quota is the seven-day line over the five-hour window,
+  a sawtooth at 24h and a skyline of window highs beyond it, each bar its own window's high; a
+  turnover the serve slept through is faint and marked `≈` rather than drawn as a firm line
+  through a minute nobody measured, and the `≈` survives the month where the names are dropped.
+  Percentages are floored, as the header's gauges are. No hover: a tap puts a cursor on a chart, every number on the card becomes that
+  moment's, and `Back to now` undoes it; a tap on a legend key isolates its series, including a
+  project whose basename is the empty string. An hour with no readings at all reads as `no
+  reading` rather than as `$0.00`, and a project nothing ever published a cost for is a dash
+  rather than a zero. Without
+  `history.days` the two longer ranges are refused, the view says which key turns them on, and
+  that sentence is rendered by the server so a browser with JavaScript off still gets it. One
+  chart per screen on a phone, with the range bar pinned under the thumb and every control it
+  adds carrying a 44px target; in the dark scheme the fills are drawn back to 55% and the lines
+  are not.
 - **One owner for the journal directory.** The retention is a property of that directory and the
   process applying it was whichever `serve` started last: a `serve --history-days 1` started to
   try the setting out swept twenty-nine days a thirty-day serve was keeping, in four seconds, and
