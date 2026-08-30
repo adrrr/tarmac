@@ -14,6 +14,10 @@
 // A flag every command takes is exempt from the second direction, on the grounds that the
 // option list documents it once. A third check holds the exemption to those grounds, so it
 // cannot go on excusing a flag no list names — which is where `--help` itself sat (#113).
+//
+// The option list is then held to the parser in the same two directions the synopsis is, the
+// last check below covering the one those three leave open: a flag the list describes and the
+// parser has never heard of refuses the reader who typed what the help told them to.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -128,5 +132,17 @@ test('every flag the synopsis is excused from naming is named in the option list
       listed.includes(flag),
       `\`${flag}\` is exempt from the synopsis check because the option list documents it, and the option list does not name it`,
     );
+  }
+});
+
+// The other direction on the option list, which nothing above asks: the synopsis checks cover
+// the flags a synopsis line offers, and a description under it is read by neither. A typo there
+// (`--hom` for `--home`) or a flag that never shipped costs the reader an exit 1 on a spelling
+// the help itself handed them, and every test in this file stays green.
+test('every flag the option list names is one the parser knows', () => {
+  const listed = optionList(help());
+  assert.ok(listed.length > 0, 'no option list found in --help');
+  for (const flag of listed) {
+    assert.ok(OPTION_FLAGS.includes(flag), `the option list documents \`${flag}\` and the parser has never heard of it`);
   }
 });
