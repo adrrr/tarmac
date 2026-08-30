@@ -13,6 +13,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 Nothing yet.
 
+## [0.8.1] — 2026-08-30
+
+### Changed
+
+- Author and copyright holder now read `adrrr` in `package.json` and `LICENSE`, the account
+  that publishes this package. No code change, same `dist/`.
+
 ## [0.8.0] — 2026-08-29
 
 ### Added
