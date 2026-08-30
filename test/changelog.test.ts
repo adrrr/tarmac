@@ -342,6 +342,30 @@ test('CI fetches the tags the guards above read', () => {
   );
 });
 
+// Both duplicate-heading assertions count with this helper — the tagged side beside the `git
+// show`, the working tree in the `duplicated` guard above — so a dedupe inside it (`.filter((v, i, a) =>
+// a.indexOf(v) === i)`, the shape a tidy-up takes) empties both of them at once and leaves the
+// suite green. Neither guard's comment names the helper; this test is what holds it, and it is
+// the only assertion here that reads `datedVersions()` against an input carrying the doubling.
+test('datedVersions keeps a version that owns two dated sections, and skips Unreleased', () => {
+  const doubled = [
+    '# Changelog',
+    '',
+    '## [Unreleased]',
+    '',
+    '## [9.9.9] — 2026-01-02',
+    '- the copy a botched merge left on top',
+    '',
+    '## [9.9.9] — 2026-01-01',
+    '- what the tag actually published',
+    '',
+    '## [9.9.8] — 2025-12-31',
+    '- older still',
+  ].join('\n');
+
+  assert.deepEqual(datedVersions(doubled), ['9.9.9', '9.9.9', '9.9.8']);
+});
+
 // The one line a reader of the first failure is given. `fail` prints the message and nothing
 // else, so a line number that points at the wrong place sends them through fifty lines of prose
 // by hand — and a truncated section is where that is easiest to get wrong: walking to the SHORTER
