@@ -126,7 +126,7 @@ test('every flag a command accepts is shown on that command in --help', () => {
 // account of itself, and hidden from the check above by the set that excuses it.
 test('every flag the synopsis is excused from naming is named in the option list', () => {
   const listed = optionList(help());
-  assert.ok(listed.length > 0, 'no option list found in --help — the assertion below would pass on nothing');
+  assert.ok(listed.length > 0, 'no option list found in --help — the failures below would blame the flags for an extractor that read none');
   for (const flag of ANSWERED_EVERYWHERE) {
     assert.ok(
       listed.includes(flag),
