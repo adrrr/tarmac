@@ -98,8 +98,12 @@ export function parseAgents(text: string): ParsedAgents {
       health.noSessionId += 1;
       continue;
     }
-    const sessionId = typeof entry.sessionId === 'string' ? entry.sessionId : null;
-    if (!sessionId) health.noSessionId += 1;
+    // The empty string is not an id, and it is a `string`, so the type check alone let it
+    // through: counted as missing here, then carried as `''` to every reader and written to
+    // the journal as `sid: ''`, where the id of a session nobody could name is a bucket every
+    // nameless session shares. Absent is `null`, the same as everywhere else in this file.
+    const sessionId = typeof entry.sessionId === 'string' && entry.sessionId !== '' ? entry.sessionId : null;
+    if (sessionId === null) health.noSessionId += 1;
 
     // A background agent carries no `status` at all — its word is under `state`. `status`
     // still wins where both are present: it comes from the agent's own process, and `state`

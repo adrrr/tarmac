@@ -11,7 +11,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **An empty session id is absent, not a name.** An entry from `claude agents --json` carrying
+  `sessionId: ""` passed the type check that reads it, and the empty string travelled on as an
+  id — through the fleet and into the journal as `sid: ""` — while discovery health had already
+  counted the same entry as one that carries no session id. It reads `null` at the parser now,
+  like every other field that surface leaves unfilled, and the journal says what it means.
 
 ## [0.8.1] — 2026-08-30
 
