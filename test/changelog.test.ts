@@ -166,6 +166,23 @@ function taggedReleases(): { tag: string; version: string }[] {
 }
 
 /**
+ * The working tree's CHANGELOG, read only once its fences close.
+ *
+ * Both tests below go through here because an open fence lies to each of them in its own way:
+ * the first reports a section that is plainly there as missing, the second finds no dated
+ * section at all and says so — "no dated sections in the CHANGELOG" about a file full of them.
+ * The guard is what makes either failure name the fence instead.
+ */
+function currentChangelog(): string {
+  const current = read('CHANGELOG.md');
+  assert.ok(
+    !scan(current).fenceLeftOpen,
+    'the CHANGELOG leaves a code fence open: every heading after it stops being read as one, so the sections below would be reported as missing when they are plainly there',
+  );
+  return current;
+}
+
+/**
  * The first line at which two sections part company, for a message that points at the edit.
  *
  * The walk runs to the LONGER of the two, so a section that was simply truncated parts company
@@ -199,11 +216,7 @@ test('every published CHANGELOG section still says what it said when it was tagg
     'no vX.Y.Z tags in this checkout: the comparison below would pass on an empty list. Run `git fetch --tags` (a shallow clone has none) — this guard reads the tags or it fails.',
   );
 
-  const current = read('CHANGELOG.md');
-  assert.ok(
-    !scan(current).fenceLeftOpen,
-    'the CHANGELOG leaves a code fence open: every heading after it stops being read as one, so the sections below would be reported as missing when they are plainly there',
-  );
+  const current = currentChangelog();
 
   for (const { tag, version } of releases) {
     const taggedFile = git('show', `${tag}:CHANGELOG.md`);
@@ -262,7 +275,7 @@ test('every dated section since tagging began carries the tag that published it'
   const releases = taggedReleases();
   assert.ok(releases.length > 0, 'no vX.Y.Z tags in this checkout, so nothing can be said about which sections are covered');
 
-  const current = read('CHANGELOG.md');
+  const current = currentChangelog();
   const dated = datedVersions(current);
   assert.ok(dated.length > 0, 'no dated sections in the CHANGELOG — the assertions that follow would pass on nothing');
 
