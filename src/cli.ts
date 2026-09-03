@@ -61,9 +61,11 @@ const USAGE = `tarmac — fleet observability for Claude Code
                    name and no working directory, about 2 MB a day at eight sessions,
                    and writing stops at 256 MB whatever N says
   --demo           serve an invented fleet of eight sessions with a day of history behind
-                   it, instead of this machine's. On \`serve\` only. Nothing is read and
-                   nothing is written — no \`claude\`, no snapshots, no journal whatever
-                   --history-days says — and the page says on itself that it is a demo
+                   it, instead of this machine's. On \`serve\` only. This machine's fleet is
+                   never read and nothing is written: no \`claude\`, no snapshots, no temp
+                   sweep, and no journal whatever --history-days says. The port and the
+                   trusted hosts are still resolved as usual, and the page says on itself
+                   that it is a demo
 
   Those five settings can also be set, in decreasing order of precedence, by the
   environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR, TARMAC_TRUST_HOST,
@@ -149,7 +151,11 @@ try {
     // writes, not where a reader's environment would have put it. Recomputing it here made
     // `XDG_STATE_HOME` in one process and not the other a silent split.
     const frozen = installedSnapshotsDir(p);
-    if (frozen === null && wrapperIsOurs(p))
+    // Not under `--demo`, and for the reason the settings block is not: this line names the
+    // wrapper's path and the snapshot directory, which are two real paths out of a real home,
+    // and a terminal capture of a demo is exactly the artefact `--demo` exists to produce. It
+    // is also advice about a directory this run will never open.
+    if (frozen === null && wrapperIsOurs(p) && !args.demo)
       console.error(
         `tarmac: ${p.wrapper} is ours but does not say where it writes — falling back to ${p.snapshots}`,
       );
@@ -185,6 +191,11 @@ try {
       // try the setting out swept the thirty days another serve was keeping. A second serve
       // journals nothing now, and serves everything else exactly as it did.
       const days = args.demo ? null : config.historyDays.value;
+      // Said rather than dropped in silence. `serve` opens by naming what it decided and on
+      // whose authority, and a retention someone typed that this run is going to ignore is
+      // exactly the kind of thing that discipline exists for.
+      if (args.demo && config.historyDays.value !== null)
+        console.log(`tarmac: --demo keeps no journal, so the ${config.historyDays.value}-day retention is ignored`);
       const { lock, heldBy } = days === null ? { lock: null, heldBy: null } : acquireJournalLock({ dir: historyDir });
       // On stdout, under the settings block it corrects: that block has just named a retention
       // and a directory, and a reader piping it must not be left holding the half of it that
@@ -259,7 +270,9 @@ try {
       // On stdout, under the line naming the port, and said in the terminal as well as on the
       // page: whoever opens that URL sees the badge, and whoever left the process running in
       // another window has only this.
-      if (demoDay !== null) console.log('tarmac: demo data — an invented fleet. Nothing on this machine was read.');
+      // "No fleet", not "nothing": the settings this serve is running on were resolved the
+      // ordinary way, config file included. What was never opened is the fleet.
+      if (demoDay !== null) console.log('tarmac: demo data — an invented fleet. No fleet on this machine was read.');
     } else {
       const collect = (): Promise<Fleet> =>
         collectFleet({ claudeBin: args.claudeBin, snapshotsDir, staleAfterMs, snapshotsDirSource: config.snapshotsDir.source, installed: frozen !== null });

@@ -38,8 +38,8 @@ export interface Options {
   /** Skip the typed confirmation on install/uninstall. Opt-in, never implied. */
   yes: boolean;
   /**
-   * `serve` an invented fleet instead of this machine's. Nothing is read and nothing is
-   * written; the page it serves says on itself that the fleet is a demo.
+   * `serve` an invented fleet instead of this machine's. No `claude`, no snapshots, no journal,
+   * and nothing written anywhere; the page it serves says on itself that the fleet is a demo.
    */
   demo: boolean;
   help: boolean;

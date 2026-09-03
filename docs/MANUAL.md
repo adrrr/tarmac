@@ -246,10 +246,15 @@ something in them from the first second.
 tarmac serve --demo
 ```
 
-It reads nothing and writes nothing. No `claude` is spawned, no snapshot directory is opened,
-no temp file is swept, and no journal is written whatever `--history-days` says — an invented
-fleet has no business in your record of your real one. Everything else about the serve is
-unchanged: the same port rules, the same `Host` guard, the same routes.
+It reads no fleet and writes nothing. No `claude` is spawned, no snapshot directory is opened,
+no temp file is swept, and no journal is written whatever `--history-days` says, which it will
+say so out loud rather than dropping in silence — an invented fleet has no business in your
+record of your real one. What it does still read is its own settings, so a `--port` or a
+`--trust-host` in your config file applies here exactly as it does anywhere else. Everything
+else about the serve is unchanged: the same port rules, the same `Host` guard, the same routes.
+
+It also runs no sampler. The day it starts with is the day it keeps, so a demo left open for an
+afternoon shows the same picture at the end of it as at the beginning.
 
 The page says so about itself. A `demo data` badge sits beside the title on every view, and the
 terminal says the same under the URL, so a screenshot of it cannot be passed around as a

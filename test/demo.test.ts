@@ -23,6 +23,8 @@ import { HISTORY_SLOTS } from '../src/history.ts';
 import { stateOf } from '../src/map.ts';
 import { renderPage } from '../src/render.ts';
 import { DEFAULT_STALE_AFTER_MS } from '../src/config.ts';
+import { createFleetServer, listenFleetServer } from '../src/server.ts';
+import { HISTORY_CADENCE_MS } from '../src/history.ts';
 import { rawGetText, waitForOutput } from './bounded.ts';
 import { tempDir } from './sandbox.ts';
 
@@ -195,6 +197,35 @@ test('the day the collector plays ends now, so its last minute is the fleet bein
   assert.equal(demoDayStart(now), now - SHOWN * 60_000);
 });
 
+// The account gauges are read against the clock that took the reading, not against the start of
+// the invented day. Pinned to the day, the five-hour reset fell into the past about an hour into
+// any demo, and the header then read "reset was due 4h ago" over a percentage that had not
+// moved. That phrase is how this page says the number beside it is about a window that is gone.
+test('the account windows still reset in the future however long the demo has been open', () => {
+  const dayStart = DAY_START;
+  const at = dayStart + SHOWN * 60_000;
+  for (const openFor of [0, 3600_000, 9 * 3600_000]) {
+    const now = at + openFor;
+    const limits = demoFleetAt(SHOWN, dayStart, now).rows[0].rateLimits!;
+    for (const window of ['five_hour', 'seven_day']) {
+      const resetsIn = limits[window].resets_at * 1000 - now;
+      assert.ok(resetsIn > 0, `${window} reset was ${Math.round(-resetsIn / 60_000)}m in the past after ${openFor / 3600_000}h open`);
+    }
+  }
+});
+
+// The demo is a screenshot with a server behind it, and the number most people install this tool
+// to watch is the one that is about to run out. A fleet whose fullest window is two thirds has
+// nothing at stake in it.
+test('the invented day takes one session near a compact', () => {
+  let fullest = 0;
+  for (let m = 0; m < DEMO_MINUTES; m++) {
+    for (const r of demoFleetAt(m, DAY_START).rows) fullest = Math.max(fullest, r.ctxPct ?? 0);
+  }
+  assert.ok(fullest >= 85, `the fullest context window in the whole day is ${fullest}%`);
+  assert.ok(fullest <= 97, `${fullest}% is past the clamp, so the demo is showing a pinned number`);
+});
+
 // ── the marker ────────────────────────────────────────────────────────────────────────────
 
 // The whole of the second promise. A screenshot of an invented fleet with nothing on it saying
@@ -237,8 +268,17 @@ test('--demo is an option of nothing else', () => {
  * of one answers an empty fleet — or a 500 — and the assertions below go red. Nothing about
  * the shape of `src/demo.ts` can make this pass on its own.
  */
-async function serveDemo(flags: string[] = []): Promise<{ child: ChildProcess; port: number; home: string }> {
+async function serveDemo(flags: string[] = []): Promise<{ child: ChildProcess; port: number; home: string; out: string; orphan: string }> {
   const home = tempDir('tarmac-demo-');
+  // An orphaned temp file of exactly the shape `serve` sweeps, old enough to qualify. A plain
+  // serve deletes this on startup and says so. A demo must leave it exactly where it is: that
+  // sweep is a deletion in somebody's real directory, and `--demo` promises not to make one.
+  const snapshots = path.join(home, '.local', 'state', 'tarmac', 'snapshots');
+  fs.mkdirSync(snapshots, { recursive: true });
+  const orphan = path.join(snapshots, `.tarmac-${'a'.repeat(8)}-1111-1111-1111-${'b'.repeat(12)}.4242.tmp`);
+  fs.writeFileSync(orphan, '{}');
+  const old = new Date(Date.now() - 24 * 3600_000);
+  fs.utimesSync(orphan, old, old);
   const child = spawn(
     process.execPath,
     [CLI, 'serve', '--demo', '--port', '0', '--home', home, '--claude-bin', path.join(home, 'no-such-claude'), ...flags],
@@ -246,7 +286,7 @@ async function serveDemo(flags: string[] = []): Promise<{ child: ChildProcess; p
   );
   const out = await waitForOutput(child, /tarmac serving/);
   const port = Number(out.match(/tarmac serving http:\/\/127\.0\.0\.1:(\d+)/)![1]);
-  return { child, port, home };
+  return { child, port, home, out, orphan };
 }
 
 test('serve --demo answers a full fleet with no claude on the machine and no snapshots anywhere', async (t) => {
@@ -262,18 +302,64 @@ test('serve --demo answers a full fleet with no claude on the machine and no sna
   assert.match(page, /demo data/i, 'the served page does not say it is a demo');
 });
 
+// The collector and the ring are anchored on ONE `demoDay` in `cli.ts`, and that local exists
+// for exactly this: two of them a day apart would put the live fleet a day after the newest
+// minute of its own record, with the scrubber's right-hand end nowhere near what the page shows.
+test('the fleet the demo serves and the newest minute of its record are the same moment', async (t) => {
+  const { child, port } = await serveDemo();
+  t.after(() => child.kill('SIGKILL'));
+
+  const fleet = JSON.parse(await get(port, '/api/fleet')) as { health: { generatedAt: number } };
+  const record = JSON.parse(await get(port, '/api/history')) as { samples: { t: number }[] };
+  const newest = record.samples[record.samples.length - 1].t;
+  const apart = Math.abs(fleet.health.generatedAt - newest);
+  assert.ok(apart < HISTORY_CADENCE_MS, `the live fleet and the newest recorded minute are ${Math.round(apart / 60_000)}m apart`);
+});
+
+// A demo collector answers one frozen minute, so every tick would record THAT minute and push a
+// minute of the invented day off the far end. Left open, the record becomes 1440 copies of one
+// reading, which is the flat chart this whole feature exists to replace.
+test('a demo serve runs no sampler, so the day it was handed is the day it keeps', async (t) => {
+  const dayStart = demoDayStart();
+  const spin = { sampleEveryMs: 5, collect: demoCollector(dayStart), history: demoHistory(dayStart) };
+
+  const demo = createFleetServer({ ...spin, demo: true });
+  const live = createFleetServer({ ...spin, history: demoHistory(dayStart) });
+  t.after(() => { demo.close(); live.close(); });
+  const ports = await Promise.all([demo, live].map((s) => listenFleetServer(s, { port: 0, source: 'default' })));
+
+  const newestOf = async (i: number): Promise<number> => {
+    const r = JSON.parse(await get(ports[i].port, '/api/history')) as { samples: { t: number }[]; since: number };
+    return r.since;
+  };
+  const before = await Promise.all([newestOf(0), newestOf(1)]);
+  await new Promise((r) => setTimeout(r, 120));
+  const after = await Promise.all([newestOf(0), newestOf(1)]);
+
+  assert.equal(after[0], before[0], 'the demo record moved: a sampler is eating the invented day');
+  // The control, so this cannot pass because nothing samples anywhere.
+  assert.notEqual(after[1], before[1], 'the same server without --demo did not sample either, so this proves nothing');
+});
+
 // The other half of "nothing on this machine was read": a demo that journals is a demo that
 // writes an invented fleet into somebody's real record of their real one.
 test('serve --demo writes nothing, journal included, however many days it is asked for', async (t) => {
-  const { child, port, home } = await serveDemo(['--history-days', '30']);
+  const { child, port, home, out, orphan } = await serveDemo(['--history-days', '30']);
   t.after(() => child.kill('SIGKILL'));
 
   // Asked for, answered, and still nothing on disk: the record it serves is the seeded ring.
   const record = JSON.parse(await get(port, '/api/history')) as { samples: unknown[] };
   assert.ok(record.samples.length >= HISTORY_SLOTS - 1, `the demo served ${record.samples.length} minutes of record`);
 
-  const written = fs.existsSync(home) ? walk(home) : [];
-  assert.deepEqual(written, [], `serve --demo wrote ${written.length} file(s) under the home it was pointed at`);
+  // The orphan the fixture planted is the one file on this machine `serve` would have touched.
+  assert.ok(fs.existsSync(orphan), 'serve --demo swept a real temp file out of a real directory');
+  assert.deepEqual(walk(home), [orphan.slice(home.length + 1)], 'serve --demo left something behind');
+
+  // And it never announced a directory it was not going to open. The settings block names the
+  // snapshot path and the retention, which is a real path in a capture of an invented fleet.
+  assert.equal(/tarmac settings/i.test(out), false, `serve --demo printed its settings block:\n${out}`);
+  assert.equal(/reaped/.test(out), false, `serve --demo reported a sweep:\n${out}`);
+  assert.match(out, /--demo keeps no journal/, 'the retention was dropped without a word about it');
 });
 
 /** Every file under a directory, at any depth, relative to it. */

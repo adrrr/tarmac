@@ -693,12 +693,17 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
          font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",sans-serif; }
   header { display:flex; align-items:baseline; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
   h1 { font-size:1.1rem; margin:0; letter-spacing:.02em; }
-  .meta { color:var(--dim); font-size:.85rem; }
+  .meta { color:var(--dim); font-size:.85rem; }${
+    demo
+      ? `
   /* The demo marker. It borrows the warning's hues rather than the dim chrome the tabs use:
      what it says is not chrome, and a badge a reader's eye files with the furniture is a badge
-     that is not in the screenshot as far as anybody looking at the screenshot is concerned. */
+     that is not in the screenshot as far as anybody looking at the screenshot is concerned.
+     Shipped only on a demo, so a plain serve is byte-for-byte the page it always was. */
   .demo-tag { background:var(--warnbg); color:var(--warn); border:1px solid currentColor; border-radius:99px;
-              padding:.05rem .55rem; font-size:.75rem; font-weight:600; letter-spacing:.02em; white-space:nowrap; }
+              padding:.05rem .55rem; font-size:.75rem; font-weight:600; letter-spacing:.02em; white-space:nowrap; }`
+      : ''
+  }
   /* Honest, and out of the way of the fleet: three of these stacked at full padding pushed
      the table below the fold on a laptop, which is its own kind of hidden. */
   .warn { background:var(--warnbg); color:var(--warn); border:1px solid currentColor; border-radius:6px;

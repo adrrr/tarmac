@@ -14,9 +14,13 @@
 // round — a fake CLI whose output the real reader re-parses — would be a copy of the one surface
 // this repo cannot afford to have two of.
 //
-// What it may not do, held by `test/demo.test.ts`: read this machine, spawn anything, or write a
-// byte. Every path below hangs off an invented home, and the end-to-end checks run the real
-// `serve --demo` with no `claude` on the box and no snapshot directory anywhere.
+// What it may not do, held by `test/demo.test.ts`: read this machine's FLEET, spawn anything, or
+// write a byte. Every path below hangs off an invented home, and the end-to-end checks run the
+// real `serve --demo` with no `claude` on the box and no snapshot directory anywhere.
+//
+// "Its fleet", precisely, and not "nothing at all": `serve` still resolves its settings, so a
+// config file naming a port or a trusted host is read under `--demo` exactly as it always was.
+// What is never opened is the snapshot directory, `claude`, and the journal.
 
 import { DEFAULT_STALE_AFTER_MS } from './config.ts';
 import { buildFleet } from './fleet.ts';
@@ -112,7 +116,10 @@ const ACTORS: Actor[] = [
     effort: 'high',
     born: 0,
     ctxFrom: 8,
-    ctxPerBusyMinute: 0.11,
+    // Steep enough that this one ends the day near a compact. A fleet whose fullest window is
+    // two thirds is a fleet with nothing at stake, and the number most people install this to
+    // watch is the one that is about to run out.
+    ctxPerBusyMinute: 0.147,
     costPerBusyMinute: 0.038,
     ageMs: 2_000,
     // The recycle at 642 is why its ramp restarts: a compacted session is a new window.
@@ -288,20 +295,28 @@ function busyMinutes(actor: Actor, minute: number): number {
 /**
  * The account's two windows at `minute`. The five-hour one is what the replay is really about:
  * it fills, rolls over at the boundary and fills again, four or five times in a day.
+ *
+ * Both resets are measured from `now`, the clock that took the reading, and not from the start
+ * of the invented day. For a seeded minute the two are the same instant and this changes
+ * nothing. For the live view they are not: it answers the last minute of the day for as long as
+ * the serve is open, so a reset pinned to `dayStart` fell into the past about an hour in, and
+ * the header then read "reset was due 4h ago" over a percentage that had not moved. That phrase
+ * is this codebase's own way of saying the number beside it belongs to a window that is gone,
+ * and a demo has no business showing it about an account nobody has.
  */
-function rateLimits(minute: number, dayStart: number): Record<string, unknown> {
+function rateLimits(minute: number, now: number): Record<string, unknown> {
   const window = Math.floor(minute / WINDOW_MINUTES);
   const elapsed = minute % WINDOW_MINUTES;
   const peak = WINDOW_PEAKS[window % WINDOW_PEAKS.length];
   return {
     five_hour: {
       used_percentage: Math.round((peak * elapsed) / WINDOW_MINUTES),
-      resets_at: Math.round((dayStart + (window + 1) * WINDOW_MINUTES * 60_000) / 1000),
+      resets_at: Math.round((now + (WINDOW_MINUTES - elapsed) * 60_000) / 1000),
     },
     seven_day: {
       used_percentage: Math.round(29 + (14 * minute) / DEMO_MINUTES),
-      // Mid-week: far enough out that the day above never rolls it over.
-      resets_at: Math.round((dayStart + 5.5 * 24 * 3600 * 1000) / 1000),
+      // Mid-week: far enough out that the five-hour window above never rolls it over.
+      resets_at: Math.round((now + 4.5 * 24 * 3600 * 1000) / 1000),
     },
   };
 }
@@ -343,7 +358,7 @@ export function demoFleetAt(minute: number, dayStart: number, now: number = dayS
     };
   });
 
-  const limits = rateLimits(minute, dayStart);
+  const limits = rateLimits(minute, now);
   const snapshots = new Map<string, Snapshot>();
   for (const a of live) {
     const pct = contextAt(a, minute);
@@ -407,8 +422,12 @@ export function demoHistory(dayStart: number, cadence: number = HISTORY_CADENCE_
  * What `serve --demo` reads instead of the machine.
  *
  * Always the last minute of the invented day, dated by the clock that asked: the fleet does not
- * walk on while a serve is open, so a screenshot taken now and one taken in an hour are the same
- * picture — and the sampler above it goes on recording honestly dated readings of it.
+ * walk on while a serve is open, so a screenshot of it now and one taken in an hour show the
+ * same eight sessions doing the same things, with the account's two windows counting down from
+ * whenever they were read rather than from a reset that has since gone past.
+ *
+ * The record behind the scrubber holds still too: a demo serve runs no sampler, so the day
+ * seeded below is the day it keeps for as long as it is open.
  */
 export function demoCollector(dayStart: number, now: () => number = Date.now): () => Promise<Fleet> {
   return () => Promise.resolve(demoFleetAt(DEMO_MINUTES - 1, dayStart, now()));

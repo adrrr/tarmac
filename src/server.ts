@@ -372,6 +372,12 @@ export function createFleetServer({
   let sampler: NodeJS.Timeout | null = null;
   server.on('listening', () => {
     if (sampler !== null) return;
+    // A demo does not sample. Its collector answers one frozen minute, so every tick would
+    // record that same minute into the ring and push a minute of the invented day off the far
+    // end: one slot a minute, until a serve left up overnight is showing 1440 copies of one
+    // reading. That is the flat chart this whole feature exists to replace. The record it was
+    // handed is the record it keeps, and the live view stays honestly dated either way.
+    if (demo) return;
     // The journal's retention, applied before the first line of this run is written and once a
     // local day after that (the store keeps that half itself). Here rather than in the CLI so
     // that the store `serve` prunes with is, provably, the store `serve` writes with: a `serve`

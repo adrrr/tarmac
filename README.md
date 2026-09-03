@@ -26,9 +26,15 @@ documented surfaces only, never an internal format.
 npx @adrrr/tarmac              # one-shot fleet table
 npx @adrrr/tarmac --watch      # the same table, redrawn every 5s until ^C
 npx @adrrr/tarmac serve        # the same fleet in the browser
+npx @adrrr/tarmac serve --demo # an invented fleet with a day of history, to see it full
 npx @adrrr/tarmac install      # chain the status line: unlocks ctx, model, effort and cost
 npx @adrrr/tarmac uninstall    # hand your status line back
 ```
+
+On a fresh machine the first three of those are one session and no history, which is not much
+of a dashboard. `serve --demo` is the same dashboard over eight invented sessions and a day of
+their record, so the map, the replay and the curves all have something in them. It reads no
+fleet and writes nothing, and the page it serves is badged `demo data` throughout.
 
 ```
 $ npx @adrrr/tarmac
