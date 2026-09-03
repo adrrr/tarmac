@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { accepts, OPTION_FLAGS } from '../src/args.ts';
+import { accepts, COMMAND_NAMES, OPTION_FLAGS } from '../src/args.ts';
 import type { Command } from '../src/args.ts';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
@@ -117,6 +117,19 @@ test('every flag a command accepts is shown on that command in --help', () => {
       if (ANSWERED_EVERYWHERE.has(flag) || !accepts(command as Command, flag)) continue;
       assert.ok(flags.includes(flag), `\`tarmac ${command}\` accepts ${flag} and no synopsis line for it says so`);
     }
+  }
+});
+
+// The check above reads its list of commands out of the help text, so a command the parser
+// gained and the synopsis never mentioned is not held to that direction — it is skipped, in
+// silence, which is the `--claude-bin` story one level up (#125). `help` is the exception the
+// help text itself makes: it is the command you get by typing nothing, and it offers nothing
+// to describe on a line of its own.
+test('every command the parser accepts has a synopsis line to be checked on', () => {
+  const shown = new Set(synopsis(help()).map((s) => s.command));
+  for (const command of COMMAND_NAMES) {
+    if (command === 'help') continue;
+    assert.ok(shown.has(command), `the parser accepts \`tarmac ${command}\` and --help shows no synopsis line for it`);
   }
 });
 

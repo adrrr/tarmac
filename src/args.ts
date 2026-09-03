@@ -99,6 +99,9 @@ function ownersOf(key: OptionKey): string {
 /** Every flag this parser knows, so a documentation check can enumerate rather than guess. */
 export const OPTION_FLAGS: readonly string[] = Object.keys(OPTIONS);
 
+/** Every command it knows, from the same matrix, and for the same reason one level up. */
+export const COMMAND_NAMES: readonly Command[] = Object.keys(ACCEPTS) as Command[];
+
 /**
  * Does `command` read `flag`? Exported for the test that holds `--help` to this matrix:
  * asking the parser is the only way to check that does not go through the wording of an
