@@ -660,9 +660,18 @@ export interface PageOptions {
    * to refused, and a browser with no JavaScript still gets told why the view is empty.
    */
   historyEnabled?: boolean;
+  /**
+   * Whether this fleet is the invented one `serve --demo` shows.
+   *
+   * It is rendered rather than fetched, and it is rendered into the SHELL rather than into the
+   * fragment the poll swaps: a screenshot is the whole reason a demo exists, and a marker that
+   * arrives with the first tick is a marker missing from every capture taken before it. The
+   * fragment is replaced every few seconds; the header is not.
+   */
+  demo?: boolean;
 }
 
-export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled = false }: PageOptions = {}): string {
+export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled = false, demo = false }: PageOptions = {}): string {
   // The header's copy. `renderLive` below renders its own, out of this same fleet and through
   // this same function — two calls of one pure renderer over one reading, which is what keeps
   // the pair the reader sees and the pair the script will copy up from being two accounts.
@@ -685,6 +694,11 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
   header { display:flex; align-items:baseline; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
   h1 { font-size:1.1rem; margin:0; letter-spacing:.02em; }
   .meta { color:var(--dim); font-size:.85rem; }
+  /* The demo marker. It borrows the warning's hues rather than the dim chrome the tabs use:
+     what it says is not chrome, and a badge a reader's eye files with the furniture is a badge
+     that is not in the screenshot as far as anybody looking at the screenshot is concerned. */
+  .demo-tag { background:var(--warnbg); color:var(--warn); border:1px solid currentColor; border-radius:99px;
+              padding:.05rem .55rem; font-size:.75rem; font-weight:600; letter-spacing:.02em; white-space:nowrap; }
   /* Honest, and out of the way of the fleet: three of these stacked at full padding pushed
      the table below the fold on a laptop, which is its own kind of hidden. */
   .warn { background:var(--warnbg); color:var(--warn); border:1px solid currentColor; border-radius:6px;
@@ -1163,7 +1177,15 @@ ${HISTORY_PHONE_CSS}  }
 </style>
 </head><body data-view="${view}">
 <header>
-  <h1>tarmac</h1>
+  <h1>tarmac</h1>${
+    demo
+      ? `
+  <!-- Beside the title, in the shell, and never quiet. The one thing a screenshot of this page
+       must not be able to do is pass for a real fleet, and the reader who can be misled is not
+       the one running the serve — it is whoever is sent the picture afterwards. -->
+  <span class="demo-tag" role="status">demo data &mdash; an invented fleet</span>`
+      : ''
+  }
   <!-- Links, not buttons: the view survives a reload, a bookmark and a browser with
        JavaScript off — the state of a page whose own noscript banner promises it is still
        readable. Both views are in the fragment below either way, so switching costs the

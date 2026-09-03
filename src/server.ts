@@ -10,7 +10,7 @@ import { reason, renderLive, renderPage } from './render.ts';
 import type { View } from './render.ts';
 import { hostName, SOURCE_PHRASE } from './config.ts';
 import { createHistory, HISTORY_CADENCE_MS } from './history.ts';
-import type { HistorySample } from './history.ts';
+import type { FleetHistory, HistorySample } from './history.ts';
 import { HISTORY_RANGES, readRange } from './history-range.ts';
 import type { HistoryRange, RangeHistory } from './history-range.ts';
 import type { HistoryStore } from './history-store.ts';
@@ -75,6 +75,20 @@ export interface FleetServerDeps {
    * history until the day they go looking for it.
    */
   report?: (line: string) => void;
+  /**
+   * The ring this serve keeps its last 24 hours in. Its own by default, empty and filling one
+   * minute at a time, which is what every real serve does.
+   *
+   * Injected for the same reason `collect` is: `serve --demo` opens on a record that is already
+   * a day long, and building it by playing an invented day through the SAME `record` a sampler
+   * calls is what keeps the replay a reduction of the demo rather than a second account of it.
+   */
+  history?: FleetHistory;
+  /**
+   * Whether the fleet `collect` answers is the invented one. It reaches the page and nothing
+   * else — the server neither builds the demo nor knows what is in it.
+   */
+  demo?: boolean;
 }
 
 export function createFleetServer({
@@ -84,6 +98,8 @@ export function createFleetServer({
   store = null,
   rangeCacheMs = 60_000,
   report = (line) => console.error(line),
+  history = createHistory({ since: Date.now(), cadence: sampleEveryMs }),
+  demo = false,
 }: FleetServerDeps): Server {
   // Normalised HERE rather than trusted to arrive that way. This is the last thing between a
   // foreign origin and the fleet, so it owns both sides of its own comparison — the config
@@ -101,11 +117,11 @@ export function createFleetServer({
   const refusal = trusted.size === 0
     ? 'tarmac serves loopback hosts only\n'
     : 'tarmac serves loopback and trusted hosts only\n';
-  // What this serve has already read, kept for a day and never written down. `since` is the
-  // moment this server was made, not the first sample that landed: the span it covers is how
-  // long the process has been up, and an hour of it with nothing in it is a fact worth
-  // showing rather than an empty record pretending to be a young one.
-  const history = createHistory({ since: Date.now(), cadence: sampleEveryMs });
+  // What this serve has already read, kept for a day and never written down, is the ring above
+  // — its `since` is the moment it was made, not the first sample that landed, so the span it
+  // covers is how long the process has been up and an hour of it with nothing in it is a fact
+  // worth showing rather than an empty record pretending to be a young one.
+  //
   // One at a time. `claude agents --json` has a 15s deadline of its own, and a fleet slower
   // than a slot would otherwise be answered with a queue of processes instead of one missed
   // minute — the tick that finds a read still running counts the slot and stands down.
@@ -329,7 +345,7 @@ export function createFleetServer({
         body =
           url.pathname === '/live'
             ? renderLive(fleet)
-            : renderPage(fleet, PAGES.get(url.pathname)!, { historyEnabled: store !== null });
+            : renderPage(fleet, PAGES.get(url.pathname)!, { historyEnabled: store !== null, demo });
       }
     } catch (e) {
       // Say why. A dashboard that goes blank when its source breaks teaches nothing.
