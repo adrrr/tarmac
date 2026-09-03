@@ -34,9 +34,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   that has done nothing wrong. Where the curves will be, the view now says what is coming and
   how long it takes. One reading a minute, so the context lines start within a minute or two and
   the cost bars fill an hour at a time, with `serve --demo` named there for anyone who would
-  rather not wait. Text only, read off the record the view already has, and about the ring only:
-  an empty `30d` still reads as a journal that was not running rather than as a minute of
-  patience.
+  rather not wait. Text only, read off the record the view already has. It goes when the record
+  holds a number, which is the same question the charts ask, rather than when the ring holds a
+  sample: a serve running before `install`, or with no session open, records a sample a minute
+  carrying nothing, and counting those would have put the page back to explaining nothing sixty
+  seconds in. The ring only, and never over a failed read: an empty `30d` still reads as a
+  journal that was not running rather than as a minute of patience, and a serve that has stopped
+  answering is not something to wait for.
 
 ### Fixed
 

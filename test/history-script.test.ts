@@ -69,6 +69,8 @@ interface Mounted {
   /** Hold the next answer back, so a test can look at the page mid-flight. */
   hold: (on: boolean) => void;
   release: () => void;
+  /** Answer the next reads with a refusal, the way a serve that has gone away does. */
+  fail: (on: boolean) => void;
 }
 
 function mount(historyEnabled = true, body: (url: string) => unknown = (u) => (u === '/api/history' ? ring() : journal(u.slice(-2)))): Mounted {
@@ -76,11 +78,13 @@ function mount(historyEnabled = true, body: (url: string) => unknown = (u) => (u
   const urls: string[] = [];
   let held: (() => void) | null = null;
   let holding = false;
+  let failing = false;
   const p = mountPage(
     historyScriptOf(html),
     async (_call, url) => {
       urls.push(url);
       if (holding) await new Promise<void>((r) => (held = r));
+      if (failing) return { ok: false, body: 'boom' };
       return { ok: true, body: JSON.stringify(body(url)) };
     },
     { shell: shellState(html) },
@@ -94,6 +98,9 @@ function mount(historyEnabled = true, body: (url: string) => unknown = (u) => (u
     release: (): void => {
       held?.();
       held = null;
+    },
+    fail: (on: boolean): void => {
+      failing = on;
     },
   };
 }
@@ -473,6 +480,58 @@ test('a record with nothing in it yet raises the first-run block', async () => {
   assert.equal(m.p.el('hist-empty').hidden, false, 'a first run is told nothing about the empty charts it is looking at');
 });
 
+// The shape the first cut of this got wrong, and the reason the predicate asks the charts
+// rather than the sample count. `serve` before the statusline is chained, or with no session
+// open, records a sample a minute with nothing in it. The ring is not empty after sixty
+// seconds, so a sample-count test lowers the block, while every chart still paints "no
+// readings in this range" onto its canvas. The page is then LESS explanatory than it was at
+// t=0, on exactly the fresh install #151 was written for.
+const recordingNothing = (): unknown => ({
+  since: T0,
+  cadence: MIN,
+  missed: 0,
+  samples: [0, 1, 2].map((i) => ({ t: T0 + i * MIN, sessions: [], rateLimits: null })),
+});
+
+test('a ring recording empty fleets is still a first run, however many samples it has taken', async () => {
+  const m = mount(true, () => recordingNothing());
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, false, 'three samples of nothing lowered the block over three empty charts');
+});
+
+// The other shape: `serve` running before `install`, so the fleet has a session but no
+// statusline has ever written for it. Every field the three charts plot is null, and the ring
+// fills up with samples that carry nothing.
+const recordingNoTelemetry = (): unknown => ({
+  since: T0,
+  cadence: MIN,
+  missed: 0,
+  samples: [0, 1, 2].map((i) => ({
+    t: T0 + i * MIN,
+    sessions: [session({ ctxState: 'absent', ctxPct: null, costUsd: null })],
+    rateLimits: null,
+  })),
+});
+
+test('a ring of sessions nothing has measured yet is still a first run', async () => {
+  const m = mount(true, () => recordingNoTelemetry());
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, false, 'a chained-less fleet lowered the block over three empty charts');
+});
+
+// And the converse, so none of this passes by refusing to ever lower the block: one window
+// reading, with no session telemetry at all, is a quota chart worth drawing.
+test('a single account reading is something to draw', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [{ t: T0, sessions: [], rateLimits: { five_hour: { used_percentage: 12 }, seven_day: { used_percentage: 4 } } }],
+  }));
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, true);
+});
+
 test('a record with readings in it keeps the first-run block down', async () => {
   const m = mount();
   await settle(m);
@@ -495,6 +554,22 @@ test('a record still being read is not yet a first run', async () => {
   assert.equal(m.p.el('hist-empty').hidden, true, 'the block appeared while the record was still in flight');
   await settle(m);
   assert.equal(m.p.el('hist-empty').hidden, false, 'and it is back once the empty record has landed');
+});
+
+// A serve that has gone away answers nothing, and the view has no record at all. That is the
+// same "no data" the block is raised on, and the block is exactly the wrong thing to say about
+// it: "leave the serve running and come back" about a serve that is not running. The reason
+// belongs on the canvas and under the pills, where a failed read already puts it.
+test('a record that could not be read is not a first run', async () => {
+  const m = mount(true);
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+  m.fail(true);
+  m.p.el('range-24h').fire('click');
+  await settle(m);
+  assert.match(m.p.el('hist-covers').textContent, /boom/, 'precondition: the read failed and the view says so');
+  assert.equal(m.p.el('hist-empty').hidden, true, 'the page told a reader to wait for a serve that had stopped answering');
 });
 
 // The block answers one question — "the serve just started, where are my charts" — and its
