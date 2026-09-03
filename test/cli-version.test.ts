@@ -46,6 +46,19 @@ test('every command answers it, and none of them does anything else first', () =
   }
 });
 
+// The same promise, one flag over, and it had no test at all (#124): `--help` is written as
+// answerable "on any command" in the option list, in README.md and in docs/MANUAL.md, and
+// dropping `help` from a command's `ACCEPTS` set left the suite green while `tarmac serve
+// --help` exited 1 on the spelling those three sentences hand the reader.
+test('every command answers --help, which is what the option list promises', () => {
+  const wanted = run('--help').stdout;
+  for (const command of ['list', 'serve', 'install', 'uninstall'] as Command[]) {
+    const r = run(command, '--help');
+    assert.equal(r.status, 0, `tarmac ${command} --help: ${r.stderr}`);
+    assert.equal(r.stdout, wanted, `tarmac ${command} --help printed something else`);
+  }
+});
+
 // A flag every command takes is documented once, in the option list, so the synopsis parity
 // check in `cli-help.test.ts` exempts it — and an exemption with nothing behind it is how a
 // flag ends up implemented and unfindable, which is the defect that file exists for. Both
