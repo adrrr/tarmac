@@ -28,6 +28,16 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   parsed into, so there is no second parsing path to keep in step with the first. `serve`
   without the flag is unchanged.
 
+- **The history view says what its empty charts are waiting for.** A serve that started a minute
+  ago has nothing in its ring, and all three charts said so with "no readings in this range"
+  painted onto a canvas: a true verdict, in ink nobody can select or hear read out, about a page
+  that has done nothing wrong. Where the curves will be, the view now says what is coming and
+  how long it takes. One reading a minute, so the context lines start within a minute or two and
+  the cost bars fill an hour at a time, with `serve --demo` named there for anyone who would
+  rather not wait. Text only, read off the record the view already has, and about the ring only:
+  an empty `30d` still reads as a journal that was not running rather than as a minute of
+  patience.
+
 ### Fixed
 
 - **An empty session id is absent, not a name.** An entry from `claude agents --json` carrying

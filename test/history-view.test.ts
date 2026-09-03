@@ -649,6 +649,19 @@ test('the page keeps the server’s own sentence about the ring rather than writ
   assert.equal(script.includes('which is off'), false, 'the script carries a copy of the other one');
 });
 
+// #151. The first screen of a fresh install is three charts with nothing in them, and the only
+// thing on the page about that used to be "no readings in this range" painted onto a canvas.
+// The block ships in the markup and hidden, the way the replay banner does: the script raises
+// it once it has looked at a record, so a page whose script never runs does not stand there
+// claiming a verdict nobody reached.
+test('the view ships the first-run block, hidden, saying what is coming and how to skip the wait', () => {
+  const html = page('history');
+  assert.match(html, /id="hist-empty"[^>]*\bhidden\b/, 'the block is not there, or is not hidden until raised');
+  const block = html.slice(html.indexOf('id="hist-empty"'), html.indexOf('</div>', html.indexOf('id="hist-empty"')));
+  assert.match(block, /minute/, 'it does not say how long the first readings take');
+  assert.match(block, /serve --demo/, 'it does not point at the one way to see this full without waiting');
+});
+
 test('with a journal nothing is refused and nothing says it is off', () => {
   const on = page('history', true);
   assert.equal(/History is off/.test(on), false);

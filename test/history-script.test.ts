@@ -453,3 +453,68 @@ test('a turnover nobody watched keeps its qualifier even where the label is drop
   assert.ok(drawn.includes('≈'), `no qualifier among ${JSON.stringify(drawn)}`);
   assert.equal(drawn.includes('7d reset'), false, 'and the name is still dropped at a month');
 });
+
+// ── the first run, where there is nothing to draw yet (#151) ─────────────────────────────
+//
+// A serve that started a minute ago answers a record with nothing in it, and the three charts
+// each paint "no readings in this range" onto a canvas — a verdict, in ink nobody can select,
+// search or hear read out, about a page that has done nothing wrong. What the reader needs
+// there is what is coming and when, and a way to see the thing full without waiting a day.
+
+/** The ring as a serve that has just started answers it: a span, and nothing in it. */
+const emptyRing = (): unknown => ({ since: T0, cadence: MIN, missed: 0, samples: [] });
+
+// The words are held next door, against the markup: this DOM models an element whose content
+// is text and nothing else, and the block's is a sentence with <strong> and <code> in it.
+// What is this file's to prove is that the thing is raised at all, and on what.
+test('a record with nothing in it yet raises the first-run block', async () => {
+  const m = mount(true, () => emptyRing());
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, false, 'a first run is told nothing about the empty charts it is looking at');
+});
+
+test('a record with readings in it keeps the first-run block down', async () => {
+  const m = mount();
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, true, 'the block is up over charts that have something in them');
+});
+
+// "Nothing has been recorded yet" is a verdict, and a range still being read has not earned
+// one — the same rule `blank` already applies to the canvas it paints.
+test('a record still being read is not yet a first run', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? emptyRing() : journal(url.slice(-2))));
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, false, 'an empty ring does not raise the block at all');
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, true, 'a journal range is not a first run');
+  // Back to 24h. `setRange` drops the record and redraws in the same statement, before the next
+  // answer is anywhere near: nothing has been read at that moment, and a block raised there
+  // would be a verdict reached on no evidence. The click is synchronous, so this reads it.
+  m.p.el('range-24h').fire('click');
+  assert.equal(m.p.el('hist-empty').hidden, true, 'the block appeared while the record was still in flight');
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, false, 'and it is back once the empty record has landed');
+});
+
+// The block answers one question — "the serve just started, where are my charts" — and its
+// answer is to wait a minute. That is not the answer to a month with nothing in it, which is a
+// journal that was not running, and `blank` says so on the canvas as it always did.
+test('an empty journal range is not a first run, and is not offered a minute of patience', async () => {
+  const m = mount(true, (url) =>
+    url === '/api/history'
+      ? ring()
+      : {
+          enabled: true,
+          range: '30d',
+          hours: [],
+          days: [],
+          resets: [],
+          coverage: { daysRequested: 30, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+        },
+  );
+  await settle(m);
+  m.p.el('range-30d').fire('click');
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, true);
+});
