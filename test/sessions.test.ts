@@ -178,8 +178,9 @@ test('health counts what the schema failed to give us', () => {
   assert.deepEqual(health, { seen: 3, noSessionId: 1, unknownStatus: 1 });
 });
 
-// `noSessionId` already counted it; the value went on travelling as `''` — into the fleet, and
-// into the journal as `sid: ''`, where one bucket named `''` is every nameless session at once.
+// `noSessionId` already counted it; the value then went on travelling as `''`, a non-id each
+// reader had to neutralise separately (#137) — and fleet health counted the same entry again
+// as unfilable. Normalised at the source, absent is `null`, said once.
 test('an empty sessionId is no id at all, and does not travel as one', () => {
   const { sessions, health } = parseAgents(JSON.stringify([{ sessionId: '', status: 'idle' }]));
   assert.equal(sessions[0].sessionId, null);

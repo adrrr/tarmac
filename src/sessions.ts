@@ -100,8 +100,10 @@ export function parseAgents(text: string): ParsedAgents {
     }
     // The empty string is not an id, and it is a `string`, so the type check alone let it
     // through: counted as missing here, then carried as `''` to every reader and written to
-    // the journal as `sid: ''`, where the id of a session nobody could name is a bucket every
-    // nameless session shares. Absent is `null`, the same as everywhere else in this file.
+    // the journal as `sid: ''`. Each reader neutralises that value its own way (#137) —
+    // normalising at the source says it once, and stops counting the same nameless entry
+    // both here and as unfilable downstream. Absent reads `null` like every field here;
+    // sessionId alone also folds `''` into absent, an empty id being no id at all.
     const sessionId = typeof entry.sessionId === 'string' && entry.sessionId !== '' ? entry.sessionId : null;
     if (sessionId === null) health.noSessionId += 1;
 
