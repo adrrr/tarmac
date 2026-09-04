@@ -162,6 +162,8 @@ export function rawGet(
 export interface RawAnswer {
   status: number | undefined;
   body: string;
+  /** As node hands them: names lower-cased. */
+  headers: http.IncomingHttpHeaders;
 }
 
 /**
@@ -188,7 +190,7 @@ export function rawGetText(
       res.on('data', (chunk: string) => {
         body += chunk;
       });
-      res.on('end', () => resolve({ status: res.statusCode, body }));
+      res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
       // The one bound the other two do not cover, and it is why settling on `'end'` needs a
       // listener of its own: once the answer has BEGUN, node reports the death of the socket
       // on the response, `req` gets no `'error'`, and a destroyed socket never goes inactive,

@@ -192,6 +192,23 @@ test('the collector answers the shown minute whatever the clock says, dated by t
   assert.equal(later.health.generatedAt, clock, 'the reading is dated by the clock that asked for it');
 });
 
+// The threshold is the reader's setting, not the demo's. `--stale-after` reaches a real
+// collect through `resolveConfig`, and a demo that hardcodes its own answers
+// `health.staleAfterMs` with a value nobody chose — while marking sessions stale, or not,
+// against a number the flag was supposed to have replaced.
+test('the demo takes the stale threshold it is handed, and defaults to the product one', async () => {
+  const strict = demoFleetAt(SHOWN, DAY_START, DAY_START + SHOWN * 60_000, 1000);
+  const lax = demoFleetAt(SHOWN, DAY_START);
+  assert.equal(strict.health.staleAfterMs, 1000);
+  assert.equal(lax.health.staleAfterMs, DEFAULT_STALE_AFTER_MS);
+  assert.ok(
+    strict.health.stale > lax.health.stale,
+    `a 1s threshold marked ${strict.health.stale} sessions stale where 10m marked ${lax.health.stale} — the threshold changed nothing`,
+  );
+  const collected = await demoCollector(DAY_START, () => DAY_START + SHOWN * 60_000, 1000)();
+  assert.equal(collected.health.staleAfterMs, 1000, 'the collector dropped the threshold on the way through');
+});
+
 test('the day the collector plays ends now, so its last minute is the fleet being shown', () => {
   const now = 1786600000000;
   assert.equal(demoDayStart(now), now - SHOWN * 60_000);
@@ -244,6 +261,28 @@ test('a serve nobody asked for a demo says nothing about demo data', () => {
   const fleet = demoFleetAt(SHOWN, DAY_START);
   assert.equal(/demo data/i.test(renderPage(fleet, 'table')), false);
   assert.equal(/demo data/i.test(renderPage(fleet, 'map', { historyEnabled: true })), false);
+});
+
+// The page wears its badge, and machines read `/api/fleet`. An invented fleet must say so on
+// the wire too, or a consumer archiving the JSON holds a fleet it cannot tell from a real
+// one — the reader who can be fooled is the one the answer is FORWARDED to, same as the
+// screenshot. Every answer of a demo serve carries the mark, fragments and refusals included,
+// and no answer of a live serve does.
+test('a demo serve marks every answer as demo data, a live serve never does', async (t) => {
+  const dayStart = demoDayStart();
+  const mk = (demo: boolean) => createFleetServer({ collect: demoCollector(dayStart), history: demoHistory(dayStart), demo });
+  const demo = mk(true);
+  const live = mk(false);
+  t.after(() => {
+    demo.close();
+    live.close();
+  });
+  const [d, l] = await Promise.all([demo, live].map((s) => listenFleetServer(s, { port: 0, source: 'default' })));
+  for (const p of ['/', '/api/fleet', '/api/history', '/live', '/no-such-page']) {
+    const [dr, lr] = await Promise.all([rawGetText(String(d.port), '127.0.0.1', p), rawGetText(String(l.port), '127.0.0.1', p)]);
+    assert.equal(dr.headers['x-tarmac-demo'], '1', `${p} of a demo serve does not say it is one`);
+    assert.equal('x-tarmac-demo' in lr.headers, false, `${p} of a live serve claims to be a demo`);
+  }
 });
 
 // ── the parser ────────────────────────────────────────────────────────────────────────────
@@ -300,6 +339,15 @@ test('serve --demo answers a full fleet with no claude on the machine and no sna
 
   const page = await get(port, '/');
   assert.match(page, /demo data/i, 'the served page does not say it is a demo');
+});
+
+test('serve --demo honours --stale-after like any other serve', async (t) => {
+  const { child, port } = await serveDemo(['--stale-after', '1s']);
+  t.after(() => child.kill('SIGKILL'));
+
+  const fleet = JSON.parse(await get(port, '/api/fleet')) as { health: { staleAfterMs: number; stale: number } };
+  assert.equal(fleet.health.staleAfterMs, 1000, 'the resolved threshold did not reach the demo collector');
+  assert.ok(fleet.health.stale > 0, 'every invented snapshot is older than 1s, yet none is marked stale');
 });
 
 // The collector and the ring are anchored on ONE `demoDay` in `cli.ts`, and that local exists

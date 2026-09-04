@@ -338,7 +338,7 @@ function contextAt(actor: Actor, minute: number): number | null {
  * view always shows the last minute of the day, dated by the clock that asked for it, so two
  * captures taken an hour apart are the same picture.
  */
-export function demoFleetAt(minute: number, dayStart: number, now: number = dayStart + minute * 60_000): Fleet {
+export function demoFleetAt(minute: number, dayStart: number, now: number = dayStart + minute * 60_000, staleAfterMs: number = DEFAULT_STALE_AFTER_MS): Fleet {
   const live = ACTORS.filter((a) => minute >= a.born);
 
   const sessions: Session[] = live.map((a) => {
@@ -390,7 +390,7 @@ export function demoFleetAt(minute: number, dayStart: number, now: number = dayS
     unknownStatus: sessions.filter((s) => s.busy === null && s.status !== 'waiting').length,
   };
 
-  const fleet = buildFleet({ sessions, snapshots, now, staleAfterMs: DEFAULT_STALE_AFTER_MS, discovery });
+  const fleet = buildFleet({ sessions, snapshots, now, staleAfterMs, discovery });
   // What the collector fills in, filled in here for the same reason it does it there: these
   // four are how the page tells "nothing to report" from "we could not look", and leaving them
   // undefined would render the second as the first.
@@ -429,8 +429,8 @@ export function demoHistory(dayStart: number, cadence: number = HISTORY_CADENCE_
  * The record behind the scrubber holds still too: a demo serve runs no sampler, so the day
  * seeded below is the day it keeps for as long as it is open.
  */
-export function demoCollector(dayStart: number, now: () => number = Date.now): () => Promise<Fleet> {
-  return () => Promise.resolve(demoFleetAt(DEMO_MINUTES - 1, dayStart, now()));
+export function demoCollector(dayStart: number, now: () => number = Date.now, staleAfterMs: number = DEFAULT_STALE_AFTER_MS): () => Promise<Fleet> {
+  return () => Promise.resolve(demoFleetAt(DEMO_MINUTES - 1, dayStart, now(), staleAfterMs));
 }
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;

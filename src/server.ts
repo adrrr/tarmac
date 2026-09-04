@@ -111,6 +111,12 @@ export function createFleetServer({
   // reachable from a flag, a variable or a file gets here empty; that is the parser's promise,
   // and this is the guard not resting on it.
   const trusted = new Set(trustedHosts.map((h) => hostName(h.trim()).toLowerCase()).filter((h) => h !== ''));
+  // The page wears a badge; this is the same fact for machines. The HTML shell is one of four
+  // surfaces this port answers, and the other three are JSON and a fragment a consumer may
+  // archive or forward — where an invented fleet with nothing on it saying so becomes a real
+  // one the moment the response body travels alone. On every answer for the same reason
+  // IDENTITY is: the refusals and the 500s of a demo serve are the demo's too.
+  const identity = demo ? { ...IDENTITY, 'x-tarmac-demo': '1' } : IDENTITY;
   // Which rule refused, decided once. With hosts named, "loopback hosts only" would read as a
   // flag that never took; with none, this is the sentence it has always been, to the byte. The
   // Host itself is never quoted back: it is the one string on the request the caller wrote.
@@ -235,7 +241,7 @@ export function createFleetServer({
     // reader trusted on top of that is a name, exactly: matched whole, never as a prefix, a
     // suffix or a pattern, so trusting one host can never be trusting a family of them.
     if (!isLoopbackHost(req.headers.host) && !isTrustedHost(req.headers.host, trusted)) {
-      res.writeHead(403, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
+      res.writeHead(403, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
       res.end(refusal);
       return;
     }
@@ -247,7 +253,7 @@ export function createFleetServer({
     // spawned; a client that sends no label (curl, a script) is left alone.
     const site = req.headers['sec-fetch-site'];
     if (typeof site === 'string' && site !== 'same-origin' && site !== 'none') {
-      res.writeHead(403, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
+      res.writeHead(403, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
       res.end('tarmac serves same-origin requests only\n');
       return;
     }
@@ -268,7 +274,7 @@ export function createFleetServer({
       url.pathname !== '/api/fleet' &&
       url.pathname !== '/api/history'
     ) {
-      res.writeHead(404, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
+      res.writeHead(404, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
       res.end('not found\n');
       return;
     }
@@ -285,7 +291,7 @@ export function createFleetServer({
         if (!isRange(asked)) {
           // The value is not quoted back, for the reason the refused Host is not: it is a string
           // the caller wrote, and the page swaps a refusal's text into `innerHTML` as its reason.
-          res.writeHead(400, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+          res.writeHead(400, { ...identity, 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
           res.end(`tarmac serves /api/history for 24h, ${HISTORY_RANGES.join(' and ')}; no range is the last 24h\n`);
           return;
         }
@@ -297,12 +303,12 @@ export function createFleetServer({
         } catch (e) {
           // Nothing in `readRange` is allowed to throw, and this is the seam that keeps a day
           // when something does from being a request that hangs instead of an answer.
-          res.writeHead(500, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
+          res.writeHead(500, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
           res.end(`tarmac could not read the fleet journal:\n${reason(e)}\n`);
           return;
         }
         res.writeHead(200, {
-          ...IDENTITY,
+          ...identity,
           'content-type': 'application/json; charset=utf-8',
           'cache-control': 'no-store',
         });
@@ -313,7 +319,7 @@ export function createFleetServer({
 
     if (url.pathname === '/api/history') {
       res.writeHead(200, {
-        ...IDENTITY,
+        ...identity,
         'content-type': 'application/json; charset=utf-8',
         'cache-control': 'no-store',
       });
@@ -349,14 +355,14 @@ export function createFleetServer({
       }
     } catch (e) {
       // Say why. A dashboard that goes blank when its source breaks teaches nothing.
-      res.writeHead(500, { ...IDENTITY, 'content-type': 'text/plain; charset=utf-8' });
+      res.writeHead(500, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
       res.end(`tarmac could not read the fleet:\n${reason(e)}\n`);
       return;
     }
 
     // A page whose entire claim is freshness must not be served from a cache: a restored tab
     // re-running the script over stale HTML would re-stamp it "updated just now".
-    res.writeHead(200, { ...IDENTITY, 'content-type': type, 'cache-control': 'no-store' });
+    res.writeHead(200, { ...identity, 'content-type': type, 'cache-control': 'no-store' });
     res.end(body);
   });
 

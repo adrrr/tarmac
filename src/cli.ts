@@ -244,7 +244,7 @@ try {
         collect:
           demoDay === null
             ? () => collectFleet({ claudeBin: args.claudeBin, snapshotsDir, staleAfterMs, snapshotsDirSource: config.snapshotsDir.source, installed: frozen !== null })
-            : demoCollector(demoDay),
+            : demoCollector(demoDay, Date.now, staleAfterMs),
         // A day of it, already in the ring: the flat charts a first run opens on are the whole
         // of what #150 is about, and a demo whose record started a minute ago has the same
         // ones. `undefined` is "keep your own", which is what every other serve gets.
