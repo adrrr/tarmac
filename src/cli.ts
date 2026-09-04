@@ -13,6 +13,7 @@ import os from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from './args.ts';
 import { collectFleet } from './collect.ts';
+import { demoCollector, demoDayStart, demoHistory } from './demo.ts';
 import type { Fleet } from './fleet.ts';
 import { readConfigFile, resolveConfig } from './config.ts';
 import { createFleetServer, listenFleetServer } from './server.ts';
@@ -30,6 +31,7 @@ const USAGE = `tarmac — fleet observability for Claude Code
         one-shot fleet table — with --watch, redrawn every 5s until ^C
   tarmac serve      [--home DIR] [--port N] [--stale-after D] [--snapshots-dir DIR]
                     [--claude-bin PATH] [--trust-host HOST] [--history-days N]
+                    [--demo]
         local dashboard
   tarmac install    [--home DIR] [--yes]
         chain the statusline
@@ -58,6 +60,12 @@ const USAGE = `tarmac — fleet observability for Claude Code
                    which is the command that samples: one JSON line a minute, no session
                    name and no working directory, about 2 MB a day at eight sessions,
                    and writing stops at 256 MB whatever N says
+  --demo           serve an invented fleet of eight sessions with a day of history behind
+                   it, instead of this machine's. On \`serve\` only. This machine's fleet is
+                   never read and nothing is written: no \`claude\`, no snapshots, no temp
+                   sweep, and no journal whatever --history-days says. The port and the
+                   trusted hosts are still resolved as usual, and the page says on itself
+                   that it is a demo
 
   Those five settings can also be set, in decreasing order of precedence, by the
   environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR, TARMAC_TRUST_HOST,
@@ -143,7 +151,11 @@ try {
     // writes, not where a reader's environment would have put it. Recomputing it here made
     // `XDG_STATE_HOME` in one process and not the other a silent split.
     const frozen = installedSnapshotsDir(p);
-    if (frozen === null && wrapperIsOurs(p))
+    // Not under `--demo`, and for the reason the settings block is not: this line names the
+    // wrapper's path and the snapshot directory, which are two real paths out of a real home,
+    // and a terminal capture of a demo is exactly the artefact `--demo` exists to produce. It
+    // is also advice about a directory this run will never open.
+    if (frozen === null && wrapperIsOurs(p) && !args.demo)
       console.error(
         `tarmac: ${p.wrapper} is ours but does not say where it writes — falling back to ${p.snapshots}`,
       );
@@ -163,14 +175,27 @@ try {
       // Beside the snapshots, never among them: `reap.ts`, the wrapper's own sweep and the
       // legacy purge in `install.ts` all decide by name inside that directory.
       const historyDir = historyDirFor(snapshotsDir);
-      // Unattended for hours, so it opens by saying what it decided and on whose authority.
-      process.stdout.write(renderSettings(config, p.config, historyDir));
+      // `--demo` serves an invented fleet, and everything it SUPPRESSES is here: a settings
+      // block naming a snapshot directory it will never open, a journal whatever
+      // `--history-days` says, and a sweep of somebody's temp files. A demo that journalled
+      // would write an invented fleet into a real record of a real one; a demo that swept
+      // would delete a file to show a picture. What it ADDS is one collector and one ring,
+      // both below.
+      //
+      // Unattended for hours, so a real serve opens by saying what it decided and on whose
+      // authority.
+      if (!args.demo) process.stdout.write(renderSettings(config, p.config, historyDir));
 
       // One journal, one owner (#133). The retention is a property of the DIRECTORY and the
       // process applying it was whichever `serve` started last, so a `--history-days 1` run to
       // try the setting out swept the thirty days another serve was keeping. A second serve
       // journals nothing now, and serves everything else exactly as it did.
-      const days = config.historyDays.value;
+      const days = args.demo ? null : config.historyDays.value;
+      // Said rather than dropped in silence. `serve` opens by naming what it decided and on
+      // whose authority, and a retention someone typed that this run is going to ignore is
+      // exactly the kind of thing that discipline exists for.
+      if (args.demo && config.historyDays.value !== null)
+        console.log(`tarmac: --demo keeps no journal, so the ${config.historyDays.value}-day retention is ignored`);
       const { lock, heldBy } = days === null ? { lock: null, heldBy: null } : acquireJournalLock({ dir: historyDir });
       // On stdout, under the settings block it corrects: that block has just named a retention
       // and a directory, and a reader piping it must not be left holding the half of it that
@@ -207,12 +232,24 @@ try {
       // it says what it did rather than doing it quietly, this being the user's directory. It
       // is no longer the only deletion a `serve` makes: a journal that was asked for applies
       // its retention on `listening`, and says that too. Nothing else here removes anything.
-      const { reaped, failed } = reapOrphanedTemps(snapshotsDir);
-      if (reaped > 0) console.log(`tarmac: reaped ${reaped} orphaned snapshot temp file(s)`);
-      if (failed > 0) console.error(`tarmac: could not remove ${failed} orphaned temp file(s) under ${snapshotsDir}`);
+      if (!args.demo) {
+        const { reaped, failed } = reapOrphanedTemps(snapshotsDir);
+        if (reaped > 0) console.log(`tarmac: reaped ${reaped} orphaned snapshot temp file(s)`);
+        if (failed > 0) console.error(`tarmac: could not remove ${failed} orphaned temp file(s) under ${snapshotsDir}`);
+      }
 
+      // The invented day ends now, so the last minute of it is the fleet the live view shows.
+      const demoDay = args.demo ? demoDayStart() : null;
       const server = createFleetServer({
-        collect: () => collectFleet({ claudeBin: args.claudeBin, snapshotsDir, staleAfterMs, snapshotsDirSource: config.snapshotsDir.source, installed: frozen !== null }),
+        collect:
+          demoDay === null
+            ? () => collectFleet({ claudeBin: args.claudeBin, snapshotsDir, staleAfterMs, snapshotsDirSource: config.snapshotsDir.source, installed: frozen !== null })
+            : demoCollector(demoDay, Date.now, staleAfterMs),
+        // A day of it, already in the ring: the flat charts a first run opens on are the whole
+        // of what #150 is about, and a demo whose record started a minute ago has the same
+        // ones. `undefined` is "keep your own", which is what every other serve gets.
+        history: demoDay === null ? undefined : demoHistory(demoDay),
+        demo: demoDay !== null,
         trustedHosts: config.trustHosts.value,
         // No key anywhere is no store, which is no directory and no file: the default is that
         // nothing of this fleet is written down, and it is the default that is the product.
@@ -230,6 +267,12 @@ try {
         process.exit(1);
       });
       console.log(servingLine(bound));
+      // On stdout, under the line naming the port, and said in the terminal as well as on the
+      // page: whoever opens that URL sees the badge, and whoever left the process running in
+      // another window has only this.
+      // "No fleet", not "nothing": the settings this serve is running on were resolved the
+      // ordinary way, config file included. What was never opened is the fleet.
+      if (demoDay !== null) console.log('tarmac: demo data — an invented fleet. No fleet on this machine was read.');
     } else {
       const collect = (): Promise<Fleet> =>
         collectFleet({ claudeBin: args.claudeBin, snapshotsDir, staleAfterMs, snapshotsDirSource: config.snapshotsDir.source, installed: frozen !== null });

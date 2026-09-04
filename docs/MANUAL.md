@@ -8,7 +8,7 @@ the test suite, so none of it is aspiration.
 | Command | What it does | Options |
 |---|---|---|
 | `tarmac list` | one-shot fleet table, and the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
-| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /history` for the curves, `GET /live` for the fragment an open page refreshes from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran, or `?range=7d` and `?range=30d` for the journal on disk | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host`, `--history-days` |
+| `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /history` for the curves, `GET /live` for the fragment an open page refreshes from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran, or `?range=7d` and `?range=30d` for the journal on disk | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host`, `--history-days`, `--demo` |
 | `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
@@ -231,6 +231,34 @@ no such header, curl or a script, is left alone. Naming a host yourself is the o
 A busy default port walks up to the next free one and says so. A port you chose yourself, by
 flag, environment or config file, refuses instead, because you chose it (see
 [configuration](#configuration)).
+
+### Seeing it full: `serve --demo`
+
+The first run of anything is the run with nothing in it. One session, no record yet, and the
+page is a table of one row over three charts with nothing to draw — which is what tarmac looks
+like before it has had time to look like anything.
+
+`tarmac serve --demo` serves an invented fleet instead: eight sessions across five projects,
+with a day of history already behind them, so the map, the replay and the curves all have
+something in them from the first second.
+
+```
+tarmac serve --demo
+```
+
+It reads no fleet and writes nothing. No `claude` is spawned, no snapshot directory is opened,
+no temp file is swept, and no journal is written whatever `--history-days` says, which it will
+say so out loud rather than dropping in silence — an invented fleet has no business in your
+record of your real one. What it does still read is its own settings, so a `--port` or a
+`--trust-host` in your config file applies here exactly as it does anywhere else. Everything
+else about the serve is unchanged: the same port rules, the same `Host` guard, the same routes.
+
+It also runs no sampler. The day it starts with is the day it keeps, so a demo left open for an
+afternoon shows the same picture at the end of it as at the beginning.
+
+The page says so about itself. A `demo data` badge sits beside the title on every view, and the
+terminal says the same under the URL, so a screenshot of it cannot be passed around as a
+picture of somebody's real fleet by accident.
 
 ### Putting it behind a reverse proxy
 

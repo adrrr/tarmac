@@ -11,6 +11,23 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`tarmac serve --demo`, so the first run is not an empty screen.** One session and no record
+  yet renders as a one-row table over three charts with nothing in them, which is the first
+  thing most people ever see of this tool. `--demo` serves an invented fleet instead — eight
+  sessions across five projects, with a day of history already behind them — so the map, the
+  replay and the curves are all worth looking at from the first second. It reads no fleet and
+  writes nothing: no `claude` spawned, no snapshot directory opened, no temp file swept, and no
+  journal whatever `--history-days` says, which it reports rather than dropping in silence. Its
+  own settings are still resolved, so a port or a trusted host set in a config file applies. It
+  runs no sampler either, so the day it starts with is the day it keeps. A `demo data` badge
+  sits beside the title on every
+  view, and the terminal says the same under the URL, so a screenshot of it cannot pass for a
+  real fleet by accident. The invented fleet feeds the same structures the two real sources are
+  parsed into, so there is no second parsing path to keep in step with the first. `serve`
+  without the flag is unchanged.
+
 ### Fixed
 
 - **An empty session id is absent, not a name.** An entry from `claude agents --json` carrying

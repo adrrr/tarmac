@@ -37,13 +37,18 @@ export interface Options {
   watch: boolean;
   /** Skip the typed confirmation on install/uninstall. Opt-in, never implied. */
   yes: boolean;
+  /**
+   * `serve` an invented fleet instead of this machine's. No `claude`, no snapshots, no journal,
+   * and nothing written anywhere; the page it serves says on itself that the fleet is a demo.
+   */
+  demo: boolean;
   help: boolean;
   /** Print the version and leave, answerable on any command exactly as `help` is. */
   version: boolean;
 }
 
 type OptionKey = Exclude<keyof Options, 'command'>;
-type FlagKey = 'json' | 'watch' | 'yes' | 'help' | 'version';
+type FlagKey = 'json' | 'watch' | 'yes' | 'demo' | 'help' | 'version';
 type StringKey = 'staleAfter' | 'snapshotsDir' | 'home' | 'claudeBin';
 type ListKey = 'trustHost';
 
@@ -63,6 +68,7 @@ const OPTIONS: Record<string, OptionKey | undefined> = {
   '--json': 'json',
   '--watch': 'watch',
   '--yes': 'yes',
+  '--demo': 'demo',
   '--help': 'help',
   '--version': 'version',
   // The one short spelling this parser knows, and it is here because it is what people type
@@ -70,7 +76,7 @@ const OPTIONS: Record<string, OptionKey | undefined> = {
   // `-h` for help would be the next request and the one after that.
   '-v': 'version',
 };
-const FLAGS = new Set<OptionKey>(['json', 'watch', 'yes', 'help', 'version']);
+const FLAGS = new Set<OptionKey>(['json', 'watch', 'yes', 'demo', 'help', 'version']);
 /** Options that ACCUMULATE rather than overwrite — passed twice, both values are kept. */
 const LISTS = new Set<OptionKey>(['trustHost']);
 
@@ -85,7 +91,7 @@ const LISTS = new Set<OptionKey>(['trustHost']);
  */
 const ACCEPTS: Record<Command, ReadonlySet<OptionKey>> = {
   list: new Set<OptionKey>(['staleAfter', 'snapshotsDir', 'home', 'claudeBin', 'json', 'watch', 'help', 'version']),
-  serve: new Set<OptionKey>(['port', 'staleAfter', 'snapshotsDir', 'trustHost', 'historyDays', 'home', 'claudeBin', 'help', 'version']),
+  serve: new Set<OptionKey>(['port', 'staleAfter', 'snapshotsDir', 'trustHost', 'historyDays', 'home', 'claudeBin', 'demo', 'help', 'version']),
   install: new Set<OptionKey>(['home', 'yes', 'help', 'version']),
   uninstall: new Set<OptionKey>(['home', 'yes', 'help', 'version']),
   help: new Set<OptionKey>(['help', 'version']),
@@ -113,7 +119,7 @@ export function accepts(command: Command, flag: string): boolean {
 }
 
 export function parseArgs(argv: string[]): Options {
-  const out: Options = { command: 'list', port: null, staleAfter: null, snapshotsDir: null, trustHost: [], historyDays: null, home: null, claudeBin: 'claude', json: false, watch: false, yes: false, help: false, version: false };
+  const out: Options = { command: 'list', port: null, staleAfter: null, snapshotsDir: null, trustHost: [], historyDays: null, home: null, claudeBin: 'claude', json: false, watch: false, yes: false, demo: false, help: false, version: false };
   let i = 0;
 
   if (argv[0] && !argv[0].startsWith('-')) {
