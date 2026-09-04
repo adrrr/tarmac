@@ -726,6 +726,23 @@ told why there is nothing to draw. Under the pills, what the range actually cove
 the days asked for had a file, whether the journal had stopped at its cap, and how many readings
 came back unusable.
 
+On a serve that started a minute ago there is nothing in the ring yet, and three empty frames
+saying "no readings in this range" is a true answer to a question nobody asked. So the view says
+what is coming instead: a reading a minute, the context lines within a minute or two, the cost
+bars an hour at a time, and [`serve --demo`](#seeing-it-full-serve---demo) for anyone who would
+rather see the three of them full than wait.
+
+It goes when the record holds a number, which is the same question the charts ask: a context
+percentage, a cost, or a window reading. Sample count is deliberately not the test. A serve
+running before `install`, or with no session open, records a sample a minute carrying nothing at
+all, and a page that lowered the block there would go back to explaining nothing sixty seconds
+in, on exactly the fresh machine it was written for.
+
+It is about the ring only. An empty `30d` is a journal that was not running, which patience does
+not fix, and the frames there say so as they always did. A range that could not be read is not a
+first run either: "leave the serve running" is the wrong thing to say about a serve that has
+stopped answering, and the reason for that already appears under the pills.
+
 **Context.** At 24h, one line per session on the ring's minute grid. Per session and not per
 project, because that is what breaks the line: a session recycled at three in the morning is a
 different session, and joining its successor's 4% to its own 88% would draw a cliff that never

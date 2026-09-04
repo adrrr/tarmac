@@ -644,7 +644,7 @@ export const HISTORY_CSS = `
      two account-wide charts side by side under it; the phone block stacks them, one chart to
      a screen. */
   .view-history { display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:start; }
-  #ctx, .hist-off, .view-history > .note { grid-column:1 / -1; }
+  #ctx, .hist-off, .hist-empty, .view-history > .note { grid-column:1 / -1; }
   .view-history > .note { margin-top:0; }
   .chart { border:1px solid var(--line); border-radius:12px; padding:.65rem .8rem .7rem; min-width:0; }
   /* The margin is what the way-back-to-now's tap target is drawn into. That overlay reaches
@@ -703,7 +703,11 @@ export const HISTORY_CSS = `
   /* Off is not a fault, so it is not a .warn: a framed sentence in the page's own ink, with
      the one key that turns it on. */
   .hist-off { border:1px solid var(--line); border-radius:8px; padding:.5rem .7rem; font-size:.8rem; line-height:1.5; }
-  .hist-off code, .view-history .note code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.95em; }
+  /* Same frame as "off" above, and for the same reason: a serve that has been running a minute
+     is not a fault either. It sits directly over the charts it is about, because "where are my
+     curves" is a question asked while looking at the place they will be. */
+  .hist-empty { border:1px solid var(--line); border-radius:8px; padding:.5rem .7rem; font-size:.8rem; line-height:1.5; }
+  .hist-off code, .hist-empty code, .view-history .note code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.95em; }
   /* The other two views are in the shell on every address — the tabs between them are meant to
      cost nothing — so the one being read hides the pair it stands in front of. History is the
      exception and ships only on its own address: it carries a script and three canvases, and a
@@ -782,7 +786,8 @@ ${
   off
     ? `  <div class="hist-off" id="hist-off" role="status"><strong>History is off.</strong> The last 24h live in memory while <code>tarmac serve</code> runs and go when it stops; nothing is written to disk. To keep 7 and 30 days, add <code>{"history": {"days": 30}}</code> to <code>~/.claude/tarmac/config.json</code> and start <code>serve</code> again.</div>\n`
     : ''
-}${chart('ctx', 'Context', 'per session &middot; 24h')}
+}  <div class="hist-empty" id="hist-empty" role="status" hidden><strong>Nothing to draw yet.</strong> <code>tarmac serve</code> reads the fleet once a minute, so the context lines start within a minute or two, the cost bars fill an hour at a time, and the quota curve needs a few readings before it has a shape. A session has to be open for any of them to have a subject. Leave the serve running and come back. To see all three full right now, without waiting: <code>tarmac serve --demo</code>.</div>
+${chart('ctx', 'Context', 'per session &middot; 24h')}
 ${chart('cost', 'Cost', 'per project &middot; hourly &middot; 24h')}
 ${chart('quota', 'Quota', 'account &middot; 24h')}
   <p class="note">Recorded once a minute, only while <code>tarmac serve</code> runs. A minute it was not running is a minute with no reading, drawn as a gap and never as a zero. A session recycled overnight comes back as a new line from its first frame.${
@@ -1206,9 +1211,53 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     el(id + '-legend').hidden = true;
   }
 
+  /*
+   * Is there a single number in the ring? The three charts plot exactly three things, and this
+   * asks whether the record holds any of them: a context percentage, a cost, or a window
+   * reading. Nothing else counts as something to draw.
+   *
+   * A first cut asked whether the ring held any SAMPLE, and those two part company sixty
+   * seconds in, which is the worst possible moment. A serve started before the statusline is
+   * chained, or with no session open, records a sample a minute carrying nothing at all: the
+   * sample count says "we are away" while the charts are still empty, and the block came down
+   * over a page no more explanatory than it was at the start. Counting blank canvases does not
+   * fix it either, because two of the three draw an empty grid rather than blanking whenever
+   * the span is non-zero, however little is in it.
+   */
+  function drawable() {
+    var s = state.data && state.data.samples, i, j, ses, lim, k;
+    if (!s) return false;
+    for (i = 0; i < s.length; i++) {
+      lim = s[i].rateLimits;
+      for (k in lim) if (lim[k] && typeof lim[k].used_percentage === 'number') return true;
+      ses = s[i].sessions || [];
+      for (j = 0; j < ses.length; j++) {
+        if (typeof ses[j].ctxPct === 'number' || typeof ses[j].costUsd === 'number') return true;
+      }
+    }
+    return false;
+  }
+
+  /*
+   * Whether this is a serve with nothing to draw, which is what a first run looks like (#151).
+   *
+   * The ring only. An empty 7d is a journal that was not running for a week, and this block's
+   * answer, wait a minute and the lines will come, is not true of that. The canvas goes on
+   * saying "no readings in this range" there, which is the honest verdict.
+   *
+   * Neither loading nor an error counts: both are states in which nothing has been read yet,
+   * and a block raised over a request still in flight would be answering a question the
+   * record is about to answer itself. Same rule the blank canvas applies one function up.
+   */
+  function firstRun() {
+    if (state.range !== '24h' || state.loading || state.err !== null) return false;
+    return !drawable();
+  }
+
   var draw = { ctx: drawCtx, cost: drawCost, quota: drawQuota };
   function redraw() {
     covers.textContent = coversText();
+    el('hist-empty').hidden = !firstRun();
     if (!state.data) { ids.forEach(function (id) { blank(id, state.range); }); return; }
     ids.forEach(function (id) { draw[id](); });
   }
