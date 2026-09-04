@@ -47,8 +47,6 @@ type FlagKey = 'json' | 'watch' | 'yes' | 'help' | 'version';
 type StringKey = 'staleAfter' | 'snapshotsDir' | 'home' | 'claudeBin';
 type ListKey = 'trustHost';
 
-const COMMANDS = new Set<string>(['list', 'serve', 'install', 'uninstall', 'help']);
-
 // `| undefined` is load-bearing, not decoration: without it the compiler types the lookup
 // below as always-present and the `if (!key) throw` guard reads as dead code — which is how
 // a future cleanup deletes the one thing standing between a typo and a silently ignored flag.
@@ -103,6 +101,17 @@ export const OPTION_FLAGS: readonly string[] = Object.keys(OPTIONS);
 export const COMMAND_NAMES: readonly Command[] = Object.keys(ACCEPTS) as Command[];
 
 /**
+ * Is `name` a command? Asked of the matrix, because a second list written beside it is a list
+ * that drifts: a name in that one and not in this one was not refused, it was accepted with
+ * nothing behind it, and the next flag read `.has` off `undefined` (#149).
+ *
+ * Own keys only — `in` would make `toString` a command.
+ */
+function isCommand(name: string): name is Command {
+  return Object.hasOwn(ACCEPTS, name);
+}
+
+/**
  * Does `command` read `flag`? Exported for the test that holds `--help` to this matrix:
  * asking the parser is the only way to check that does not go through the wording of an
  * error message, which a reword would silently turn into a test that greens on everything.
@@ -116,9 +125,10 @@ export function parseArgs(argv: string[]): Options {
   const out: Options = { command: 'list', port: null, staleAfter: null, snapshotsDir: null, trustHost: [], historyDays: null, home: null, claudeBin: 'claude', json: false, watch: false, yes: false, help: false, version: false };
   let i = 0;
 
-  if (argv[0] && !argv[0].startsWith('-')) {
-    if (!COMMANDS.has(argv[0])) throw new Error(`unknown command: ${argv[0]}`);
-    out.command = argv[0] as Command;
+  const first = argv[0];
+  if (first && !first.startsWith('-')) {
+    if (!isCommand(first)) throw new Error(`unknown command: ${first}`);
+    out.command = first;
     i = 1;
   }
 
