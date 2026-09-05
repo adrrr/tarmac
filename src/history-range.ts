@@ -247,9 +247,14 @@ export async function readRange({ dir, range, now, capped = false }: ReadRangeOp
       // `lstat`, not `stat`, and NOT for the pipe: `stat` reports the target's kind, so it
       // refuses a link pointing at a FIFO exactly as this does. The one shape the two disagree
       // about is a link to a regular file, and that is the whole of the choice. A journal file
-      // is a file this store appended to; a link is a name somebody else put there, aimed at
-      // something nobody told this reader about, and following it reads whatever it is aimed
-      // at today. Only what we wrote, which is `reap.ts`'s rule for the same reason.
+      // is a file this store appended to; a symbolic link is a name somebody else put there,
+      // aimed at something nobody told this reader about, and following it reads whatever it
+      // is aimed at today. Only what we wrote, which is `reap.ts`'s rule for the same reason.
+      //
+      // A HARD link to a regular file is the shape neither call can see — it carries the
+      // target's inode, so it reads as a plain file and its day lands in `days[]`. No hang can
+      // come of it (a hard link to a FIFO is still refused by kind), so what this guard holds
+      // is "nothing that can block", not "nothing somebody else named".
       //
       // The cost, and it is real: `history-store.ts:386` measures the directory with `statSync`,
       // so a linked day file is charged to the 256 MB cap and never read. The two readings of

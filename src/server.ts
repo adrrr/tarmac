@@ -205,13 +205,10 @@ export function createFleetServer({
   // stale on a slow disk while it is still running, and the next request then opens the same
   // month a second time, in parallel, which is the one thing this exists to prevent.
   //
-  // That half is held by construction rather than by a test in this suite, which is worth knowing
-  // before editing it: the TTL below has tests, and "one read, however many requests arrive during
-  // it" is this shape, kept simple enough to read. The entry goes in the map before anything is
-  // awaited, and nothing takes it out while it is running. It IS measurable, by counting the calls
-  // a request makes to `fs/promises.readFile`, which is how the regression this comment used to
-  // deny was found; what a test for it costs is a module-wide patch of `node:fs`, and that is the
-  // trade this file made rather than the impossibility it claimed.
+  // That half IS held by a test now: `readJournal` was seeded for the 504 branch, and counting
+  // its calls is exactly "one read, however many requests arrive during it" — the suite pins it
+  // without the module-wide `node:fs` patch this comment used to name as the price. The entry
+  // goes in the map before anything is awaited, and nothing takes it out while it is running.
   interface Cached {
     at: number | null;
     reading: Promise<RangeHistory>;
