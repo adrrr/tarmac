@@ -73,6 +73,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   `appendFileSync` blocks on one too and that block is synchronous, which no deadline can fire
   through.
 
+- **`--yes=false` no longer means yes.** Every boolean flag accepted an `=value` suffix and threw
+  the value away, so `tarmac install --yes=false` ran as `--yes` and skipped the typed
+  confirmation, and `tarmac serve --demo=false` served the demo. A boolean handed a value is now
+  refused by name — `tarmac: --yes takes no value` — in the same family as the unknown-option
+  refusal. Reading `=false` as false was the other option and is not what happens: a parser this
+  strict about a typo does not guess at truthiness. The flag on its own is unchanged.
+
 - **An empty session id is absent, not a name.** An entry from `claude agents --json` carrying
   `sessionId: ""` passed the type check that reads it, and the empty string travelled on as an
   id — through the fleet and into the journal as `sid: ""` — while discovery health had already

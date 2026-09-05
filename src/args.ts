@@ -145,6 +145,10 @@ export function parseArgs(argv: string[]): Options {
     if (!ACCEPTS[out.command].has(key))
       throw new Error(`${flag} is not an option of \`tarmac ${out.command}\` — it belongs to: ${ownersOf(key)}`);
     if (FLAGS.has(key)) {
+      // A boolean has no value to read, so it refuses one rather than deciding what it meant:
+      // `--yes=false` taken as `--yes` skips the confirmation the operator just declined, and
+      // a parser this strict about a typo has no business guessing at truthiness (#155).
+      if (inline !== null) throw new Error(`${flag} takes no value`);
       out[key as FlagKey] = true;
       continue;
     }
