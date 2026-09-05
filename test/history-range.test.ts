@@ -15,7 +15,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { readRange } from '../src/history-range.ts';
+import { waitForSettled } from './bounded.ts';
 import { tempDir } from './sandbox.ts';
 
 /** Noon on a named calendar day, local. Noon so no fixture sits within an hour of a DST shift. */
@@ -66,6 +68,33 @@ function journal(): string {
   const dir = path.join(tempDir('tarmac-range-'), 'history');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+/**
+ * A FIFO where a day file should be, carrying the name the store itself would write.
+ *
+ * `mkfifo` rather than a node call, there being none: making one is POSIX and the two runners
+ * this suite is built for are Linux and macOS. A failure to make it is asserted rather than
+ * skipped — a skip here would be a green run that proved nothing about the read it exists for.
+ */
+function fifoDay(dir: string, date: string): string {
+  const file = path.join(dir, `${date}.jsonl`);
+  const made = spawnSync('mkfifo', [file]);
+  assert.equal(made.status, 0, `mkfifo ${file}: ${made.error?.message ?? made.stderr}`);
+  return file;
+}
+
+/**
+ * Opens the write end of a FIFO a reader may be blocked on, and closes it: the blocked open
+ * returns, the read sees end of file, and the thread it was holding goes back. Non-blocking, so
+ * where there is no reader this is `ENXIO` and nothing at all — which is the passing case.
+ */
+function unblock(fifo: string): void {
+  try {
+    fs.closeSync(fs.openSync(fifo, fs.constants.O_WRONLY | fs.constants.O_NONBLOCK));
+  } catch {
+    // ENXIO: nobody was blocked, which is what a fixed reader leaves behind.
+  }
 }
 
 /** Appends a day file exactly as the store does: one record a line, each line terminated. */
@@ -129,6 +158,37 @@ test('a directory that is not there yet reads as an empty range, and never as a 
   assert.deepEqual(range.hours, []);
   assert.deepEqual(range.days, []);
   assert.deepEqual(range.resets, []);
+});
+
+// The journal directory belongs to whoever owns the machine, and a day file is opened by the
+// name the store would have written — so what is behind that name is not this reader's to
+// assume. `fs.readFile` on a FIFO blocks until someone writes to the other end, which hung the
+// range read, the request waiting on it, and every request that joined the cached read behind
+// it (#136). The wait below is bounded for the same reason the fix is: a test of a read that
+// hangs, waited on with nothing to stop it, does not fail — it stops the file.
+test('a day file that is not a regular file is counted and stepped over, never opened', async () => {
+  const dir = journal();
+  const now = at(2026, 8, 7);
+  const fifo = fifoDay(dir, '2026-08-07');
+  day(dir, '2026-08-06', [rec(at(2026, 8, 6, 9), [sess()])]);
+
+  try {
+    const range = await waitForSettled(readRange({ dir, range: '7d', now }), 'a range read over a FIFO');
+
+    assert.equal(range.coverage.lines, 1, 'the day beside it is read as it always was');
+    assert.equal(range.coverage.skipped, 1, 'and the one that is not a file is counted, not swallowed');
+    assert.deepEqual(
+      range.days.map((d) => d.date),
+      ['2026-08-06'],
+      'a name nothing could be read from is not a day this range covers',
+    );
+  } finally {
+    // Releases a read that IS blocked, so a failing run reports and then ends: an open that
+    // never returns holds a libuv thread, and the file would never exit to print the failure.
+    // On a passing run nothing is blocked and the open finds no reader — ENXIO, and nothing
+    // to release.
+    unblock(fifo);
+  }
 });
 
 // ── the hour ──────────────────────────────────────────────────────────────────────────

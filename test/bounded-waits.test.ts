@@ -19,7 +19,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { dyingServer, NET_DEADLINE_MS, netDeadlineFrom, rawGet, rawGetText, silentServer, waitForOutput } from './bounded.ts';
+import { dyingServer, NET_DEADLINE_MS, netDeadlineFrom, rawGet, rawGetText, silentServer, waitForOutput, waitForSettled } from './bounded.ts';
 import { unboundedWaits } from './scan-waits.ts';
 import { DEADLINE_UNDER_TEST_CALL, HAND_TYPED_DEFAULT_DEFINITION, RAW_CLIENT_IMPORT, SPLIT_WAIT_CALL, VERDICTS } from './scan-waits.fixtures.ts';
 
@@ -277,4 +277,35 @@ test('an answer that dies mid-body is a rejection, not a wait forever', async ()
     dying.closeAllConnections();
     await new Promise<void>((r) => dying.close(() => r()));
   }
+});
+
+// ── the wait that is not on a socket at all ───────────────────────────────────────────
+// The third shape, and the one the journal brought in: a promise that may never settle. A
+// FIFO left in the journal directory blocks `fs.readFile` until someone writes to the other
+// end (#136), so the tests that prove that read is bounded must not be unbounded themselves.
+// One helper rather than a race written out in each of them, for the reason the two above are
+// shared: a bound is easy to write in a form that reads bounded and is not.
+test('a promise that never settles is a rejection naming what was waited for', async () => {
+  await assert.rejects(
+    () => waitForSettled(new Promise(() => {}), 'a range read over a FIFO', 20),
+    (e: Error) => {
+      assert.match(e.message, /a range read over a FIFO/, 'names what never came');
+      assert.match(e.message, /20ms/, 'and how long it was given');
+      return true;
+    },
+  );
+});
+
+test('a promise that settles inside its deadline is handed back untouched, either way', async () => {
+  assert.equal(await waitForSettled(Promise.resolve('a range'), 'the range', NET_DEADLINE_MS), 'a range');
+  const failed = waitForSettled(Promise.reject(new Error('EACCES: the journal')), 'the range', NET_DEADLINE_MS);
+  await assert.rejects(() => failed, /EACCES: the journal/, 'the work-s own failure, not a deadline dressed up as one');
+});
+
+// A stray deadline must never be the reason a file stays open — the failure this module is
+// about, in miniature, and the same unref `waitForOutput` carries.
+test('the deadline of a wait that succeeded does not hold the file open', async () => {
+  const before = process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
+  await waitForSettled(Promise.resolve(1), 'the range', NET_DEADLINE_MS);
+  assert.equal(process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length, before, 'the timer was cleared');
 });
