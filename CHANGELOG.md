@@ -44,6 +44,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A first run raises one empty-state box, not two.** With no `history.days` set and a ring a
+  minute old, the history view said "History is off." and "Nothing to draw yet." at once: two
+  blocks on one screen, on exactly the fresh install the second of them was written for. The
+  first wins wherever it applies, because it names a cause and the key that turns the journal
+  on; the other is for the serve whose journal is on and still young.
+
 - **An empty session id is absent, not a name.** An entry from `claude agents --json` carrying
   `sessionId: ""` passed the type check that reads it, and the empty string travelled on as an
   id — through the fleet and into the journal as `sid: ""` — while discovery health had already

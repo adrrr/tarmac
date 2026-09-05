@@ -593,3 +593,17 @@ test('an empty journal range is not a first run, and is not offered a minute of 
   await settle(m);
   assert.equal(m.p.el('hist-empty').hidden, true);
 });
+
+// The first default run is BOTH of the states above at once: no `history.days`, so the server
+// shipped "History is off." in the markup, and a ring a minute old, so the predicate above would
+// raise "Nothing to draw yet." over it. Two boxes, one screen, saying two things where one is
+// true and actionable — which is the screen #151 was written to fix (#157).
+//
+// "History is off." wins: it names a cause and what to do about it, and it is the server's own
+// answer about the config. The other block is for the serve whose journal is on and young.
+test('a first run with no journal raises one box, not two', async () => {
+  const m = mount(false, () => emptyRing());
+  await settle(m);
+  assert.equal(m.p.el('range-7d').disabled, true, 'precondition: this is a serve with no journal');
+  assert.equal(m.p.el('hist-empty').hidden, true, 'the page said "history is off" and "wait a minute" at once');
+});
