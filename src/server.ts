@@ -12,7 +12,7 @@ import { hostName, SOURCE_PHRASE } from './config.ts';
 import { createHistory, HISTORY_CADENCE_MS } from './history.ts';
 import type { FleetHistory, HistorySample } from './history.ts';
 import { HISTORY_RANGES, readRange } from './history-range.ts';
-import type { HistoryRange, RangeHistory } from './history-range.ts';
+import type { HistoryRange, RangeHistory, ReadRangeOptions } from './history-range.ts';
 import type { HistoryStore } from './history-store.ts';
 import type { Source } from './config.ts';
 import type { Fleet } from './fleet.ts';
@@ -26,6 +26,14 @@ import type { Fleet } from './fleet.ts';
  * failures carry it too: their text is what it quotes as the reason.
  */
 const IDENTITY = { 'x-tarmac': '1' };
+
+/**
+ * A range read that never came back, kept apart from a range read that failed: one is a journal
+ * that answered with a broken file, the other a directory nothing came out of at all. The
+ * handler answers 500 for the first and 504 for the second, and a reader is sent to two
+ * different places by them.
+ */
+class JournalTimeout extends Error {}
 
 /** The addresses that serve the shell, and which view each one opens on. */
 const PAGES = new Map<string, View>([
@@ -70,6 +78,25 @@ export interface FleetServerDeps {
    */
   rangeCacheMs?: number;
   /**
+   * How a range is read off the journal on disk. Injected for the reason `collect` is: a read
+   * that never comes back cannot be made out of a real directory once the reader refuses
+   * everything that can block on one, and the deadline below would then be a branch no test
+   * could ever take.
+   */
+  readJournal?: (options: ReadRangeOptions) => Promise<RangeHistory>;
+  /**
+   * How long a request waits for that read before it is told nobody is coming. A parameter for
+   * the same one reason `rangeCacheMs` is one: a suite that waited half a minute to watch a
+   * deadline fire would not be run.
+   *
+   * Thirty seconds because the number has to be well past the read and well short of a person:
+   * a month of journal is tens of megabytes read one file at a time, which is under a second on
+   * a working disk and seconds on a poor one, and a page that fetches this sets no timeout of
+   * its own — so what stands between a directory that has stopped answering and a spinner that
+   * never ends is this number and nothing else.
+   */
+  rangeDeadlineMs?: number;
+  /**
    * Where the journal's own troubles are said out loud. `serve` runs unattended for hours, so
    * a journal that quietly stopped writing would leave a reader believing they have a week of
    * history until the day they go looking for it.
@@ -97,6 +124,8 @@ export function createFleetServer({
   trustedHosts = [],
   store = null,
   rangeCacheMs = 60_000,
+  readJournal = readRange,
+  rangeDeadlineMs = 30_000,
   report = (line) => console.error(line),
   history = createHistory({ since: Date.now(), cadence: sampleEveryMs }),
   demo = false,
@@ -176,13 +205,10 @@ export function createFleetServer({
   // stale on a slow disk while it is still running, and the next request then opens the same
   // month a second time, in parallel, which is the one thing this exists to prevent.
   //
-  // That half is held by construction rather than by a test in this suite, which is worth knowing
-  // before editing it: the TTL below has tests, and "one read, however many requests arrive during
-  // it" is this shape, kept simple enough to read. The entry goes in the map before anything is
-  // awaited, and nothing takes it out while it is running. It IS measurable, by counting the calls
-  // a request makes to `fs/promises.readFile`, which is how the regression this comment used to
-  // deny was found; what a test for it costs is a module-wide patch of `node:fs`, and that is the
-  // trade this file made rather than the impossibility it claimed.
+  // That half IS held by a test now: `readJournal` was seeded for the 504 branch, and counting
+  // its calls is exactly "one read, however many requests arrive during it" — the suite pins it
+  // without the module-wide `node:fs` patch this comment used to name as the price. The entry
+  // goes in the map before anything is awaited, and nothing takes it out while it is running.
   interface Cached {
     at: number | null;
     reading: Promise<RangeHistory>;
@@ -196,7 +222,7 @@ export function createFleetServer({
     // Read once per range per minute rather than per request: `stats()` walks the directory, and
     // a journal that stopped at its cap stays stopped for hours, so a minute-old answer to that
     // question is the same answer.
-    entry.reading = readRange({ dir: store.dir, range, now, capped: store.stats().capped }).then(
+    entry.reading = readJournal({ dir: store.dir, range, now, capped: store.stats().capped }).then(
       (answer) => {
         entry.at = Date.now();
         return answer;
@@ -212,6 +238,40 @@ export function createFleetServer({
     ranges.set(range, entry);
     return entry.reading;
   };
+  /**
+   * The same read, with a deadline on the REQUEST rather than on the read.
+   *
+   * A read that does not come back is not a read that can be taken back: nothing cancels a
+   * blocked `open`, and the thread it holds is held until the kernel hands it over. So the entry
+   * stays in the cache, and every request that arrives while it is out gives up on its own clock
+   * instead of starting a second read of a directory that is already not answering. If it ever
+   * does land, it is served — to whoever is asking then. The price is written down rather than
+   * hidden: an entry that never settles is never dated, so that range answers 504 for the life
+   * of the process, and a restart is what reads it again.
+   *
+   * What this bounds is the WAIT. `rangeOf` measures the directory synchronously before the read
+   * begins (`readdirSync`, then a `statSync` a file), so a volume that has stopped answering
+   * stops the event loop this timer would have to fire on. A deadline cannot save a thread that
+   * is not running; only asynchronous work is bounded here, and that is the whole of the claim.
+   */
+  const answerRange = (store: HistoryStore, range: HistoryRange): Promise<RangeHistory> =>
+    new Promise<RangeHistory>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new JournalTimeout(`nothing came back from ${store.dir} in ${rangeDeadlineMs}ms`)),
+        rangeDeadlineMs,
+      );
+      // The nominal path pays one timer and no latency: the answer clears it on the way past.
+      // The unref is the belt, and a narrow one worth naming rather than overselling: while the
+      // request is out its own socket holds the loop, so the only window this covers is a
+      // deadline still counting after the socket has gone. `bounded.ts` carries the same line
+      // for a case that IS reachable in a test, and has one; this one has no test of its own.
+      timer.unref();
+      // Attached, rather than raced with `Promise.race`: this is what marks the shared read's own
+      // failure handled when it arrives after the request that started it has already given up.
+      rangeOf(store, range)
+        .then(resolve, reject)
+        .finally(() => clearTimeout(timer));
+    });
 
   const sample = async (): Promise<void> => {
     // First, and outside the try: the journal's lock says this process is alive, which is a
@@ -299,11 +359,16 @@ export function createFleetServer({
         // would draw a flat line over a month the fleet was busy for.
         let body: object;
         try {
-          body = store === null ? { enabled: false, range: asked } : { enabled: true, ...(await rangeOf(store, asked)) };
+          body = store === null ? { enabled: false, range: asked } : { enabled: true, ...(await answerRange(store, asked)) };
         } catch (e) {
           // Nothing in `readRange` is allowed to throw, and this is the seam that keeps a day
           // when something does from being a request that hangs instead of an answer.
-          res.writeHead(500, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
+          //
+          // A read that has not come back is the other failure, and it is not the same news: 500
+          // is a read that came back with a failure, 504 is a read that did not come back at all
+          // — the first sends a reader to the file, the second to the directory. The page prints
+          // whichever sentence arrives as the reason the charts are empty.
+          res.writeHead(e instanceof JournalTimeout ? 504 : 500, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
           res.end(`tarmac could not read the fleet journal:\n${reason(e)}\n`);
           return;
         }

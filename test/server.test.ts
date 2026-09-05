@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
+import { spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -18,6 +19,7 @@ import { HISTORY_CADENCE_MS } from '../src/history.ts';
 import type { HistoryPayload } from '../src/history.ts';
 import { acquireJournalLock, createHistoryStore } from '../src/history-store.ts';
 import type { HistoryStore, JournalRecord } from '../src/history-store.ts';
+import type { HistoryRange, RangeHistory } from '../src/history-range.ts';
 import { tempDir } from './sandbox.ts';
 import type { Fleet, FleetRow } from '../src/fleet.ts';
 
@@ -1463,6 +1465,18 @@ function today(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/**
+ * The day before it, by the same local rule and by calendar arithmetic rather than by
+ * subtracting 24 hours: two of those are 23 or 25 on the mornings a clock shifted, and the
+ * range reader names its files the same way.
+ */
+function yesterday(): string {
+  const d = new Date();
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const y = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+  return `${y.getFullYear()}-${pad(y.getMonth() + 1)}-${pad(y.getDate())}`;
+}
+
 /** A journal in a directory of its own, with the store's own clock. */
 const journal = (opts: { maxBytes?: number } = {}): { dir: string; store: HistoryStore } => {
   const dir = path.join(tempDir('tarmac-serve-hist-'), 'history');
@@ -1862,4 +1876,116 @@ test('the week and the month are cached apart', async () => {
     },
     { store },
   );
+});
+
+// ── a journal read that does not come back ────────────────────────────────────────────
+// The other half of #136. A FIFO in the journal directory is refused by the reader now, but
+// the request had no bound of its own either: a read that does not return was a request that
+// never answered, and — the cache being one read shared by everyone who asks inside its minute
+// — every request behind it waited on the same silence. A page fetching `/api/history?range=`
+// has no timeout of its own, so a browser sat there with a spinner and nothing to report.
+//
+// A read that hangs cannot be made out of a real directory any more, which is the point of the
+// fix; so the reader is injected here, exactly as the collector is, and hangs on request.
+
+/** A journal read that answers when this test says so, and counts how often it was started. */
+function heldRead(): { read: () => Promise<RangeHistory>; started: () => number; answer: (range: RangeHistory) => void } {
+  let started = 0;
+  let release: (range: RangeHistory) => void = () => {};
+  const held = new Promise<RangeHistory>((resolve) => {
+    release = resolve;
+  });
+  return {
+    read: () => {
+      started += 1;
+      return held;
+    },
+    started: () => started,
+    answer: (range) => release(range),
+  };
+}
+
+/** The thinnest answer the route can serve: a range that read nothing and says so. */
+const emptyRange = (range: HistoryRange): RangeHistory => ({
+  range,
+  hours: [],
+  days: [],
+  resets: [],
+  coverage: { daysRequested: 7, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+});
+
+test('a journal read that never comes back is a 504 saying so, not a request that hangs', async () => {
+  const { store } = journal();
+  const held = heldRead();
+  await withServer(
+    collectOk,
+    async (base) => {
+      const res = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+      assert.equal(res.status, 504);
+      assert.equal(res.headers.get('x-tarmac'), '1');
+      assert.match(res.headers.get('content-type')!, /text\/plain/);
+      const body = await res.text();
+      assert.match(body, /journal/i, 'names what it gave up on');
+      assert.match(body, /40ms/, 'and how long it gave it, which is the number a reader would change');
+    },
+    { store, readJournal: held.read, rangeDeadlineMs: 40 },
+  );
+});
+
+// What the deadline must NOT do: turn one stuck read into a stuck read per request. The read
+// is abandoned, never cancelled — a blocked open holds a thread whatever this process decides —
+// so starting another one on the next request would spend a thread a minute on a directory that
+// is already not answering. The one that was started is also the one that gets served if it
+// ever does come back.
+test('a read that outlived its request is not started again, and answers the request after it', async () => {
+  const { store } = journal();
+  const held = heldRead();
+  await withServer(
+    collectOk,
+    async (base) => {
+      const first = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+      assert.equal(first.status, 504);
+      const second = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+      assert.equal(second.status, 504, 'still nothing to serve, and still an answer');
+      assert.equal(held.started(), 1, 'one read, however many requests gave up on it');
+
+      held.answer(emptyRange('7d'));
+      const third = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+      assert.equal(third.status, 200);
+      assert.deepEqual(await third.json(), { enabled: true, ...emptyRange('7d') });
+      assert.equal(held.started(), 1, 'and the answer it came back with is the one that is served');
+    },
+    { store, readJournal: held.read, rangeDeadlineMs: 40 },
+  );
+});
+
+// The end of #136, through the route it was found on: a FIFO wearing a day file's name used to
+// hang this request and every one after it. The other days are still read, and the range says
+// it stepped over one.
+test('a FIFO in the journal directory is a range that answers, not a request that hangs', async () => {
+  const { dir, store } = journal();
+  journalDay(dir, [journalled(Date.now(), 1)]);
+  const fifo = path.join(dir, `${yesterday()}.jsonl`);
+  const made = spawnSync('mkfifo', [fifo]);
+  assert.equal(made.status, 0, `mkfifo ${fifo}: ${made.error?.message ?? made.stderr}`);
+  try {
+    await withServer(
+      collectOk,
+      async (base) => {
+        const res = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
+        assert.equal(res.status, 200);
+        const body = (await res.json()) as { coverage: { lines: number; skipped: number } };
+        assert.equal(body.coverage.lines, 1, 'the day that is a file is read');
+        assert.equal(body.coverage.skipped, 1, 'and the one that is not is counted');
+      },
+      { store },
+    );
+  } finally {
+    // Releases a read left blocked by a failing run, so the file reports instead of hanging.
+    try {
+      fs.closeSync(fs.openSync(fifo, fs.constants.O_WRONLY | fs.constants.O_NONBLOCK));
+    } catch {
+      // ENXIO: nobody is blocked, which is what a passing run leaves behind.
+    }
+  }
 });
