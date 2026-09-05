@@ -302,18 +302,21 @@ test('a promise that settles inside its deadline is handed back untouched, eithe
   await assert.rejects(() => failed, /EACCES: the journal/, "the read's own failure, not a deadline dressed up as one");
 });
 
-// A deadline still counting must never be the reason a file stays open — the failure this
-// module is about, in miniature, and the same unref `waitForOutput` carries. Read while the
-// wait is STILL OUT, since that is the only moment a deadline can hold anything, and because
-// `process.getActiveResourcesInfo` reports what keeps the event loop alive: a timer that has
-// been cleared and one that was unref'd are equally absent from it, so a reading taken after
-// the wait had settled could only ever be green.
-test('a deadline still counting does not hold the file open', () => {
-  const timers = (): number => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
-  const before = timers();
-  // Never settles, so the deadline below is pending for the whole assertion. Its rejection is
-  // caught here and nowhere else: an unhandled one, a minute after this file has moved on, is
-  // the kind of failure that lands on whichever test happens to be running then.
-  waitForSettled(new Promise(() => {}), 'a read nobody is waiting for', NET_DEADLINE_MS).catch(() => {});
-  assert.equal(timers(), before, 'the deadline is out, and the loop is not held by it');
+// The other half of a deadline that HOLDS the loop, and the price of it firing at all: a wait
+// that is over must let go at once. A cleared deadline and one left counting are the same
+// answer and a very different file — sixty seconds of held loop after the last assertion is a
+// run that reports and then sits there, which is most of the way back to the hang.
+//
+// Measured on a child rather than on `getActiveResourcesInfo()` here: the runner arms a timer
+// of its own per test under `--test-timeout`, so a count taken in-process is reading the
+// runner as much as the helper. Whether the process ENDS is the property, and it is the one a
+// dropped `clearTimeout` breaks.
+test('a wait that is over lets the process go at once', async () => {
+  const bounded = new URL('./bounded.ts', import.meta.url).href;
+  const c = child(`import(${JSON.stringify(bounded)}).then((m) => m.waitForSettled(Promise.resolve(1), 'a settled read', 20000))`);
+  const started = Date.now();
+  const [code] = (await once(c, 'exit')) as [number | null];
+  const took = Date.now() - started;
+  assert.equal(code, 0, 'the child ran the helper and ended on its own');
+  assert.ok(took < 10_000, `a deadline left counting holds the process to its full 20s: ended in ${took}ms`);
 });

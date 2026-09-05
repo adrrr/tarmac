@@ -9,10 +9,11 @@
 // have gone red stopped reporting instead, and the file had to be killed from outside. A
 // wait that cannot fail is a test that cannot fail.
 //
-// Both live HERE, together, because neither deadline is one line of code and both are easy
-// to write in a form that looks bounded and is not (see `rawGet`). One home, one pair of
-// tests in `bounded-waits.test.ts` — and a static guard that keeps the raw clients out of
-// the test files, where nothing would prove their deadline fires.
+// All three live HERE, together, because no one of these deadlines is one line of code and
+// each is easy to write in a form that looks bounded and is not (see `rawGet`, and see the
+// unref that made `waitForSettled` skippable). One home, one set of tests in
+// `bounded-waits.test.ts` — and a static guard that keeps the raw clients out of the test
+// files, where nothing would prove their deadline fires.
 
 import http from 'node:http';
 import type { ChildProcess } from 'node:child_process';
@@ -153,12 +154,18 @@ export function waitForOutput(child: ChildProcess, marker: RegExp, timeoutMs = N
  */
 export function waitForSettled<T>(work: Promise<T>, what: string, timeoutMs = NET_DEADLINE_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    // REF'D, unlike the deadline in `waitForOutput`, and the difference is not a preference: a
+    // child with open pipes holds the loop while that wait is out, and a promise holds nothing
+    // at all. Unref'd, this timer was skipped on any run where the loop had nothing else to do
+    // — the wait then never settled, and node 22 cancelled all three of this helper's tests
+    // with `Promise resolution is still pending but the event loop has already resolved`, while
+    // node 24 and 26 happened to stay busy long enough to hide it. A deadline that may not fire
+    // is the hang this module exists to prevent, wearing a bound's clothes.
+    //
+    // The price is paid back by the `clearTimeout` below: the loop is held while the wait is
+    // out, and not a millisecond longer. That half has a test now, which the unref had made
+    // unwritable — a cleared unref'd timer and a pending one are the same to every reading.
     const timer = setTimeout(() => reject(new Error(`${what} had not settled after ${timeoutMs}ms`)), timeoutMs);
-    // A deadline still counting must not be the reason the file stays open — a wait that is
-    // GIVEN a deadline it never reaches is the ordinary case here, and an unref'd timer keeps
-    // nothing alive. The `clearTimeout` below ends it the moment the wait is over; this is what
-    // holds while it is still out.
-    timer.unref();
     // `reject` on a promise that has already settled is a no-op, and attaching the handler is
     // what marks `work`'s own rejection handled — a read that fails a minute after its request
     // gave up must not become an unhandled rejection in a file that has moved on.
