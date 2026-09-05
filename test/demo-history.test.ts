@@ -52,6 +52,11 @@ test('a demo serve has a week of journal behind it, and the pills have something
     'the week carries no context or no window reading',
   );
   assert.ok(week.resets.length > 0, 'a week of five-hour windows turned over nowhere');
+  // A reading a minute, which is the cadence a real journal is written at: an hour of sixty and
+  // an hour of six are drawn the same and are not the same fact, and a demo thinning its own
+  // week would be showing every reader a serve that had been stopping and starting all week.
+  const inner = week.hours.slice(1, -1);
+  assert.ok(inner.every((h) => h.n === 60), `an hour of the invented week holds ${Math.min(...inner.map((h) => h.n))} readings`);
 });
 
 // The point of the whole exercise. A demo whose journal was invented separately would show a
