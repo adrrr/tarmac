@@ -200,7 +200,9 @@ test('a boolean flag handed a value is refused, never read as the flag alone', (
   for (const flag of OPTION_FLAGS) {
     const command = COMMAND_NAMES.find((c) => accepts(c, flag));
     assert.ok(command !== undefined, `no command reads ${flag} — the matrix and the flag list disagree`);
-    assert.throws(() => parseArgs([command, `${flag}=`]), /takes no value|needs a value/, `${flag}= sailed through`);
+    // Anchored on the flag's own name: a sweep that only matched the sentence stayed green
+    // the day one flag answered with another flag's refusal.
+    assert.throws(() => parseArgs([command, `${flag}=`]), new RegExp(`^Error: ${flag} (takes no|needs a) value$`), `${flag}= sailed through`);
   }
 });
 
