@@ -662,6 +662,21 @@ test('the view ships the first-run block, hidden, saying what is coming and how 
   assert.match(block, /serve --demo/, 'it does not point at the one way to see this full without waiting');
 });
 
+// A demo serve keeps a journal it invented in memory, and the sentence under the pills is the
+// server's word on where those ranges come from. "On disk" there is a claim about a process that
+// has just reported, in the terminal, that it writes nothing (#156). The demo may invent a fleet;
+// it may not report a measurement of a directory it never opened.
+test('a demo names the journal it invented, and never a disk it did not open', () => {
+  const demo = renderPage(fleet(), 'history', { historyEnabled: true, demo: true });
+
+  assert.match(demo, /24h from memory[^<]*invented in memory/);
+  assert.equal(/7d and 30d from the journal on disk/.test(demo), false, 'the demo claims a disk');
+  // The script rebuilds this line per range and counts the days it got, so it needs the same
+  // fact. Carried on the element the sentence is already read off rather than fetched.
+  assert.match(demo, /id="hist-covers"[^>]*data-days="days invented"/);
+  assert.equal(/id="hist-covers"[^>]*data-days/.test(page('history', true)), false, 'a serve with a real journal carries the demo-s word for its days');
+});
+
 test('with a journal nothing is refused and nothing says it is off', () => {
   const on = page('history', true);
   assert.equal(/History is off/.test(on), false);

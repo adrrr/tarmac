@@ -151,24 +151,42 @@ export interface MountOptions {
    * `text` is there for the same reason one step further on: the history view keeps the
    * sentence the SERVER wrote about the ring rather than writing a second copy of it, so an
    * element that starts empty here is a page that starts wrong.
+   *
+   * `attrs` is the third of those: a script that reads a fact off an attribute the server wrote
+   * is reading something this DOM has to have, or the assertion is about a `null` the browser
+   * would never return.
    */
-  shell?: Record<string, { hidden: boolean; disabled: boolean; text: string }>;
+  shell?: Record<string, ShellElement>;
+}
+
+/** One element as the served markup ships it — only what a script reads back off it. */
+export interface ShellElement {
+  hidden: boolean;
+  disabled: boolean;
+  text: string;
+  attrs: Record<string, string>;
 }
 
 /**
  * What the served markup says about each element with an id, so the fake DOM starts where the
  * browser's would. Only the two attributes the script toggles are read.
  */
-export function shellState(html: string): Record<string, { hidden: boolean; disabled: boolean; text: string }> {
-  const state: Record<string, { hidden: boolean; disabled: boolean; text: string }> = {};
+export function shellState(html: string): Record<string, ShellElement> {
+  const state: Record<string, ShellElement> = {};
   for (const m of html.matchAll(/<([a-z]+)\s([^>]*\bid="([\w-]+)"[^>]*)>([^<]*)/g)) {
     const [, , attrs, id, text] = m;
+    // Every `name="value"` on the tag, so `getAttribute` answers what the SERVER wrote rather
+    // than the `null` an element nobody described would answer. Valueless attributes are the two
+    // booleans below and are read there; nothing in these pages reads one through `getAttribute`.
+    const written: Record<string, string> = {};
+    for (const a of attrs.matchAll(/([a-zA-Z-]+)="([^"]*)"/g)) written[a[1]] = decode(a[2]);
     state[id] = {
       hidden: /\bhidden\b/.test(attrs),
       disabled: /\bdisabled\b/.test(attrs),
       // Only an element whose content is text and nothing else: anything with a child is
       // markup this DOM does not model, and a partial string would be worse than none.
       text: decode(text),
+      attrs: written,
     };
   }
   return state;
@@ -210,6 +228,7 @@ export function mountPage(
         e.hidden = as.hidden;
         e.disabled = as.disabled;
         e.textContent = as.text;
+        for (const [name, value] of Object.entries(as.attrs)) e.setAttribute(name, value);
       }
     }
     return e;

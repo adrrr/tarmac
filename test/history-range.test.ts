@@ -742,3 +742,32 @@ test('a line nobody could parse and a line dated elsewhere are counted apart', a
   assert.equal(coverage.skipped, 1, 'the torn one');
   assert.equal(coverage.outOfRange, 1, 'the one dated outside the week');
 });
+
+// ── where the days come from ──────────────────────────────────────────────────────────────
+//
+// The reader opens one file per calendar day, and that is its only contact with a disk. Taking
+// the day as a seam rather than as a path is what lets a journal exist that was never written:
+// `serve --demo` answers a week of invented days through this same aggregation, so there is one
+// place that turns records into hours, days and resets, and not a second one for the demo (#156).
+
+test('a range reads its days through the reader it was given, and opens no file of its own', async () => {
+  const now = at(2026, 8, 7);
+  const asked: string[] = [];
+  const answer = await readRange({
+    // A directory that is not there, so a reader that fell back to the disk answers nothing at
+    // all and the assertions below go red rather than passing on an empty range.
+    dir: path.join(tempDir('tarmac-range-'), 'nowhere'),
+    range: '7d',
+    now,
+    readDay: async (date) => {
+      asked.push(date);
+      return date === '2026-08-06' ? JSON.stringify(rec(at(2026, 8, 6, 10), [sess({ costUsd: 3 })])) + '\n' : null;
+    },
+  });
+
+  assert.equal(asked.length, 7, `the reader was asked for ${asked.length} days, not the seven of the range`);
+  assert.equal(asked[asked.length - 1], '2026-08-07', 'the days did not arrive oldest first');
+  assert.equal(answer.coverage.lines, 1);
+  assert.deepEqual(answer.days.map((d) => d.date), ['2026-08-06']);
+  assert.deepEqual(answer.hours.map((h) => h.t), [hourOf(at(2026, 8, 6, 10))]);
+});

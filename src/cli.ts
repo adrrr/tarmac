@@ -14,6 +14,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from './args.ts';
 import { collectFleet } from './collect.ts';
 import { demoCollector, demoDayStart, demoHistory } from './demo.ts';
+import { createDemoHistoryStore } from './demo-history.ts';
 import type { Fleet } from './fleet.ts';
 import { readConfigFile, resolveConfig } from './config.ts';
 import { createFleetServer, listenFleetServer } from './server.ts';
@@ -60,12 +61,12 @@ const USAGE = `tarmac — fleet observability for Claude Code
                    which is the command that samples: one JSON line a minute, no session
                    name and no working directory, about 2 MB a day at eight sessions,
                    and writing stops at 256 MB whatever N says
-  --demo           serve an invented fleet of eight sessions with a day of history behind
-                   it, instead of this machine's. On \`serve\` only. This machine's fleet is
-                   never read and nothing is written: no \`claude\`, no snapshots, no temp
-                   sweep, and no journal whatever --history-days says. The port and the
-                   trusted hosts are still resolved as usual, and the page says on itself
-                   that it is a demo
+  --demo           serve an invented fleet of eight sessions, with a day of history behind
+                   it and a week of journal under that, instead of this machine's. On
+                   \`serve\` only. This machine's fleet is never read and nothing is written:
+                   no \`claude\`, no snapshots, no temp sweep, and no journal file whatever
+                   --history-days says. The port and the trusted hosts are still resolved
+                   as usual, and the page says on itself that it is a demo
 
   Those five settings can also be set, in decreasing order of precedence, by the
   environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR, TARMAC_TRUST_HOST,
@@ -195,7 +196,7 @@ try {
       // whose authority, and a retention someone typed that this run is going to ignore is
       // exactly the kind of thing that discipline exists for.
       if (args.demo && config.historyDays.value !== null)
-        console.log(`tarmac: --demo keeps no journal, so the ${config.historyDays.value}-day retention is ignored`);
+        console.log(`tarmac: --demo writes no journal, so the ${config.historyDays.value}-day retention is ignored`);
       const { lock, heldBy } = days === null ? { lock: null, heldBy: null } : acquireJournalLock({ dir: historyDir });
       // On stdout, under the settings block it corrects: that block has just named a retention
       // and a directory, and a reader piping it must not be left holding the half of it that
@@ -254,7 +255,17 @@ try {
         // No key anywhere is no store, which is no directory and no file: the default is that
         // nothing of this fleet is written down, and it is the default that is the product.
         // No lock is no store either, and for the same reason: no store, no sweep, no line.
-        store: days === null || lock === null ? null : createHistoryStore({ dir: historyDir, days, lock }),
+        //
+        // A demo gets a store all the same, and it is the one thing about `--demo` that is not a
+        // suppression: a week of invented days, in memory, answering the range reads through the
+        // seam a real journal answers them through (#156). It writes nothing and opens nothing —
+        // `days` is null above, so no directory was taken and no lock was asked for.
+        store:
+          demoDay !== null
+            ? createDemoHistoryStore({ dayStart: demoDay })
+            : days === null || lock === null
+              ? null
+              : createHistoryStore({ dir: historyDir, days, lock }),
       });
       // A port nobody chose is not worth failing over: this walks past a busy 4477 and says
       // where it landed. A port that WAS chosen refuses instead, and the refusal leaves

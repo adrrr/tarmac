@@ -650,3 +650,30 @@ test('a store that lost its directory says it stopped, and never that it was cap
   assert.match(String(s.stats().stopped), /\bpid 1\b/);
   assert.equal(s.stats().capped, false, 'nothing here is full');
 });
+
+// ── reading its own journal back ──────────────────────────────────────────────────────────
+//
+// The store owns both ends of the directory it holds: it writes the lines and it answers the
+// range reads off them. That is one seam rather than two, and it is what lets a journal exist
+// that nothing ever wrote — `serve --demo` hands the server a store with a week of invented
+// days behind it, and the server asks it the same question it asks a real one (#156).
+
+test('a store answers a range read off the days it wrote, and carries its own cap into it', async () => {
+  const dir = path.join(tempDir('tarmac-store-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const s = store(dir, 30, clock);
+  s.append(sample(clock.now));
+
+  const week = await s.read('7d', clock.now);
+
+  assert.equal(week.range, '7d');
+  assert.equal(week.coverage.lines, 1, 'the store did not read the line it had just written');
+  assert.deepEqual(week.days.map((d) => d.date), [dayOf(clock.now)]);
+  assert.equal(week.coverage.capped, false);
+
+  // A store stopped at its ceiling has the shape of a fleet that went quiet, and only the writer
+  // knows which it is. Reading through the store is what carries that fact to the reader.
+  const full = store(dir, 30, clock, 1);
+  full.append(sample(clock.now));
+  assert.equal((await full.read('7d', clock.now)).coverage.capped, true, 'the cap did not reach the range');
+});

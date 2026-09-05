@@ -60,6 +60,15 @@ const CTX_WINDOW = 1_000_000;
 const WINDOW_MINUTES = 300;
 const WINDOW_PEAKS = [58, 84, 71, 49, 77];
 
+/**
+ * Where the seven-day window stands at the newest minute, and what a day of this fleet costs
+ * it. Six points a day over the journal's seven days lands the oldest hour near 1% — a slope
+ * chosen against `DEMO_JOURNAL_DAYS`, because `readLimits` refuses a negative percentage and a
+ * steeper week would not draw a wrong line, it would draw nothing.
+ */
+const SEVEN_DAY_TOP = 43;
+const SEVEN_DAY_PER_DAY = 6;
+
 const OPUS = { id: 'claude-opus-5', display_name: 'Opus 5' };
 const FABLE = { id: 'claude-fable-5', display_name: 'Fable 5' };
 
@@ -304,7 +313,7 @@ function busyMinutes(actor: Actor, minute: number): number {
  * is this codebase's own way of saying the number beside it belongs to a window that is gone,
  * and a demo has no business showing it about an account nobody has.
  */
-function rateLimits(minute: number, now: number): Record<string, unknown> {
+function rateLimits(minute: number, now: number, cyclesBack: number = 0): Record<string, unknown> {
   const window = Math.floor(minute / WINDOW_MINUTES);
   const elapsed = minute % WINDOW_MINUTES;
   const peak = WINDOW_PEAKS[window % WINDOW_PEAKS.length];
@@ -314,7 +323,11 @@ function rateLimits(minute: number, now: number): Record<string, unknown> {
       resets_at: Math.round((now + (WINDOW_MINUTES - elapsed) * 60_000) / 1000),
     },
     seven_day: {
-      used_percentage: Math.round(29 + (14 * minute) / DEMO_MINUTES),
+      // Climbing across the whole invented week, not the cycle: the day repeats, and a ramp
+      // relative to the cycle replayed itself — a 14-point fall at every boundary, drawn as a
+      // "7d reset" line no real account produces daily. `cyclesBack` is how many cycles before
+      // the newest day this reading belongs to, so consecutive cycles join to the point.
+      used_percentage: Math.max(0, Math.round(SEVEN_DAY_TOP - SEVEN_DAY_PER_DAY * (cyclesBack + 1 - minute / DEMO_MINUTES))),
       // Mid-week: far enough out that the five-hour window above never rolls it over.
       resets_at: Math.round((now + 4.5 * 24 * 3600 * 1000) / 1000),
     },
@@ -338,7 +351,7 @@ function contextAt(actor: Actor, minute: number): number | null {
  * view always shows the last minute of the day, dated by the clock that asked for it, so two
  * captures taken an hour apart are the same picture.
  */
-export function demoFleetAt(minute: number, dayStart: number, now: number = dayStart + minute * 60_000, staleAfterMs: number = DEFAULT_STALE_AFTER_MS): Fleet {
+export function demoFleetAt(minute: number, dayStart: number, now: number = dayStart + minute * 60_000, staleAfterMs: number = DEFAULT_STALE_AFTER_MS, cyclesBack: number = 0): Fleet {
   const live = ACTORS.filter((a) => minute >= a.born);
 
   const sessions: Session[] = live.map((a) => {
@@ -358,7 +371,7 @@ export function demoFleetAt(minute: number, dayStart: number, now: number = dayS
     };
   });
 
-  const limits = rateLimits(minute, now);
+  const limits = rateLimits(minute, now, cyclesBack);
   const snapshots = new Map<string, Snapshot>();
   for (const a of live) {
     const pct = contextAt(a, minute);

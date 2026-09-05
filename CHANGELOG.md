@@ -16,12 +16,18 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - **`tarmac serve --demo`, so the first run is not an empty screen.** One session and no record
   yet renders as a one-row table over three charts with nothing in them, which is the first
   thing most people ever see of this tool. `--demo` serves an invented fleet instead — eight
-  sessions across five projects, with a day of history already behind them — so the map, the
-  replay and the curves are all worth looking at from the first second. It reads no fleet and
-  writes nothing: no `claude` spawned, no snapshot directory opened, no temp file swept, and no
-  journal whatever `--history-days` says, which it reports rather than dropping in silence. Its
+  sessions across five projects, with a day of history behind them and a week of journal under
+  that — so the map, the replay and every range of the curves are worth looking at from the
+  first second. The week is that same invented day again, played through the same code the live
+  record is, so the newest journal day and the record behind the scrubber are the same readings
+  minute for minute; it is answered through the seam a real journal is answered through, so
+  there is no second rendering path, and `30d` shows the seven days there are rather than
+  inventing the rest, and the page says the days under those two pills were invented rather than
+  counting them off a disk it never opened. It reads no fleet and writes nothing: no `claude` spawned, no snapshot
+  directory opened, no temp file swept, and no journal file whatever `--history-days` says,
+  which it reports rather than dropping in silence. Its
   own settings are still resolved, so a port or a trusted host set in a config file applies. It
-  runs no sampler either, so the day it starts with is the day it keeps. A `demo data` badge
+  runs no sampler either, so the day and the week it starts with are the ones it keeps. A `demo data` badge
   sits beside the title on every
   view, and the terminal says the same under the URL, so a screenshot of it cannot pass for a
   real fleet by accident. The invented fleet feeds the same structures the two real sources are
