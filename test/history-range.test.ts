@@ -191,6 +191,29 @@ test('a day file that is not a regular file is counted and stepped over, never o
   }
 });
 
+// The other half of that guard, and the half a FIFO cannot show: `stat` refuses a link to a
+// pipe too, so what tells the two calls apart is a link to an ordinary file. Refused as well,
+// deliberately. The store writes files and never links, so a link in that directory was put
+// there by somebody else, aimed at something this reader was never told about — here, at
+// another day of the same journal, which `stat` would then read a second time and charge to a
+// day nothing was written on.
+test('a day file that is a link is skipped too, whatever it points at', async () => {
+  const dir = journal();
+  const now = at(2026, 8, 7);
+  day(dir, '2026-08-05', [rec(at(2026, 8, 5, 9), [sess({ costUsd: 1 })])]);
+  fs.symlinkSync(path.join(dir, '2026-08-05.jsonl'), path.join(dir, '2026-08-06.jsonl'));
+
+  const range = await readRange({ dir, range: '7d', now });
+
+  assert.equal(range.coverage.lines, 1, 'the reading is read once, on the day it was written to');
+  assert.equal(range.coverage.skipped, 1, 'and the link is counted, not followed');
+  assert.deepEqual(
+    range.days.map((d) => d.date),
+    ['2026-08-05'],
+    'the 6th is a name, not a day this fleet spent anything on',
+  );
+});
+
 // ── the hour ──────────────────────────────────────────────────────────────────────────
 
 test('an hour keeps the highest context it saw and the last cost and state it was left in', async () => {

@@ -244,9 +244,16 @@ export async function readRange({ dir, range, now, capped = false }: ReadRangeOp
       // waiting on it, and every request that joined the cached read behind it (#136). So the
       // kind is asked BEFORE the open, and only a regular file is opened.
       //
-      // `lstat`, not `stat`: the question is what this name IS, and a symlink is not a journal
-      // file the store wrote — it is a name pointing somewhere else, and the somewhere else can
-      // be a FIFO. The same call `reap.ts` makes, for the same reason: the link's own kind.
+      // `lstat`, not `stat`, and NOT for the pipe: `stat` reports the target's kind, so it
+      // refuses a link pointing at a FIFO exactly as this does. The one shape the two disagree
+      // about is a link to a regular file, and that is the whole of the choice. A journal file
+      // is a file this store appended to; a link is a name somebody else put there, aimed at
+      // something nobody told this reader about, and following it reads whatever it is aimed
+      // at today. Only what we wrote, which is `reap.ts`'s rule for the same reason.
+      //
+      // The cost, and it is real: `history-store.ts:386` measures the directory with `statSync`,
+      // so a linked day file is charged to the 256 MB cap and never read. The two readings of
+      // one directory disagree by exactly that shape, and this is the side that refuses.
       //
       // A check before an open is a race, and it stays one: nothing stops the name being
       // replaced between the two. What it costs is bounded — one hung read, once, on a

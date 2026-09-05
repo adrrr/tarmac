@@ -248,7 +248,14 @@ export function createFleetServer({
    * blocked `open`, and the thread it holds is held until the kernel hands it over. So the entry
    * stays in the cache, and every request that arrives while it is out gives up on its own clock
    * instead of starting a second read of a directory that is already not answering. If it ever
-   * does land, it is served — to whoever is asking then.
+   * does land, it is served — to whoever is asking then. The price is written down rather than
+   * hidden: an entry that never settles is never dated, so that range answers 504 for the life
+   * of the process, and a restart is what reads it again.
+   *
+   * What this bounds is the WAIT. `rangeOf` measures the directory synchronously before the read
+   * begins (`readdirSync`, then a `statSync` a file), so a volume that has stopped answering
+   * stops the event loop this timer would have to fire on. A deadline cannot save a thread that
+   * is not running; only asynchronous work is bounded here, and that is the whole of the claim.
    */
   const answerRange = (store: HistoryStore, range: HistoryRange): Promise<RangeHistory> =>
     new Promise<RangeHistory>((resolve, reject) => {
@@ -257,7 +264,10 @@ export function createFleetServer({
         rangeDeadlineMs,
       );
       // The nominal path pays one timer and no latency: the answer clears it on the way past.
-      // Unref'd as well, so a deadline still out cannot be the reason `serve` will not exit.
+      // The unref is the belt, and a narrow one worth naming rather than overselling: while the
+      // request is out its own socket holds the loop, so the only window this covers is a
+      // deadline still counting after the socket has gone. `bounded.ts` carries the same line
+      // for a case that IS reachable in a test, and has one; this one has no test of its own.
       timer.unref();
       // Attached, rather than raced with `Promise.race`: this is what marks the shared read's own
       // failure handled when it arrives after the request that started it has already given up.
