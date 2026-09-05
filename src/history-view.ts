@@ -847,6 +847,19 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   // and not this page's — and a copy of both, kept in step by hand, is how the two come to
   // disagree.
   var covers24 = covers.textContent;
+  // Whether this serve has a journal at all. It decides which of the two blocks a page with
+  // nothing in it raises: with no journal the server has already shipped the one that names that
+  // cause and its fix, and a second block under it offering a minute of patience is one screen
+  // saying two things (#157).
+  //
+  // Read off the page rather than asked for down the wire, for the reason the sentence above is:
+  // it is the config's answer, the server has it, and a round trip to be told it would leave the
+  // question open for as long as the request took. Off the PILL and not off the block it is
+  // really about, which would read better — the eighty-line DOM the suite executes this script
+  // on hands back an element for every id asked of it, so an assertion about a block the server
+  // did not ship cannot be written there, while a disabled attribute it did ship can. The two
+  // are the same fact: one flag in the view above writes both.
+  var journalOff = el('range-7d').disabled;
   // What this serve calls the days behind its two long ranges. The sentence above is the
   // server's and is kept rather than written again; this is the half of it the script rebuilds
   // per range, and where a day came from is no more this page's answer there than it is here.
@@ -1260,8 +1273,12 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
    * Neither loading nor an error counts: both are states in which nothing has been read yet,
    * and a block raised over a request still in flight would be answering a question the
    * record is about to answer itself. Same rule the blank canvas applies one function up.
+   *
+   * Nor does a serve with no journal, which is the FIRST default run and where both blocks
+   * used to come up together (#157): the server has already raised the other one there.
    */
   function firstRun() {
+    if (journalOff) return false;
     if (state.range !== '24h' || state.loading || state.err !== null) return false;
     return !drawable();
   }

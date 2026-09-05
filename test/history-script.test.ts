@@ -598,6 +598,32 @@ test('an empty journal range is not a first run, and is not offered a minute of 
   assert.equal(m.p.el('hist-empty').hidden, true);
 });
 
+// The first default run is BOTH of the states above at once: no `history.days`, so the server
+// shipped "History is off." in the markup, and a ring a minute old, so the predicate above would
+// raise "Nothing to draw yet." over it. Two boxes, one screen, saying two things where one is
+// true and actionable — which is the screen #151 was written to fix (#157).
+//
+// "History is off." wins: it names a cause and what to do about it, and it is the server's own
+// answer about the config. The other block is for the serve whose journal is on and young.
+//
+// One record, mounted twice, asserted opposite ways. A test that only pinned the block DOWN on
+// the journal-off page would pass over a script that had stopped raising it anywhere — the
+// markup ships it hidden, so the assertion would be reading the shell's own starting value back
+// — and it would pass over a payload that had quietly stopped being empty. The half that says
+// `false` is what makes the other half mean anything: the same record, with a journal, still
+// raises it.
+test('a first run raises one box, and which one is the journal’s answer', async () => {
+  const off = mount(false, () => emptyRing());
+  await settle(off);
+  assert.equal(off.p.el('range-7d').disabled, true, 'precondition: this is a serve with no journal');
+  assert.equal(off.p.el('hist-empty').hidden, true, 'the page said "history is off" and "wait a minute" at once');
+
+  const on = mount(true, () => emptyRing());
+  await settle(on);
+  assert.equal(on.p.el('range-7d').disabled, false, 'precondition: this serve keeps a journal');
+  assert.equal(on.p.el('hist-empty').hidden, false, 'the block is down over a young journal, where it is the true answer');
+});
+
 // The counted half of the sentence under the pills. "7 of 7 days on disk" is not a description
 // of the product, it is a measurement of THIS serve — and a demo has no disk to have measured
 // (#156). Read off the element the server already writes that sentence on, so the script keeps
