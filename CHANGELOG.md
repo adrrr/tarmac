@@ -26,7 +26,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   directory opened, no temp file swept, and no journal file whatever `--history-days` says,
   which it reports rather than dropping in silence. Its
   own settings are still resolved, so a port or a trusted host set in a config file applies. It
-  runs no sampler either, so the day it starts with is the day it keeps. A `demo data` badge
+  runs no sampler either, so the day and the week it starts with are the ones it keeps. A `demo data` badge
   sits beside the title on every
   view, and the terminal says the same under the URL, so a screenshot of it cannot pass for a
   real fleet by accident. The invented fleet feeds the same structures the two real sources are
