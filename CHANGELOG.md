@@ -38,12 +38,19 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   holds a number, which is the same question the charts ask, rather than when the ring holds a
   sample: a serve running before `install`, or with no session open, records a sample a minute
   carrying nothing, and counting those would have put the page back to explaining nothing sixty
-  seconds in. The ring only, and never over a failed read: an empty `30d` still reads as a
-  journal that was not running rather than as a minute of patience, and a serve that has stopped
-  answering is not something to wait for.
+  seconds in. The ring only, never over a failed read, and never where the journal is off: an
+  empty `30d` still reads as a journal that was not running rather than as a minute of patience,
+  a serve that has stopped answering is not something to wait for, and a serve with no journal
+  is already being told so by the box above.
 
 ### Fixed
 
+- **A first run raises one empty-state box, not two.** With no `history.days` set and a ring a
+  minute old, the history view said "History is off." and "Nothing to draw yet." at once: two
+  blocks on one screen, on exactly the fresh install the second of them was written for. The
+  first wins wherever it applies, because it names a cause and the key that turns the journal on.
+  Which leaves the second for the serve whose journal is on and still young, and no longer for
+  the default one, where the sentence about the missing journal says the useful half already.
 - **A named pipe in the journal directory no longer hangs the range read.** `fs.readFile` on a
   FIFO waits for someone to write to the other end, and the journal directory belongs to whoever
   owns the machine — so a FIFO wearing a day file's name stopped the range read dead, and with it
