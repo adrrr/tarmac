@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { collectFleet } from '../src/collect.ts';
-import { parseArgs } from '../src/args.ts';
+import { accepts, COMMAND_NAMES, OPTION_FLAGS, parseArgs, type Command } from '../src/args.ts';
 import { tempDir } from './sandbox.ts';
 
 const SID = 'ea6a607c-42e0-4773-af4d-ae5f5938d819';
@@ -170,6 +170,38 @@ test('an option handed an empty value is refused, never taken as an empty settin
   assert.throws(() => parseArgs(['list', '--claude-bin=']), /--claude-bin needs a value/);
   assert.throws(() => parseArgs(['list', '--stale-after=']), /--stale-after needs a value/);
   assert.throws(() => parseArgs(['serve', '--port=']), /--port needs a value/);
+});
+
+// The mirror of the test above, and the one that inverts an answer rather than widening a
+// path: every boolean took an `=value` suffix and threw the value away, so `--yes=false` ran
+// as `--yes` and skipped the typed confirmation the operator had just declined. Refused by
+// name rather than read as false — a parser this strict about a typo does not guess at
+// truthiness (#155). The sweep is over `OPTION_FLAGS` so a boolean added later is covered
+// here without being remembered: whatever it is, `=` on it is one of these two refusals.
+test('a boolean flag handed a value is refused, never read as the flag alone', () => {
+  const booleans: [Command, string][] = [
+    ['install', '--yes'],
+    ['list', '--json'],
+    ['list', '--watch'],
+    ['serve', '--demo'],
+    ['list', '--help'],
+    ['list', '--version'],
+    ['list', '-v'],
+  ];
+  for (const [command, flag] of booleans) {
+    assert.throws(
+      () => parseArgs([command, `${flag}=false`]),
+      new RegExp(`^Error: ${flag} takes no value$`),
+      `\`${flag}=false\` was not refused`,
+    );
+  }
+  assert.equal(parseArgs(['install', '--yes']).yes, true, 'and the flag on its own still reads');
+
+  for (const flag of OPTION_FLAGS) {
+    const command = COMMAND_NAMES.find((c) => accepts(c, flag));
+    assert.ok(command !== undefined, `no command reads ${flag} — the matrix and the flag list disagree`);
+    assert.throws(() => parseArgs([command, `${flag}=`]), /takes no value|needs a value/, `${flag}= sailed through`);
+  }
 });
 
 test('reads --watch, and leaves it false when it is absent', () => {
