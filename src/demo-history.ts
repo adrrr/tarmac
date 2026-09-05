@@ -82,12 +82,29 @@ const oldestDay = (now: number, days: number): string => {
 };
 
 /**
+ * The newest minute this journal has, which is the newest minute the RING has: the moment the
+ * serve started, and the fleet the live view shows for as long as it is open.
+ *
+ * The journal stops there rather than at the clock that asked, for the reason the demo runs no
+ * sampler at all — the record it was handed is the record it keeps. Bounded by `now` instead, a
+ * serve open for three hours invented three hours of minutes past the end of its own day: past
+ * the last segment every actor has, so their costs climbed for ever, and past the newest minute
+ * of the ring, so the two stopped telling one story an hour in. It also made the answer depend
+ * on when it was asked, which is the one thing a demo may not do.
+ */
+const endOfPast = (dayStart: number): number => dayStart + (DEMO_MINUTES - 1) * MINUTE;
+
+/**
  * Which repetition of the invented day a moment falls in, given the day the ring is anchored on.
  *
  * The last one is the ring's own, unshifted, which is what makes the newest journal day and the
  * record behind the scrubber the same readings rather than two accounts of one fleet. Anything
  * earlier is that same day again, a whole number of days back — a fleet that arrives, works and
  * goes home, five projects at a time, for a week.
+ *
+ * The floor at zero is the ring's own last minute, `DEMO_MINUTES - 1`, which is a whole cycle
+ * after `dayStart` and belongs to the cycle that started there rather than to the next one.
+ * Nothing is ever asked past it: `endOfPast` above is where the journal stops.
  */
 const cycleStartFor = (t: number, dayStart: number): number =>
   dayStart - Math.max(0, Math.ceil((dayStart - t) / CYCLE_MS)) * CYCLE_MS;
@@ -97,20 +114,21 @@ const cycleStartFor = (t: number, dayStart: number): number =>
  * for a day this journal does not cover.
  *
  * The readings sit on the RING's minute grid rather than on the hour, so the day that overlaps
- * the ring carries the ring's own minutes and the two can be compared reading for reading. It
- * stops at `now`: a demo that journalled the rest of today would be showing readings taken in
- * the future, which `readRange` would drop as out of range and a reader would be right to
- * disbelieve.
+ * the ring carries the ring's own minutes and the two can be compared reading for reading.
+ *
+ * A function of `dayStart` and nothing else, the clock that asks included: a demo whose past
+ * grew while somebody looked at it would be a screenshot nobody could re-take.
  */
-export function demoJournalDay(date: string, dayStart: number, now: number): string | null {
+export function demoJournalDay(date: string, dayStart: number): string | null {
   const midnight = midnightOf(date);
   if (midnight === null) return null;
-  if (date < oldestDay(now, DEMO_JOURNAL_DAYS) || date > dayOf(now)) return null;
+  const last = endOfPast(dayStart);
+  if (date < oldestDay(last, DEMO_JOURNAL_DAYS) || date > dayOf(last)) return null;
 
   // The next local midnight, which is 23, 24 or 25 hours along — calendar arithmetic, never a
   // 24-hour block, so the morning a clock shifts does not lose or double an hour of the day.
   const d = new Date(midnight);
-  const end = Math.min(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1, now);
+  const end = Math.min(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1, last);
   const from = Math.ceil((midnight - dayStart) / MINUTE);
   const to = Math.floor((end - dayStart) / MINUTE);
   if (to < from) return null;
@@ -153,6 +171,9 @@ export function createDemoHistoryStore({ dayStart }: { dayStart: number }): Hist
     // absence. `capped` is false for the same reason — nothing here can fill.
     stats: (): HistoryStats => ({ files: 0, bytes: 0, misses: 0, stopped: null, capped: false }),
     read: (range: HistoryRange, now: number): Promise<RangeHistory> =>
-      readRange({ dir: DEMO_HISTORY_DIR, range, now, readDay: async (date) => demoJournalDay(date, dayStart, now) }),
+      // `now` decides which calendar days the range covers, as it does for a real journal; what
+      // is IN each of them is the serve's own frozen past. A demo left open across a midnight
+      // therefore shows six days of seven rather than growing a day it never recorded.
+      readRange({ dir: DEMO_HISTORY_DIR, range, now, readDay: async (date) => demoJournalDay(date, dayStart) }),
   };
 }

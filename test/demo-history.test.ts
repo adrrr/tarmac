@@ -14,6 +14,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createDemoHistoryStore, DEMO_JOURNAL_DAYS, demoJournalDay } from '../src/demo-history.ts';
 import { DEMO_HOME, demoDayStart, demoHistory } from '../src/demo.ts';
 import { journalRecordOf } from '../src/history-store.ts';
@@ -59,7 +60,7 @@ test('a demo serve has a week of journal behind it, and the pills have something
 test('the last day of the journal and the ring are the same readings', () => {
   const samples = demoHistory(DAY_START).read().samples;
   const newest = samples[samples.length - 1];
-  const text = demoJournalDay(dayOf(NOW), DAY_START, NOW);
+  const text = demoJournalDay(dayOf(NOW), DAY_START);
 
   assert.notEqual(text, null, 'the journal has no day for today');
   const records = text!.trim().split('\n').map((l) => JSON.parse(l) as { t: number });
@@ -83,8 +84,25 @@ test('a month asked of the demo answers the days it has, and reports the ones it
   assert.equal(month.days.length, DEMO_JOURNAL_DAYS, 'the month invented days the demo does not carry');
 });
 
-// Two serves see the same past. A screenshot of the demo's week is one anybody can re-take.
-test('two demo stores answer a range identically', async () => {
+// Two serves see the same past, and a demo serve's past does not move while it is open — the
+// same promise the ring already keeps, which is why it runs no sampler.
+//
+// It is the clock that asks that makes this worth a test. Bounded by that clock, the journal
+// went on inventing minutes for as long as the serve stayed up: past the last segment every
+// actor has, so their costs climbed for ever, and past the newest minute of the ring, so the
+// two stopped telling one story an hour in.
+test('the past a demo serve started with is the past it keeps', async () => {
+  const s = demoStore();
+
+  const opened = await s.read('7d', NOW);
+  const threeHoursLater = await s.read('7d', NOW + 3 * 3600_000);
+
+  assert.equal(JSON.stringify(threeHoursLater), JSON.stringify(opened), 'the invented week grew while the serve was open');
+  // Not vacuously: a week that answered nothing compares equal to another week of nothing.
+  assert.ok(opened.coverage.lines > 6 * 1400, `a week of minutes is not ${opened.coverage.lines} readings`);
+});
+
+test('two demo serves of the same age see the same past', async () => {
   const [a, b] = await Promise.all([demoStore().read('7d', NOW), demoStore().read('7d', NOW)]);
 
   assert.equal(JSON.stringify(a), JSON.stringify(b), 'the invented week moved between two stores');
@@ -98,4 +116,14 @@ test('the demo journal names an invented directory and reports nothing on a disk
   assert.ok(s.dir.startsWith(`${DEMO_HOME}/`), `the demo store names a directory off this machine: ${s.dir}`);
   assert.deepEqual(s.stats(), { files: 0, bytes: 0, misses: 0, stopped: null, capped: false });
   assert.deepEqual(s.prune(), { removed: 0, failed: 0 });
+});
+
+// And the same red line held where it can be held rather than argued: the module has no way to
+// reach a disk at all. The end-to-end check next door watches a served home and sees nothing
+// appear in it, which is the consequence; this is the cause, and it is the assertion that
+// survives somebody adding a cache "just for the demo".
+test('nothing in the demo journal can open a file', () => {
+  const src = fs.readFileSync(new URL('../src/demo-history.ts', import.meta.url), 'utf8');
+
+  assert.equal(/from 'node:fs/.test(src), false, 'the demo journal imports a filesystem module');
 });
