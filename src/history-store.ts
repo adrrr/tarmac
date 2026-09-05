@@ -24,6 +24,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { readRange } from './history-range.ts';
+import type { HistoryRange, RangeHistory } from './history-range.ts';
 import type { HistorySample, HistorySession } from './history.ts';
 
 /**
@@ -239,8 +241,11 @@ export interface JournalRecord extends Omit<HistorySample, 'sessions'> {
  * added to `HistorySession` tomorrow does not compile here until somebody has decided whether
  * it belongs in a file that outlives the process. The omission that has to survive every future
  * edit cannot be written as a subtraction from a shape that is free to grow.
+ *
+ * Exported for the demo's invented journal, which is the one other thing that produces a line
+ * of this shape: a second allowlist written out by hand there is a second thing to keep true.
  */
-const lineOf = ({ t, sessions, rateLimits }: HistorySample): JournalRecord => ({
+export const journalRecordOf = ({ t, sessions, rateLimits }: HistorySample): JournalRecord => ({
   t,
   sessions: sessions.map(
     ({ sid, project, kind, state, ctxState, ctxPct, costUsd }): JournalSession => ({
@@ -300,6 +305,20 @@ export interface HistoryStore {
   append(sample: HistorySample): void;
   prune(): HistoryPruned;
   stats(): HistoryStats;
+  /**
+   * A week or a month of that journal, aggregated. The other end of the same directory, put
+   * here rather than left to the caller so there is ONE thing a serve asks about its journal:
+   * `readRange` needs the directory and it needs `capped`, which only the writer knows, and a
+   * caller assembling those two by hand is a caller that can assemble them wrong.
+   *
+   * It is also the seam a journal nobody wrote comes through: `serve --demo` hands over a store
+   * whose days are invented in memory, and the server cannot tell the difference — which is
+   * what keeps the demo off a rendering path of its own (#156).
+   *
+   * `now` is the moment the range ends at, injected for the reason it is injected one module
+   * over: a serve up for a week has to keep asking what "the last seven days" means.
+   */
+  read(range: HistoryRange, now: number): Promise<RangeHistory>;
 }
 
 export interface HistoryStoreOptions {
@@ -452,7 +471,7 @@ export function createHistoryStore({
 
       // One line, one reading, terminated: a reader tailing this file sees whole records, and a
       // process killed between two appends leaves the last one complete.
-      const line = JSON.stringify(lineOf(sample)) + '\n';
+      const line = JSON.stringify(journalRecordOf(sample)) + '\n';
       const bytes = Buffer.byteLength(line);
       const onDisk = measure().bytes;
       if (onDisk + bytes > maxBytes) {
@@ -475,6 +494,12 @@ export function createHistoryStore({
       }
     },
     prune,
+    read(range: HistoryRange, at: number): Promise<RangeHistory> {
+      // `capped` is read here rather than passed in by the caller: it is a fact about this
+      // writer, and a journal at its ceiling looks from the disk alone exactly like a fleet
+      // that went quiet.
+      return readRange({ dir, range, now: at, capped });
+    },
     stats(): HistoryStats {
       const { files, bytes } = measure();
       return { files, bytes, misses, stopped, capped };

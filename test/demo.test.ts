@@ -18,6 +18,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DEMO_HOME, DEMO_MINUTES, DEMO_SESSIONS, demoCollector, demoDayStart, demoFleetAt, demoHistory } from '../src/demo.ts';
+import { DEMO_JOURNAL_DAYS } from '../src/demo-history.ts';
 import { parseArgs } from '../src/args.ts';
 import { HISTORY_SLOTS } from '../src/history.ts';
 import { stateOf } from '../src/map.ts';
@@ -389,6 +390,40 @@ test('a demo serve runs no sampler, so the day it was handed is the day it keeps
   assert.notEqual(after[1], before[1], 'the same server without --demo did not sample either, so this proves nothing');
 });
 
+// The page the demo used to show switched off (#156). A demo serve carries an invented journal,
+// so the two long ranges answer, the pills that ask for them are live, and the sentence about a
+// journal nobody turned on is gone.
+test('serve --demo answers the ranges a journal answers, and the pills that ask for them are live', async (t) => {
+  const { child, port } = await serveDemo();
+  t.after(() => child.kill('SIGKILL'));
+
+  const page = await get(port, '/history');
+  assert.equal(/History is off/.test(page), false, 'the demo says the product is switched off');
+  assert.equal(/id="range-7d"[^>]*\bdisabled\b/.test(page), false, 'the 7d pill is dead on a demo');
+  assert.equal(/id="range-30d"[^>]*\bdisabled\b/.test(page), false, 'the 30d pill is dead on a demo');
+
+  const week = JSON.parse(await get(port, '/api/history?range=7d')) as {
+    enabled: boolean;
+    days: Array<{ date: string; byProject: Array<{ project: string; costUsd: number }> }>;
+    hours: Array<{ n: number; sessions: unknown[] }>;
+    resets: unknown[];
+    coverage: { lines: number; daysRequested: number; skipped: number };
+  };
+  assert.equal(week.enabled, true);
+  assert.equal(week.days.length, DEMO_JOURNAL_DAYS, `the invented week is ${week.days.length} days`);
+  assert.equal(week.coverage.skipped, 0, 'the demo wrote a line its own reader could not parse');
+  assert.ok(week.coverage.lines > 6 * 1400, `a week of minutes is not ${week.coverage.lines} readings`);
+  assert.ok(week.resets.length > 0, 'a week of five-hour windows turned over nowhere');
+  for (const d of week.days) {
+    for (const p of d.byProject) assert.ok(p.costUsd > 0, `${d.date} charges ${p.project} nothing`);
+  }
+
+  // The month shows the week it has rather than inventing the rest of itself.
+  const month = JSON.parse(await get(port, '/api/history?range=30d')) as { days: unknown[]; coverage: { daysRequested: number } };
+  assert.equal(month.coverage.daysRequested, 30);
+  assert.equal((month.days as unknown[]).length, DEMO_JOURNAL_DAYS);
+});
+
 // The other half of "nothing on this machine was read": a demo that journals is a demo that
 // writes an invented fleet into somebody's real record of their real one.
 test('serve --demo writes nothing, journal included, however many days it is asked for', async (t) => {
@@ -398,6 +433,9 @@ test('serve --demo writes nothing, journal included, however many days it is ask
   // Asked for, answered, and still nothing on disk: the record it serves is the seeded ring.
   const record = JSON.parse(await get(port, '/api/history')) as { samples: unknown[] };
   assert.ok(record.samples.length >= HISTORY_SLOTS - 1, `the demo served ${record.samples.length} minutes of record`);
+  // And the invented journal, read in full through the range route, which is the one path here
+  // that would open a file if the demo's days came off a disk.
+  for (const range of ['7d', '30d']) await get(port, `/api/history?range=${range}`);
 
   // The orphan the fixture planted is the one file on this machine `serve` would have touched.
   assert.ok(fs.existsSync(orphan), 'serve --demo swept a real temp file out of a real directory');
@@ -407,7 +445,7 @@ test('serve --demo writes nothing, journal included, however many days it is ask
   // snapshot path and the retention, which is a real path in a capture of an invented fleet.
   assert.equal(/tarmac settings/i.test(out), false, `serve --demo printed its settings block:\n${out}`);
   assert.equal(/reaped/.test(out), false, `serve --demo reported a sweep:\n${out}`);
-  assert.match(out, /--demo keeps no journal/, 'the retention was dropped without a word about it');
+  assert.match(out, /--demo writes no journal/, 'the retention was dropped without a word about it');
 });
 
 /** Every file under a directory, at any depth, relative to it. */

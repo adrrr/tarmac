@@ -155,6 +155,16 @@ export interface ReadRangeOptions {
    * nothing, and this field is rendered as "journal capped".
    */
   capped?: boolean;
+  /**
+   * How one local day is read back, `null` for a day there is nothing for. Defaults to the file
+   * of that name in `dir`, which is what every real journal is.
+   *
+   * The seam exists so a journal can be answered that was never written: `serve --demo` invents
+   * a week of days in memory and hands them through here, so the aggregation below — hours,
+   * days, resets, coverage — is the one the real journal goes through and not a copy of it
+   * (#156). Whoever passes one owns `dir` being a directory nothing opens.
+   */
+  readDay?: (date: string) => Promise<string | null>;
 }
 
 /** A reading as it comes back off the disk: checked for shape, and nothing more. */
@@ -207,7 +217,13 @@ interface DaySessionAcc {
  * the fleet on, and thirty files opened at once is thirty buffers of a day each in memory for
  * an answer that is a few hundred rows.
  */
-export async function readRange({ dir, range, now, capped = false }: ReadRangeOptions): Promise<RangeHistory> {
+export async function readRange({
+  dir,
+  range,
+  now,
+  capped = false,
+  readDay = (date) => fs.readFile(path.join(dir, `${date}.jsonl`), 'utf8').catch(() => null),
+}: ReadRangeOptions): Promise<RangeHistory> {
   const daysRequested = RANGE_DAYS[range];
   const coverage: RangeCoverage = { daysRequested, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped };
   const hours = new Map<number, HourAcc>();
@@ -230,14 +246,11 @@ export async function readRange({ dir, range, now, capped = false }: ReadRangeOp
   const windowEnd = startOfDay(now, -1);
 
   for (const date of days_) {
-    let text: string;
-    try {
-      text = await fs.readFile(path.join(dir, `${date}.jsonl`), 'utf8');
-    } catch {
-      // A day with no file is the normal case: `serve` was not running. A day whose file cannot
-      // be read is the same answer for this reader, and `serve` is not the process that fixes it.
-      continue;
-    }
+    // A day with nothing for it is the normal case: `serve` was not running. A day whose file
+    // cannot be read is the same answer for this reader — the default reader above swallows its
+    // own failure — and `serve` is not the process that fixes it.
+    const text = await readDay(date);
+    if (text === null) continue;
 
     // The day a record is CHARGED to is the file it is in, and the hour it falls in is its own
     // clock. The file name is the day the writer decided on, so a reading taken a second before

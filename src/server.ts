@@ -11,7 +11,7 @@ import type { View } from './render.ts';
 import { hostName, SOURCE_PHRASE } from './config.ts';
 import { createHistory, HISTORY_CADENCE_MS } from './history.ts';
 import type { FleetHistory, HistorySample } from './history.ts';
-import { HISTORY_RANGES, readRange } from './history-range.ts';
+import { HISTORY_RANGES } from './history-range.ts';
 import type { HistoryRange, RangeHistory } from './history-range.ts';
 import type { HistoryStore } from './history-store.ts';
 import type { Source } from './config.ts';
@@ -193,10 +193,14 @@ export function createFleetServer({
     const held = ranges.get(range);
     if (held !== undefined && (held.at === null || now - held.at < rangeCacheMs)) return held.reading;
     const entry: Cached = { at: null, reading: undefined as unknown as Promise<RangeHistory> };
-    // Read once per range per minute rather than per request: `stats()` walks the directory, and
-    // a journal that stopped at its cap stays stopped for hours, so a minute-old answer to that
-    // question is the same answer.
-    entry.reading = readRange({ dir: store.dir, range, now, capped: store.stats().capped }).then(
+    // Asked of the STORE, which owns both ends of its own journal: this route never learns where
+    // the days come from, so the invented week `serve --demo` carries arrives here as an ordinary
+    // range read and the demo gets no rendering path of its own (#156).
+    //
+    // Read once per range per minute rather than per request: the store walks its directory to
+    // answer, and a journal that stopped at its cap stays stopped for hours, so a minute-old
+    // answer to that question is the same answer.
+    entry.reading = store.read(range, now).then(
       (answer) => {
         entry.at = Date.now();
         return answer;
