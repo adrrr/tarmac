@@ -1,16 +1,19 @@
-// The suite's two ways of waiting on something that may never come: a line on a child's
-// stdout, and an HTTP request a server may accept and never answer. Not a `*.test.ts`, so
-// the runner's glob leaves it alone — same arrangement as `fleet-fixtures.ts`.
+// The suite's three ways of waiting on something that may never come: a line on a child's
+// stdout, an HTTP request a server may accept and never answer, and a promise that may never
+// settle — a read of the journal directory is one, since `fs.readFile` on a FIFO waits for a
+// writer that need never come (#136). Not a `*.test.ts`, so the runner's glob leaves it alone
+// — same arrangement as `fleet-fixtures.ts`.
 //
 // The deadline is the whole point. Both serve harnesses used to wait on `tarmac serving`
 // with nothing to stop them: when a change made that line never come, the tests that should
 // have gone red stopped reporting instead, and the file had to be killed from outside. A
 // wait that cannot fail is a test that cannot fail.
 //
-// Both live HERE, together, because neither deadline is one line of code and both are easy
-// to write in a form that looks bounded and is not (see `rawGet`). One home, one pair of
-// tests in `bounded-waits.test.ts` — and a static guard that keeps the raw clients out of
-// the test files, where nothing would prove their deadline fires.
+// All three live HERE, together, because no one of these deadlines is one line of code and
+// each is easy to write in a form that looks bounded and is not (see `rawGet`, and see the
+// unref that made `waitForSettled` skippable). One home, one set of tests in
+// `bounded-waits.test.ts` — and a static guard that keeps the raw clients out of the test
+// files, where nothing would prove their deadline fires.
 
 import http from 'node:http';
 import type { ChildProcess } from 'node:child_process';
@@ -135,6 +138,38 @@ export function waitForOutput(child: ChildProcess, marker: RegExp, timeoutMs = N
     });
     child.on('error', (e) => fail(e));
     child.on('exit', (code) => fail(new Error(`cli exited ${code}: ${err || out}`)));
+  });
+}
+
+/**
+ * Resolves with `work`, or rejects — always within `timeoutMs` — when it has not settled by
+ * then, naming `what` was waited for and how long it was given. A promise that settles either
+ * way inside the deadline is handed back untouched, its own failure included.
+ *
+ * ⚠️ The rejection does not CANCEL anything, and there is no shape of this that could: a
+ * `fs.readFile` blocked on a FIFO holds a libuv thread until someone opens the other end, so a
+ * test that reports through this helper and stops there ends in a file that never exits — the
+ * hang, one step further out. Whatever was left blocked is the caller's to release, in a
+ * `finally`, exactly as `waitForOutput` kills the child it gave up on.
+ */
+export function waitForSettled<T>(work: Promise<T>, what: string, timeoutMs = NET_DEADLINE_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    // REF'D, unlike the deadline in `waitForOutput`, and the difference is not a preference: a
+    // child with open pipes holds the loop while that wait is out, and a promise holds nothing
+    // at all. Unref'd, this timer was skipped on any run where the loop had nothing else to do
+    // — the wait then never settled, and node 22 cancelled all three of this helper's tests
+    // with `Promise resolution is still pending but the event loop has already resolved`, while
+    // node 24 and 26 happened to stay busy long enough to hide it. A deadline that may not fire
+    // is the hang this module exists to prevent, wearing a bound's clothes.
+    //
+    // The price is paid back by the `clearTimeout` below: the loop is held while the wait is
+    // out, and not a millisecond longer. That half has a test now, which the unref had made
+    // unwritable — a cleared unref'd timer and a pending one are the same to every reading.
+    const timer = setTimeout(() => reject(new Error(`${what} had not settled after ${timeoutMs}ms`)), timeoutMs);
+    // `reject` on a promise that has already settled is a no-op, and attaching the handler is
+    // what marks `work`'s own rejection handled — a read that fails a minute after its request
+    // gave up must not become an unhandled rejection in a file that has moved on.
+    work.then(resolve, reject).finally(() => clearTimeout(timer));
   });
 }
 

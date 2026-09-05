@@ -116,6 +116,11 @@ export interface RangeCoverage {
   /**
    * Lines that would not parse, or that parsed into something that is not a reading. This is
    * #134's number, and it is kept for that: a torn line is a filesystem event worth seeing.
+   *
+   * And the one thing counted here that is not a line: a day file that is not a regular file,
+   * which is one whole day nothing could be read from (#136). The same fact in the same field
+   * rather than a second one, because it answers the same question a reader asks of a thin
+   * range — what did this read step over.
    */
   skipped: number;
   /** Lines that read cleanly and carry a clock outside the range. A different fact, counted apart. */
@@ -157,7 +162,8 @@ export interface ReadRangeOptions {
   capped?: boolean;
   /**
    * How one local day is read back, `null` for a day there is nothing for. Defaults to the file
-   * of that name in `dir`, which is what every real journal is.
+   * of that name in `dir`, which is what every real journal is — refusing anything that is not
+   * a regular file (#136), counted in `coverage.skipped`.
    *
    * The seam exists so a journal can be answered that was never written: `serve --demo` invents
    * a week of days in memory and hands them through here, so the aggregation below — hours,
@@ -217,15 +223,56 @@ interface DaySessionAcc {
  * the fleet on, and thirty files opened at once is thirty buffers of a day each in memory for
  * an answer that is a few hundred rows.
  */
-export async function readRange({
-  dir,
-  range,
-  now,
-  capped = false,
-  readDay = (date) => fs.readFile(path.join(dir, `${date}.jsonl`), 'utf8').catch(() => null),
-}: ReadRangeOptions): Promise<RangeHistory> {
+export async function readRange({ dir, range, now, capped = false, readDay }: ReadRangeOptions): Promise<RangeHistory> {
   const daysRequested = RANGE_DAYS[range];
   const coverage: RangeCoverage = { daysRequested, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped };
+  // The default reader, built here rather than in the signature because it counts into
+  // `coverage`: a day file refused by kind is a record this range could not read, which is the
+  // question `skipped` answers — and only the DISK path can meet one. An injected reader
+  // (#156's invented week) never opens a name, so the guard is the default's own.
+  //
+  // What is behind the name is not this reader's to assume. The store writes day files into
+  // a directory that belongs to the user, and anything can land in it: `fs.readFile` on a
+  // FIFO blocks until someone writes to the other end, which hung this read, the request
+  // waiting on it, and every request that joined the cached read behind it (#136). So the
+  // kind is asked BEFORE the open, and only a regular file is opened.
+  //
+  // `lstat`, not `stat`, and NOT for the pipe: `stat` reports the target's kind, so it
+  // refuses a link pointing at a FIFO exactly as this does. The one shape the two disagree
+  // about is a link to a regular file, and that is the whole of the choice. A journal file
+  // is a file this store appended to; a symbolic link is a name somebody else put there,
+  // aimed at something nobody told this reader about, and following it reads whatever it
+  // is aimed at today. Only what we wrote, which is `reap.ts`'s rule for the same reason.
+  //
+  // A HARD link to a regular file is the shape neither call can see — it carries the
+  // target's inode, so it reads as a plain file and its day lands in `days[]`. No hang can
+  // come of it (a hard link to a FIFO is still refused by kind), so what this guard holds
+  // is "nothing that can block", not "nothing somebody else named".
+  //
+  // The cost, and it is real: `history-store.ts:386` measures the directory with `statSync`,
+  // so a linked day file is charged to the 256 MB cap and never read. The two readings of
+  // one directory disagree by exactly that shape, and this is the side that refuses.
+  //
+  // A check before an open is a race, and it stays one: nothing stops the name being
+  // replaced between the two. What it costs is bounded — one hung read, once, on a
+  // directory somebody is racing — and `serve` answers 504 rather than waiting for it.
+  const readDayFromDisk = async (date: string): Promise<string | null> => {
+    const file = path.join(dir, `${date}.jsonl`);
+    try {
+      if (!(await fs.lstat(file)).isFile()) {
+        // Counted rather than passed over, and counted here: a day file that is not a file is
+        // a record this range could not read, which is the question `skipped` answers.
+        coverage.skipped += 1;
+        return null;
+      }
+      return await fs.readFile(file, 'utf8');
+    } catch {
+      // A day with no file is the normal case: `serve` was not running. A day whose file cannot
+      // be read is the same answer for this reader, and `serve` is not the process that fixes it.
+      return null;
+    }
+  };
+  const read = readDay ?? readDayFromDisk;
   const hours = new Map<number, HourAcc>();
   const days = new Map<string, Map<string, DaySessionAcc>>();
   const resets: RangeReset[] = [];
@@ -247,9 +294,9 @@ export async function readRange({
 
   for (const date of days_) {
     // A day with nothing for it is the normal case: `serve` was not running. A day whose file
-    // cannot be read is the same answer for this reader — the default reader above swallows its
-    // own failure — and `serve` is not the process that fixes it.
-    const text = await readDay(date);
+    // cannot be read is the same answer for this reader — both readers swallow their own
+    // failure — and `serve` is not the process that fixes it.
+    const text = await read(date);
     if (text === null) continue;
 
     // The day a record is CHARGED to is the file it is in, and the hour it falls in is its own
