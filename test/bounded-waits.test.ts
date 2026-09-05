@@ -299,13 +299,15 @@ test('a promise that never settles is a rejection naming what was waited for', a
 test('a promise that settles inside its deadline is handed back untouched, either way', async () => {
   assert.equal(await waitForSettled(Promise.resolve('a range'), 'the range', NET_DEADLINE_MS), 'a range');
   const failed = waitForSettled(Promise.reject(new Error('EACCES: the journal')), 'the range', NET_DEADLINE_MS);
-  await assert.rejects(() => failed, /EACCES: the journal/, 'the work-s own failure, not a deadline dressed up as one');
+  await assert.rejects(() => failed, /EACCES: the journal/, "the read's own failure, not a deadline dressed up as one");
 });
 
 // A deadline still counting must never be the reason a file stays open — the failure this
-// module is about, in miniature, and the same unref `waitForOutput` carries. Measured while the
-// wait is STILL OUT, since that is the only moment a deadline can hold anything: `getActive\
-// ResourcesInfo` reports what keeps the event loop alive, which an unref'd timer does not.
+// module is about, in miniature, and the same unref `waitForOutput` carries. Read while the
+// wait is STILL OUT, since that is the only moment a deadline can hold anything, and because
+// `process.getActiveResourcesInfo` reports what keeps the event loop alive: a timer that has
+// been cleared and one that was unref'd are equally absent from it, so a reading taken after
+// the wait had settled could only ever be green.
 test('a deadline still counting does not hold the file open', () => {
   const timers = (): number => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
   const before = timers();
