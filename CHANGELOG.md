@@ -44,6 +44,22 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A named pipe in the journal directory no longer hangs the range read.** `fs.readFile` on a
+  FIFO waits for someone to write to the other end, and the journal directory belongs to whoever
+  owns the machine — so a FIFO wearing a day file's name stopped the range read dead, and with it
+  the `/api/history?range=` request waiting on that read and every request that joined it inside
+  the cached minute. The page fetching it sets no timeout of its own, so the charts sat on a
+  spinner with nothing to report. Two changes, and each stands without the other. A day file's
+  kind is now asked before it is opened, and only a regular file is read: anything else, a link
+  included, is counted in `coverage.skipped` and stepped over, so the rest of the range is served
+  as usual. And the request itself has a deadline of thirty seconds, past which it answers `504`
+  naming the directory nothing came back from, rather than waiting. A read that outlived its
+  request is abandoned, never restarted — nothing can cancel a blocked open — so a directory that
+  has stopped answering costs one read, and the answer is served to whoever is asking if it
+  lands. The READER is what this fixes. A FIFO wearing today's name still stops the writer, since
+  `appendFileSync` blocks on one too and that block is synchronous, which no deadline can fire
+  through.
+
 - **An empty session id is absent, not a name.** An entry from `claude agents --json` carrying
   `sessionId: ""` passed the type check that reads it, and the empty string travelled on as an
   id — through the fleet and into the journal as `sid: ""` — while discovery health had already

@@ -1011,6 +1011,15 @@ clock while each line carries the reading's own, so a clock corrected overnight 
 `coverage.skipped` is the corrupted ones, which is a filesystem event worth seeing, and
 `coverage.outOfRange` the ones whose clock puts them somewhere else.
 
+A whole day is skipped, and counted in `coverage.skipped` too, when the name a day file would
+have is not a regular file. The directory is yours and anything can land in it: reading a named
+pipe there waits for someone to write to the other end, which would hang the read, the request on
+it and every request sharing it. The kind is asked before the file is opened, and a symlink is
+refused with the rest — what the store writes is a file, so a link is a name somebody else put
+there. That is the READER. The writer still opens today's file to append to it, and a named pipe
+wearing that name blocks it, which stops the sampler and everything else this process does.
+Nothing but you puts one there, and nothing here defends against it.
+
 Inside a reading, what cannot be read costs itself and nothing around it. A `rate_limits` the
 source did not shape as two windows, which is a shape it does send, costs the two window figures
 for that minute and leaves the sessions alone. A session entry with no id of its own, or one that is
@@ -1022,6 +1031,19 @@ identities rather than measurements, and the day and the hour keep the name they
 Each range is read at most once a minute, held for that long and shared between requests, so a
 page that polls, or a reader moving between 7d and 30d, does not put a month of files through the
 thread that also samples the fleet. `list` never comes here at all.
+
+A request waits thirty seconds for that read and then answers `504`, naming the directory nothing
+came back from. A journal that answered with something unreadable is a `500` instead: the first
+sends you to the directory, the second to the file. The read that ran out of time is abandoned
+rather than restarted — nothing cancels a blocked open — so a directory that has stopped
+answering costs one read however many requests give up on it, and if it does land, the answer is
+served to whoever is asking then. The price of not restarting it: that range answers `504` for as
+long as `serve` runs, including after whatever was stuck has been cleared away. Restarting
+`serve` is what starts a new read of it.
+
+The deadline bounds the WAIT, not the work. The size of the directory is measured synchronously
+before the read begins, so a volume that has stopped answering `readdir` stops this process where
+it stands, and no timer here fires through that.
 
 ## Configuration
 

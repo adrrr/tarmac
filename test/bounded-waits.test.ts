@@ -19,7 +19,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { dyingServer, NET_DEADLINE_MS, netDeadlineFrom, rawGet, rawGetText, silentServer, waitForOutput } from './bounded.ts';
+import { dyingServer, NET_DEADLINE_MS, netDeadlineFrom, rawGet, rawGetText, silentServer, waitForOutput, waitForSettled } from './bounded.ts';
 import { unboundedWaits } from './scan-waits.ts';
 import { DEADLINE_UNDER_TEST_CALL, HAND_TYPED_DEFAULT_DEFINITION, RAW_CLIENT_IMPORT, SPLIT_WAIT_CALL, VERDICTS } from './scan-waits.fixtures.ts';
 
@@ -277,4 +277,46 @@ test('an answer that dies mid-body is a rejection, not a wait forever', async ()
     dying.closeAllConnections();
     await new Promise<void>((r) => dying.close(() => r()));
   }
+});
+
+// ── the wait that is not on a socket at all ───────────────────────────────────────────
+// The third shape, and the one the journal brought in: a promise that may never settle. A
+// FIFO left in the journal directory blocks `fs.readFile` until someone writes to the other
+// end (#136), so the tests that prove that read is bounded must not be unbounded themselves.
+// One helper rather than a race written out in each of them, for the reason the two above are
+// shared: a bound is easy to write in a form that reads bounded and is not.
+test('a promise that never settles is a rejection naming what was waited for', async () => {
+  await assert.rejects(
+    () => waitForSettled(new Promise(() => {}), 'a range read over a FIFO', 20),
+    (e: Error) => {
+      assert.match(e.message, /a range read over a FIFO/, 'names what never came');
+      assert.match(e.message, /20ms/, 'and how long it was given');
+      return true;
+    },
+  );
+});
+
+test('a promise that settles inside its deadline is handed back untouched, either way', async () => {
+  assert.equal(await waitForSettled(Promise.resolve('a range'), 'the range', NET_DEADLINE_MS), 'a range');
+  const failed = waitForSettled(Promise.reject(new Error('EACCES: the journal')), 'the range', NET_DEADLINE_MS);
+  await assert.rejects(() => failed, /EACCES: the journal/, "the read's own failure, not a deadline dressed up as one");
+});
+
+// The other half of a deadline that HOLDS the loop, and the price of it firing at all: a wait
+// that is over must let go at once. A cleared deadline and one left counting are the same
+// answer and a very different file — sixty seconds of held loop after the last assertion is a
+// run that reports and then sits there, which is most of the way back to the hang.
+//
+// Measured on a child rather than on `getActiveResourcesInfo()` here: the runner arms a timer
+// of its own per test under `--test-timeout`, so a count taken in-process is reading the
+// runner as much as the helper. Whether the process ENDS is the property, and it is the one a
+// dropped `clearTimeout` breaks.
+test('a wait that is over lets the process go at once', async () => {
+  const bounded = new URL('./bounded.ts', import.meta.url).href;
+  const c = child(`import(${JSON.stringify(bounded)}).then((m) => m.waitForSettled(Promise.resolve(1), 'a settled read', 20000))`);
+  const started = Date.now();
+  const [code] = (await once(c, 'exit')) as [number | null];
+  const took = Date.now() - started;
+  assert.equal(code, 0, 'the child ran the helper and ended on its own');
+  assert.ok(took < 10_000, `a deadline left counting holds the process to its full 20s: ended in ${took}ms`);
 });
