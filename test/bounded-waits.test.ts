@@ -302,10 +302,16 @@ test('a promise that settles inside its deadline is handed back untouched, eithe
   await assert.rejects(() => failed, /EACCES: the journal/, 'the work-s own failure, not a deadline dressed up as one');
 });
 
-// A stray deadline must never be the reason a file stays open — the failure this module is
-// about, in miniature, and the same unref `waitForOutput` carries.
-test('the deadline of a wait that succeeded does not hold the file open', async () => {
-  const before = process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
-  await waitForSettled(Promise.resolve(1), 'the range', NET_DEADLINE_MS);
-  assert.equal(process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length, before, 'the timer was cleared');
+// A deadline still counting must never be the reason a file stays open — the failure this
+// module is about, in miniature, and the same unref `waitForOutput` carries. Measured while the
+// wait is STILL OUT, since that is the only moment a deadline can hold anything: `getActive\
+// ResourcesInfo` reports what keeps the event loop alive, which an unref'd timer does not.
+test('a deadline still counting does not hold the file open', () => {
+  const timers = (): number => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
+  const before = timers();
+  // Never settles, so the deadline below is pending for the whole assertion. Its rejection is
+  // caught here and nowhere else: an unhandled one, a minute after this file has moved on, is
+  // the kind of failure that lands on whichever test happens to be running then.
+  waitForSettled(new Promise(() => {}), 'a read nobody is waiting for', NET_DEADLINE_MS).catch(() => {});
+  assert.equal(timers(), before, 'the deadline is out, and the loop is not held by it');
 });

@@ -154,9 +154,10 @@ export function waitForOutput(child: ChildProcess, marker: RegExp, timeoutMs = N
 export function waitForSettled<T>(work: Promise<T>, what: string, timeoutMs = NET_DEADLINE_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${what} had not settled after ${timeoutMs}ms`)), timeoutMs);
-    // A settled wait must not be the reason the file stays open, and `unref` alone is not that
-    // promise: an unref'd timer still fires, and a rejection nobody is listening to any more is
-    // an unhandled one. The `clearTimeout` below is what actually ends it; this is the belt.
+    // A deadline still counting must not be the reason the file stays open — a wait that is
+    // GIVEN a deadline it never reaches is the ordinary case here, and an unref'd timer keeps
+    // nothing alive. The `clearTimeout` below ends it the moment the wait is over; this is what
+    // holds while it is still out.
     timer.unref();
     // `reject` on a promise that has already settled is a no-op, and attaching the handler is
     // what marks `work`'s own rejection handled — a read that fails a minute after its request
