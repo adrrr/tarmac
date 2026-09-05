@@ -358,9 +358,9 @@ export function createFleetServer({
           // when something does from being a request that hangs instead of an answer.
           //
           // A read that has not come back is the other failure, and it is not the same news: 500
-          // says the journal was read and would not answer, 504 says nothing came back from the
-          // directory at all — which is a directory to go and look at. The page prints whichever
-          // sentence arrives as the reason the charts are empty.
+          // is a read that came back with a failure, 504 is a read that did not come back at all
+          // — the first sends a reader to the file, the second to the directory. The page prints
+          // whichever sentence arrives as the reason the charts are empty.
           res.writeHead(e instanceof JournalTimeout ? 504 : 500, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
           res.end(`tarmac could not read the fleet journal:\n${reason(e)}\n`);
           return;
