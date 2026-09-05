@@ -154,7 +154,10 @@ export function demoJournalDay(date: string, dayStart: number): string | null {
     const t = dayStart + k * MINUTE;
     const cycleStart = cycleStartFor(t, dayStart);
     const minute = Math.round((t - cycleStart) / MINUTE);
-    text += `${JSON.stringify(journalRecordOf(ring.record(demoFleetAt(minute, cycleStart, t))))}\n`;
+    // How many cycles before the newest day this reading belongs to — what lets the seven-day
+    // window climb across the whole invented week instead of replaying one day's ramp.
+    const cyclesBack = Math.round((dayStart - cycleStart) / CYCLE_MS);
+    text += `${JSON.stringify(journalRecordOf(ring.record(demoFleetAt(minute, cycleStart, t, undefined, cyclesBack))))}\n`;
   }
   return text;
 }

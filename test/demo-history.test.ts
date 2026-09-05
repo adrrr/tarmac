@@ -71,6 +71,24 @@ test('a demo serve has a week of journal behind it, and the pills have something
 // The point of the whole exercise. A demo whose journal was invented separately would show a
 // week that has nothing to do with the eight sessions on the other two views, and the day the
 // two overlap is where that shows: the last day of the journal IS the ring, minute for minute.
+// The invented account's seven-day window must climb across the invented week the way a real
+// one does. The day repeats, and a `seven_day` that replayed its cycle-relative ramp fell 14
+// points at every day boundary — six full-height "7d reset" lines on the 7d chart of a week in
+// which the 24h ring shows the same window climbing cleanly. No real account turns its weekly
+// window over daily; the demo may not either.
+test('the invented week turns its seven-day window over nowhere', async () => {
+  const week = await demoStore().read('7d', NOW);
+  assert.deepEqual(
+    week.resets.filter((r) => r.limit === 'seven_day'),
+    [],
+    'the invented week draws a "7d reset" line the ring knows nothing about',
+  );
+  assert.ok(week.resets.some((r) => r.limit === 'five_hour'), 'no window turned over at all');
+  const seven = week.hours.map((h) => h.rateLimits.seven_day);
+  assert.equal(seven.filter((v) => v === null).length, 0, 'an hour of the invented week has no seven-day reading');
+  assert.ok(Math.min(...(seven as number[])) > 0, `the oldest hour of the week reads ${Math.min(...(seven as number[]))}%`);
+});
+
 test('the last day of the journal and the ring are the same readings', () => {
   const samples = demoHistory(DAY_START).read().samples;
   const newest = samples[samples.length - 1];
