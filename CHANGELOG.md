@@ -22,7 +22,8 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   record is, so the newest journal day and the record behind the scrubber are the same readings
   minute for minute; it is answered through the seam a real journal is answered through, so
   there is no second rendering path, and `30d` shows the seven days there are rather than
-  inventing the rest. It reads no fleet and writes nothing: no `claude` spawned, no snapshot
+  inventing the rest, and the page says the days under those two pills were invented rather than
+  counting them off a disk it never opened. It reads no fleet and writes nothing: no `claude` spawned, no snapshot
   directory opened, no temp file swept, and no journal file whatever `--history-days` says,
   which it reports rather than dropping in silence. Its
   own settings are still resolved, so a port or a trusted host set in a config file applies. It

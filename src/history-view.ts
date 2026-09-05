@@ -762,6 +762,11 @@ export const HISTORY_TOUCH_CSS = `
 export interface HistoryViewOptions {
   /** Whether `history.days` is set, which the SERVER knows and the page would have to ask for. */
   historyEnabled: boolean;
+  /**
+   * Whether the journal behind those ranges is the invented one. Same reason `historyEnabled` is
+   * here: it is the server's fact, and the page may not claim it read a disk it never opened.
+   */
+  demo?: boolean;
 }
 
 const chart = (id: string, name: string, sub: string): string =>
@@ -779,7 +784,7 @@ const chart = (id: string, name: string, sub: string): string =>
  * script after a round trip. A reader with no journal never sees a range flicker from live to
  * refused, and a browser with no JavaScript still gets told why the page is empty.
  */
-export function renderHistoryView({ historyEnabled }: HistoryViewOptions): string {
+export function renderHistoryView({ historyEnabled, demo = false }: HistoryViewOptions): string {
   const off = !historyEnabled;
   return `<div class="view view-history">
 ${
@@ -798,10 +803,12 @@ ${chart('quota', 'Quota', 'account &middot; 24h')}
     <button type="button" id="range-24h" data-range="24h" aria-pressed="true">24h</button>
     <button type="button" id="range-7d" data-range="7d" aria-pressed="false"${off ? ' disabled' : ''}>7d</button>
     <button type="button" id="range-30d" data-range="30d" aria-pressed="false"${off ? ' disabled' : ''}>30d</button>
-    <div class="covers" id="hist-covers">${
+    <div class="covers" id="hist-covers"${demo ? ' data-days="days invented"' : ''}>${
       off
         ? '24h from memory &middot; 7d and 30d need the journal, which is off'
-        : '24h from memory &middot; 7d and 30d from the journal on disk'
+        : demo
+          ? '24h from memory &middot; 7d and 30d from a journal invented in memory'
+          : '24h from memory &middot; 7d and 30d from the journal on disk'
     }</div>
   </div>
 </div>`;
@@ -840,6 +847,11 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   // and not this page's — and a copy of both, kept in step by hand, is how the two come to
   // disagree.
   var covers24 = covers.textContent;
+  // What this serve calls the days behind its two long ranges. The sentence above is the
+  // server's and is kept rather than written again; this is the half of it the script rebuilds
+  // per range, and where a day came from is no more this page's answer there than it is here.
+  // Absent is what every serve that reads its journal off a disk says, which is most of them.
+  var daysWord = covers.getAttribute('data-days') || 'days on disk';
   var state = { range: '24h', data: null, err: null, iso: {}, cursor: {}, loading: false, gen: 0 };
   // Which series a chart is isolated on, or null. Read through a function and compared against
   // null rather than tested for truth: path.basename('/') is the empty string, so a project
@@ -1296,7 +1308,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     if (state.loading) return 'reading ' + state.range + '…';
     if (state.range === '24h') return covers24;
     if (!d || !d.coverage) return state.range + ' from the journal';
-    var c = d.coverage, said = state.range + ' from the journal · ' + d.days.length + ' of ' + c.daysRequested + ' days on disk';
+    var c = d.coverage, said = state.range + ' from the journal · ' + d.days.length + ' of ' + c.daysRequested + ' ' + daysWord;
     // Said once and quietly: a journal that stopped at its cap, and readings the reader could
     // not use. Neither is a fault to shout about, and both change what the charts above mean.
     if (c.capped) said += ' · journal capped';

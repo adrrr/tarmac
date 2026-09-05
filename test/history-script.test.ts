@@ -61,7 +61,7 @@ const journal = (range: string): unknown => ({
   coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
 });
 
-const page = (historyEnabled = true): string => renderPage({ rows: [row()], health: health() }, 'history', { historyEnabled });
+const page = (historyEnabled = true, demo = false): string => renderPage({ rows: [row()], health: health() }, 'history', { historyEnabled, demo });
 
 interface Mounted {
   p: Page;
@@ -73,8 +73,12 @@ interface Mounted {
   fail: (on: boolean) => void;
 }
 
-function mount(historyEnabled = true, body: (url: string) => unknown = (u) => (u === '/api/history' ? ring() : journal(u.slice(-2)))): Mounted {
-  const html = page(historyEnabled);
+function mount(
+  historyEnabled = true,
+  body: (url: string) => unknown = (u) => (u === '/api/history' ? ring() : journal(u.slice(-2))),
+  demo = false,
+): Mounted {
+  const html = page(historyEnabled, demo);
   const urls: string[] = [];
   let held: (() => void) | null = null;
   let holding = false;
@@ -592,4 +596,22 @@ test('an empty journal range is not a first run, and is not offered a minute of 
   m.p.el('range-30d').fire('click');
   await settle(m);
   assert.equal(m.p.el('hist-empty').hidden, true);
+});
+
+// The counted half of the sentence under the pills. "7 of 7 days on disk" is not a description
+// of the product, it is a measurement of THIS serve — and a demo has no disk to have measured
+// (#156). Read off the element the server already writes that sentence on, so the script keeps
+// asking the server rather than deciding for itself.
+test('a demo counts the days it invented, and a real serve counts the days on disk', async () => {
+  const demo = mount(true, undefined, true);
+  await settle(demo);
+  demo.p.el('range-7d').fire('click');
+  await settle(demo);
+  assert.match(demo.p.el('hist-covers').textContent, /7d from the journal · 1 of 7 days invented/);
+
+  const real = mount();
+  await settle(real);
+  real.p.el('range-7d').fire('click');
+  await settle(real);
+  assert.match(real.p.el('hist-covers').textContent, /7d from the journal · 1 of 7 days on disk/);
 });

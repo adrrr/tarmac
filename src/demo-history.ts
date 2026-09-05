@@ -50,9 +50,20 @@ const MINUTE = 60_000;
  * How long the invented day is, as a span rather than as a slot count.
  *
  * `DEMO_MINUTES` is one more than the ring holds, so that the record dates itself by its own
- * oldest reading; the DAY it plays is the 24 hours those minutes cover, and repeating it on that
- * period tiles the past exactly. A period of `DEMO_MINUTES` would leave a minute-wide hole
- * between one day and the next, once a day, for ever.
+ * oldest reading. The DAY it plays is the 24 hours those minutes cover, and this is the period
+ * the past repeats on.
+ *
+ * It decides the SHAPE of the past and never its density — a record is written every minute
+ * whatever this says. A period shorter than the day plays the fleet arriving and going home
+ * more than once between two midnights, which charges a fraction of a day's work to each of
+ * them and can leave an actor born late in the day out of the week entirely. The suite holds
+ * the consequence rather than the number: every full day of the invented week costs the same
+ * and carries all five projects, which is true of a whole day repeated and of nothing else.
+ *
+ * What is NOT held, because it cannot be seen: whether an older cycle replays the day's last
+ * minute or stops one short of it. Both tile the past exactly and both leave every day the same
+ * length, the same cost and the same fleet. This is the day the ring covers, which makes it the
+ * defensible choice rather than the pinned one.
  */
 const CYCLE_MS = (DEMO_MINUTES - 1) * MINUTE;
 
@@ -172,8 +183,13 @@ export function createDemoHistoryStore({ dayStart }: { dayStart: number }): Hist
     stats: (): HistoryStats => ({ files: 0, bytes: 0, misses: 0, stopped: null, capped: false }),
     read: (range: HistoryRange, now: number): Promise<RangeHistory> =>
       // `now` decides which calendar days the range covers, as it does for a real journal; what
-      // is IN each of them is the serve's own frozen past. A demo left open across a midnight
-      // therefore shows six days of seven rather than growing a day it never recorded.
+      // is IN each of them is the serve's own frozen past. So a demo left open loses a day off
+      // the front at each midnight — six of seven the next morning, and nothing at all a week
+      // in, which is the empty page this exists to remove, reached quietly. The alternative is
+      // to date the range on the frozen past too, and then a serve open for three days draws a
+      // week that ended three days ago under a live view dated now. Neither is right for a
+      // process meant to be opened, looked at and closed; this one at least degrades the way a
+      // real journal that stopped being written does.
       readRange({ dir: DEMO_HISTORY_DIR, range, now, readDay: async (date) => demoJournalDay(date, dayStart) }),
   };
 }

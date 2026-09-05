@@ -57,6 +57,15 @@ test('a demo serve has a week of journal behind it, and the pills have something
   // week would be showing every reader a serve that had been stopping and starting all week.
   const inner = week.hours.slice(1, -1);
   assert.ok(inner.every((h) => h.n === 60), `an hour of the invented week holds ${Math.min(...inner.map((h) => h.n))} readings`);
+
+  // And a WHOLE day repeated, which is what the period is worth holding by. Play a fraction of
+  // the day between two midnights instead and each of them is charged a fraction of a day's
+  // work, while an actor born late in the day never appears at all — a week that still passes
+  // every assertion above. Today is left out: it is the one day the past stops partway through.
+  const whole = week.days.slice(0, -1);
+  const totals = whole.map((d) => Math.round(d.byProject.reduce((sum, p) => sum + p.costUsd, 0) * 100));
+  assert.equal(new Set(totals).size, 1, `the full days of the invented week cost ${[...new Set(totals)].join(', ')} cents`);
+  assert.ok(whole.every((d) => d.byProject.length === 5), `a full day of the week carries ${Math.min(...whole.map((d) => d.byProject.length))} projects, not the fleet's five`);
 });
 
 // The point of the whole exercise. A demo whose journal was invented separately would show a
@@ -76,6 +85,11 @@ test('the last day of the journal and the ring are the same readings', () => {
   for (const s of samples.filter((x) => x.t >= records[0].t)) {
     assert.deepEqual(records.find((r) => r.t === s.t), journalRecordOf(s), `they disagree about ${new Date(s.t).toISOString()}`);
   }
+  // Both directions. The loop above proves the journal holds every minute the ring holds; on its
+  // own it says nothing about a journal that runs one minute PAST the ring, which is a reading of
+  // the invented day after its last — a fleet nobody ever saw, dated a minute after the serve
+  // started, and the exact thing the newest-minute bound exists to prevent.
+  assert.equal(records[records.length - 1].t, newest.t, 'the journal carries a reading the ring never had');
 });
 
 // A range that shows what exists beats one invented badly: the demo seeds a week, and a month

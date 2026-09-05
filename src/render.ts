@@ -1250,7 +1250,7 @@ ${HISTORY_PHONE_CSS}  }
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
 </div>
-${view === 'history' ? renderHistoryView({ historyEnabled }) : ''}
+${view === 'history' ? renderHistoryView({ historyEnabled, demo }) : ''}
 <script>${pageScript(view)}</script>${view === 'history' ? `\n<script>${historyScript()}</script>` : ''}
 </body></html>
 `;

@@ -405,7 +405,7 @@ test('serve --demo answers the ranges a journal answers, and the pills that ask 
   const week = JSON.parse(await get(port, '/api/history?range=7d')) as {
     enabled: boolean;
     days: Array<{ date: string; byProject: Array<{ project: string; costUsd: number }> }>;
-    hours: Array<{ n: number; sessions: unknown[] }>;
+    hours: Array<{ t: number; n: number; sessions: unknown[] }>;
     resets: unknown[];
     coverage: { lines: number; daysRequested: number; skipped: number };
   };
@@ -422,6 +422,15 @@ test('serve --demo answers the ranges a journal answers, and the pills that ask 
   const month = JSON.parse(await get(port, '/api/history?range=30d')) as { days: unknown[]; coverage: { daysRequested: number } };
   assert.equal(month.coverage.daysRequested, 30);
   assert.equal((month.days as unknown[]).length, DEMO_JOURNAL_DAYS);
+
+  // One `demoDay`, three consumers. The collector and the ring are already held to it by the
+  // check further down this file; the journal is the third, and a second `demoDayStart()` call
+  // in `cli.ts` would anchor its week somewhere the ring has never been. The newest hour of the
+  // journal is the hour the ring's newest minute falls in, or they are two accounts of one fleet.
+  const ring = JSON.parse(await get(port, '/api/history')) as { samples: { t: number }[] };
+  const newest = ring.samples[ring.samples.length - 1].t;
+  const hourOf = (t: number): number => new Date(t).setMinutes(0, 0, 0);
+  assert.equal(hourOf(week.hours[week.hours.length - 1].t), hourOf(newest), 'the journal and the ring are anchored on different days');
 });
 
 // The other half of "nothing on this machine was read": a demo that journals is a demo that
