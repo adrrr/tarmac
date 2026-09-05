@@ -601,9 +601,21 @@ test('an empty journal range is not a first run, and is not offered a minute of 
 //
 // "History is off." wins: it names a cause and what to do about it, and it is the server's own
 // answer about the config. The other block is for the serve whose journal is on and young.
-test('a first run with no journal raises one box, not two', async () => {
-  const m = mount(false, () => emptyRing());
-  await settle(m);
-  assert.equal(m.p.el('range-7d').disabled, true, 'precondition: this is a serve with no journal');
-  assert.equal(m.p.el('hist-empty').hidden, true, 'the page said "history is off" and "wait a minute" at once');
+//
+// One record, mounted twice, asserted opposite ways. A test that only pinned the block DOWN on
+// the journal-off page would pass over a script that had stopped raising it anywhere — the
+// markup ships it hidden, so the assertion would be reading the shell's own starting value back
+// — and it would pass over a payload that had quietly stopped being empty. The half that says
+// `false` is what makes the other half mean anything: the same record, with a journal, still
+// raises it.
+test('a first run raises one box, and which one is the journal’s answer', async () => {
+  const off = mount(false, () => emptyRing());
+  await settle(off);
+  assert.equal(off.p.el('range-7d').disabled, true, 'precondition: this is a serve with no journal');
+  assert.equal(off.p.el('hist-empty').hidden, true, 'the page said "history is off" and "wait a minute" at once');
+
+  const on = mount(true, () => emptyRing());
+  await settle(on);
+  assert.equal(on.p.el('range-7d').disabled, false, 'precondition: this serve keeps a journal');
+  assert.equal(on.p.el('hist-empty').hidden, false, 'the block is down over a young journal, where it is the true answer');
 });

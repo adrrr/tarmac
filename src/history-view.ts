@@ -840,11 +840,18 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   // and not this page's — and a copy of both, kept in step by hand, is how the two come to
   // disagree.
   var covers24 = covers.textContent;
-  // Whether this serve has a journal at all, read off the pills the SERVER disabled rather than
-  // asked for down the wire — the same reason the sentence above is read and not written again.
-  // It decides which of the two blocks a page with nothing in it raises: with no journal the
-  // server has already shipped the one that names that cause and its fix, and a second block
-  // under it offering a minute of patience is one screen saying two things (#157).
+  // Whether this serve has a journal at all. It decides which of the two blocks a page with
+  // nothing in it raises: with no journal the server has already shipped the one that names that
+  // cause and its fix, and a second block under it offering a minute of patience is one screen
+  // saying two things (#157).
+  //
+  // Read off the page rather than asked for down the wire, for the reason the sentence above is:
+  // it is the config's answer, the server has it, and a round trip to be told it would leave the
+  // question open for as long as the request took. Off the PILL and not off the block it is
+  // really about, which would read better — the eighty-line DOM the suite executes this script
+  // on hands back an element for every id asked of it, so an assertion about a block the server
+  // did not ship cannot be written there, while a disabled attribute it did ship can. The two
+  // are the same fact: one flag in the view above writes both.
   var journalOff = el('range-7d').disabled;
   var state = { range: '24h', data: null, err: null, iso: {}, cursor: {}, loading: false, gen: 0 };
   // Which series a chart is isolated on, or null. Read through a function and compared against
