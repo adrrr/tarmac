@@ -123,6 +123,12 @@ The third tab draws what moved rather than what is: context per session, cost pe
 the account's two windows, over the last 24 hours out of the ring or over 7 and 30 days out of
 the journal, if you keep one. `<canvas>` and the page's own script, no library.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/curves-dark.png">
+  <img src="docs/media/curves-light.png" width="1100"
+       alt="The curves page of the demo fleet, on the 7d range out of the invented journal. Context is a row of small multiples, one line per session, each a sawtooth that climbs through the day and breaks where the session was recycled, the two still climbing labelled with an arrow. Cost is one stacked bar per day in a fixed project order, the current day shorter than the six complete ones. Quota is the seven-day line climbing over the five-hour window's highs. A banner above names one unrecognised status, and the header is badged demo data.">
+</picture>
+
 A context line breaks where its session did, so a recycle at three in the morning reads as a
 break and not as a cliff, and a minute nobody read is a hole rather than a fall to zero. The
 lines that gained fifteen points or more in the last three hours are drawn full and labelled,
