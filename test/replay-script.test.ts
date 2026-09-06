@@ -475,7 +475,10 @@ test('a replayed strip says which quantity its number is', async () => {
   page.el('scrub').drag(0);
   const html = page.el('replay-map').innerHTML;
   const agent = html.slice(html.indexOf('data-role="agent"'));
-  assert.match(agent, /class="sub">ctx 41%</);
+  // Drawn since C11.4, so the label is pinned where it now sits — beside the bar, inside the
+  // span that holds the pair. What this test is about has not moved: a bare percentage under a
+  // project reads as a progress bar in the past exactly as it does in the present.
+  assert.match(agent, /class="ctx">ctx </);
 });
 
 test('the replay counts the fleet of that minute, not of this one', async () => {
@@ -812,3 +815,67 @@ for (const [what, rateLimits] of [
     assert.equal(page.el('replay-limits').innerHTML, server);
   });
 }
+
+// The track behind the handle is drawn by the page now, not by the browser, and a drawn track
+// has no idea where the handle is. --p is what tells it: the share of the record already walked,
+// written on every move and every step of a play. It is the whole of the motion in a recording
+// of this view — without it the bar sits uniform while the day runs under it.
+test('the track knows how much of the record has been walked', async () => {
+  const page = mount(record(10));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  assert.equal(page.el('scrub').style['--p'], '0.00%', 'at the far end of the past');
+  page.el('scrub').drag(3);
+  assert.equal(page.el('scrub').style['--p'], '33.33%', 'three of the nine steps in');
+  page.el('scrub').drag(9);
+  assert.equal(page.el('scrub').style['--p'], '100.00%', 'and full at the last reading held');
+});
+
+// A record with one reading in it has no span to divide by, and a share of nothing is not
+// Infinity or NaN — both of which a browser answers by dropping the whole gradient stop and
+// leaving a track that never fills for anybody.
+test('a record of one minute leaves a track a browser can still paint', async () => {
+  const page = mount(record(1));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  assert.equal(page.el('scrub').style['--p'], '0.00%');
+});
+
+// The same fragment behind the scrubber. Two renderers draw a node — the server's and the one
+// that ships to the browser — and a reading drawn in one and spelled in the other is the same
+// quantity wearing two shapes on two halves of one page.
+test('a replayed strip draws its context in the same bar the live one does', async () => {
+  const page = mount(
+    record(1, () => [session({ sid: 'a' }), session({ sid: 'b', kind: 'background', project: 'alpha', ctxPct: 41 })]),
+  );
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  const html = page.el('replay-map').innerHTML;
+  const agent = html.slice(html.indexOf('data-role="agent"'));
+  assert.match(agent, /class="ctx">ctx <span class="bar"><i style="width:41%"><\/i><\/span>/, 'the magnitude');
+  assert.match(agent, /class="ctx-pct">41%</, 'and the number beside it');
+});
+
+// A percentage the record spelled past the top fills the track and stops, in the browser's
+// renderer as in the server's: the bar sits in a fixed box and a wider fill paints over the
+// text next to it.
+test('a replayed reading over the top fills the bar and stops there', async () => {
+  const page = mount(
+    record(1, () => [session({ sid: 'a' }), session({ sid: 'b', kind: 'background', project: 'alpha', ctxPct: 140 })]),
+  );
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  const html = page.el('replay-map').innerHTML;
+  assert.match(html.slice(html.indexOf('data-role="agent"')), /class="bar"><i style="width:100%"><\/i>/);
+});
+
+// The track is drawn by the page, so it starts out saying nothing at all: `var(--p,0%)` until
+// something writes it. The record landing is the first moment there is a share to state, and
+// the handle is at the far end of the past — so the fill is written when the scrubber is
+// revealed, not only when a reader first drags it.
+test('the track states its share the moment the record is in hand', async () => {
+  const page = mount(record(10));
+  await page.advance(0);
+  assert.equal(page.el('scrub').disabled, false);
+  assert.equal(page.el('scrub').style['--p'], '0.00%', 'before anybody has touched it');
+});

@@ -98,9 +98,42 @@ export function guardVersions(seen: ReadonlyArray<string | null>): SchemaGuard {
   return { state, versions, noVersion, unchecked };
 }
 
-/** What a human should be told, or `null` when there is nothing worth saying. */
+/**
+ * A note in the two halves a page shows it in: what was seen, and what it means for the reader.
+ *
+ * The whole notice is four lines of prose, and at the foot of a phone that is most of a screen
+ * spent on a line written for a maintainer. The page prints the lead and puts the rest behind a
+ * disclosure — so the split is made HERE, where the sentences are written, rather than guessed
+ * at by a renderer looking for a full stop: a version number is full of them.
+ */
+export interface NoteParts {
+  /**
+   * Which note this is, and it is not decoration: the block lives inside the fragment the page
+   * swaps every five seconds, so a fold the reader opened has to be found again on the other
+   * side of the swap. An index would not do — notes appear and disappear on their own — so
+   * each producer names its own, and the id it becomes is stable for the life of the page.
+   */
+  key: string;
+  /** The fact. Always shown, and the whole of what a screen reader is handed by default. */
+  lead: string;
+  /** What follows from it. Behind the disclosure, and empty when there is nothing more. */
+  rest: string;
+}
+
+/** What a human should be told, in the halves a page shows it in. `null` when there is nothing. */
+export function schemaNoteParts(guard: SchemaGuard): NoteParts | null {
+  const said = schemaSaid(guard);
+  return said.length === 0 ? null : { key: 'schema', lead: said[0]!, rest: said.slice(1).join(' ') };
+}
+
+/** The same notice, whole. What every caller outside the page still asks for. */
 export function schemaNotice(guard: SchemaGuard): string | null {
-  if (guard.state === 'ok' || guard.state === 'nothing') return null;
+  const parts = schemaNoteParts(guard);
+  return parts === null ? null : `${parts.lead} ${parts.rest}`.trim();
+}
+
+function schemaSaid(guard: SchemaGuard): string[] {
+  if (guard.state === 'ok' || guard.state === 'nothing') return [];
 
   const said: string[] = [];
   if (guard.noVersion > 0) {
@@ -120,5 +153,5 @@ export function schemaNotice(guard: SchemaGuard): string | null {
   // and has no scripts/ directory. Capturing a fixture is a maintainer's move, documented
   // in the README, not something to send a user looking for.
   said.push(`Nothing is blocked and no reading is hidden; if a column starts coming up empty, update tarmac or report it at ${ISSUES_URL}.`);
-  return said.join(' ');
+  return said;
 }

@@ -741,7 +741,8 @@ export const HISTORY_CSS = `
   .view-history { display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:start; }
   #ctx, .hist-off, .hist-empty, .view-history > .note { grid-column:1 / -1; }
   .view-history > .note { margin-top:0; }
-  .chart { border:1px solid var(--line); border-radius:12px; padding:.65rem .8rem .7rem; min-width:0; }
+  .chart { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg);
+           box-shadow:var(--shadow-1), var(--edge); padding:.65rem .8rem .7rem; min-width:0; }
   /* The margin is what the way-back-to-now's tap target is drawn into. That overlay reaches
      .85rem below the button, and anything of it past this margin lands on the canvas and
      swallows taps meant for the top of the plot. The two numbers are the same on purpose. */
@@ -753,7 +754,7 @@ export const HISTORY_CSS = `
   .chart-sub.at { color:var(--fg); font-weight:600; font-variant-numeric:tabular-nums; }
   /* The one number a chart leads with, in the gauge's weight. Never a hero: the fleet is
      the subject, this is its total. */
-  .chart-stat { margin-left:auto; font-variant-numeric:tabular-nums; font-weight:650; font-size:.9rem; white-space:nowrap; }
+  .chart-stat { margin-left:auto; font-variant-numeric:tabular-nums; font-weight:600; font-size:.9rem; white-space:nowrap; }
   .to-now { font:inherit; font-size:.72rem; font-weight:600; color:var(--fg); background:transparent;
             border:1px solid var(--line); border-radius:99px; padding:.02rem .6rem; cursor:pointer; }
   /* pan-y rather than none: a drag along the chart moves the cursor, and a drag up the page
@@ -792,17 +793,27 @@ export const HISTORY_CSS = `
   .hist-range .range-name { font-size:.7rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--dim); margin-right:.2rem; }
   .hist-range button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent; border:1px solid var(--line);
             border-radius:99px; padding:.15rem .8rem; cursor:pointer; font-variant-numeric:tabular-nums; }
-  .hist-range button[aria-pressed="true"] { font-weight:600; background:color-mix(in srgb, var(--line) 55%, transparent); border-color:var(--dim); }
+  /* The chosen range as a raised chip on the page's floor, the same figure the tabs cut — with
+     one difference from the tabs that matters. There the ink carries the state (inactive --dim
+     at 5.6:1, active --fg at 18.8), so the chip is free to be decoration. Here all three
+     buttons are --fg already, so ink says nothing and weight alone would be the whole signal.
+     The border keeps --dim (4.8:1 on the floor) rather than --line-strong (1.8): a control this
+     page identifies by its edge needs an edge somebody can see. */
+  .hist-range button[aria-pressed="true"] { font-weight:600; background:var(--surface);
+            border-color:var(--dim); box-shadow:var(--shadow-1); }
   .hist-range button:disabled { opacity:.4; cursor:default; }
   .hist-range .covers { color:var(--dim); font-size:.75rem; margin-left:.4rem; }
   /* Off is not a fault, so it is not a .warn: a framed sentence in the page's own ink, with
      the one key that turns it on. */
-  .hist-off { border:1px solid var(--line); border-radius:8px; padding:.5rem .7rem; font-size:.8rem; line-height:1.5; }
+  .hist-off { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-sm);
+            box-shadow:var(--shadow-1), var(--edge); padding:.5rem .7rem; font-size:.8rem; line-height:1.5; }
   /* Same frame as "off" above, and for the same reason: a serve that has been running a minute
      is not a fault either. It sits directly over the charts it is about, because "where are my
      curves" is a question asked while looking at the place they will be. */
-  .hist-empty { border:1px solid var(--line); border-radius:8px; padding:.5rem .7rem; font-size:.8rem; line-height:1.5; }
-  .hist-off code, .hist-empty code, .view-history .note code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.95em; }
+  .hist-empty { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-sm);
+            box-shadow:var(--shadow-1), var(--edge); padding:.5rem .7rem; font-size:.8rem; line-height:1.5; }
+  .hist-off code, .hist-empty code, .view-history .note code { font-family:var(--mono); font-size:.95em;
+            background:var(--surface-2); border:1px solid var(--line); border-radius:4px; padding:.05rem .3rem; }
   /* The other two views are in the shell on every address — the tabs between them are meant to
      cost nothing — so the one being read hides the pair it stands in front of. History is the
      exception and ships only on its own address: it carries a script and three canvases, and a
@@ -977,6 +988,15 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
   }
   function slotColor(slot) { return cssVar('--s' + slot); }
+  /* How faint a series goes when it is not the one being read — deeper when another has been
+     isolated by tapping its key, because then there is a subject and everything else is
+     context. Both numbers come from the sheet: a dark surface needs less fading than a white
+     one, and the sheet is the only thing here that knows which one it is on. The literals are
+     the light values, for a browser that cannot compute a style at all. */
+  function fadeAlpha(iso) {
+    var v = parseFloat(cssVar(iso !== null ? '--fade-iso' : '--fade'));
+    return v > 0 && v <= 1 ? v : (iso !== null ? .3 : .72);
+  }
   var ENT = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   function esc(v) { return String(v === null || v === undefined ? '\\u2014' : v).replace(/[&<>"']/g, function (c) { return ENT[c]; }); }
   var PHONE = typeof matchMedia === 'function' ? matchMedia('(max-width: 46rem)') : { matches: false };
@@ -994,7 +1014,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
     var c = canvas.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { c: c, w: w, h: h, fg: cssVar('--fg'), dim: cssVar('--dim'), line: cssVar('--line'), bg: cssVar('--bg') };
+    return { c: c, w: w, h: h, fg: cssVar('--fg'), dim: cssVar('--dim'), line: cssVar('--line'), bg: cssVar('--surface') };
   }
   function plotBox(g) { return { l: 8, r: g.w - 8, t: 12, b: g.h - 18 }; }
   function hair(g, x1, y1, x2, y2, color, alpha) {
@@ -1162,12 +1182,12 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       // Climbing last, so the lines the reader came for are drawn over the rest of the fleet.
       series.slice().sort(function (a, c) { return (rising(a) ? 1 : 0) - (rising(c) ? 1 : 0); }).forEach(function (s) {
         var up = rising(s), on = iso !== null ? iso === String(s.name) : up, color = slotColor(s.slot);
-        g.c.save(); g.c.strokeStyle = color; g.c.lineWidth = on ? 2 : 1.5; g.c.globalAlpha = on ? 1 : (iso !== null ? .2 : .45);
+        g.c.save(); g.c.strokeStyle = color; g.c.lineWidth = on ? 2 : 1.5; g.c.globalAlpha = on ? 1 : fadeAlpha(iso);
         g.c.lineJoin = 'round'; g.c.lineCap = 'round';
         var end = polyline(g, s, b, t0, t1, yOf); g.c.restore();
         if (end) ends.push({ s: s, x: end.x, y: end.y, v: lastOf(s.v), on: on });
       });
-      ends.forEach(function (e) { g.c.save(); g.c.globalAlpha = e.on ? 1 : .45; dot(g, e.x, e.y, slotColor(e.s.slot), e.on ? 4 : 3); g.c.restore(); });
+      ends.forEach(function (e) { g.c.save(); g.c.globalAlpha = e.on ? 1 : fadeAlpha(iso); dot(g, e.x, e.y, slotColor(e.s.slot), e.on ? 4 : 3); g.c.restore(); });
       var prevY = -99;
       ends.filter(function (e) { return e.on; }).sort(function (a, c) { return a.y - c.y; }).forEach(function (e) {
         var y = Math.max(e.y - 7, prevY + 12, b.t + 8);

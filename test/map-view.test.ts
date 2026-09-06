@@ -403,7 +403,9 @@ const measured = (a: Partial<FleetRow> = {}): string =>
 // is the page choosing which published facts to pass on.
 test('a strip prints what the snapshot published: the reading, the model and the effort', () => {
   const html = measured();
-  assert.match(html, /class="sub">ctx 61% · Fable 5 · max</);
+  // The reading is drawn rather than spelled since C11.4, so what is pinned here is that all
+  // three are on the one line and in the order they were — not the shape of the first.
+  assert.match(html, /class="sub"><span class="ctx">ctx [\s\S]*?61%<\/span><\/span> · Fable 5 · max</);
   assert.doesNotMatch(html, /class="dial"/, 'still inline, rather than growing the dial back');
 });
 
@@ -424,7 +426,11 @@ test('an agent with no snapshot behind it prints none of the three', () => {
 // no percentage in them, and the model in that same file is still a fact the source published.
 test('a field the snapshot left empty is the only one dropped', () => {
   assert.match(measured({ ctxPct: null, ctxState: 'fresh' }), /class="sub">Fable 5 · max</);
-  assert.match(measured({ effort: null }), /class="sub">ctx 61% · Fable 5</);
+  assert.match(measured({ effort: null }), /61%<\/span><\/span> · Fable 5</);
+  // The separator belongs to the pair, not to the reading: a snapshot with a percentage and
+  // neither a model nor an effort is a line that ENDS at the number. The dot is joined in one
+  // place for that reason, and this is the case that would leave it hanging.
+  assert.match(measured({ model: null, effort: null }), /class="sub"><span class="ctx">[\s\S]*?61%<\/span><\/span><\/div>/);
 });
 
 // And it keeps the one thing that makes a number honest: a reading past the threshold may not
@@ -750,28 +756,49 @@ test('every node in the replay grid gets a cell of one size, so a scrub does not
   // The VALUE, and a value that has to clear the TALLEST card the record can produce, or the
   // floor is decoration: a row is `minmax(floor,auto)`, so anything taller pushes its own row
   // and every row under it. The card that decides it is a waiting session — dial, name, a
-  // caption clamped to two lines, and the two numbers under it — measured at 214px in Chrome
-  // on the demo. Asserted as a number rather than against the column minimum: a cell that
-  // happened to be square told us nothing about whether a node fits in it, and `minmax(0,auto)`
-  // and `minmax(8.5rem,auto)` are both squares of some column at some width.
+  // caption clamped to two lines, the kind and the cost — measured at 223.92px in Chrome, at
+  // every column width the grid produces from 136px up. Asserted as a number rather than
+  // against the column minimum: a cell that happened to be square told us nothing about whether
+  // a node fits in it, and `minmax(0,auto)` and `minmax(8.5rem,auto)` are both squares of some
+  // column at some width.
+  //
+  // 14rem is 224px, and the margin over that card is 0.08px. It was 13.5rem for a 5.5rem dial;
+  // the dial below is what took the card from 215.9 to 223.9, which is why the two numbers are
+  // asserted together and in one test. Either one moved alone reopens the reflow #170 removed.
   const floors = declaredEverywhere('.map.flat', 'grid-auto-rows');
   assert.equal(floors.length, 1, 'declared once, for every width — a floor under the cards is not a floor');
   const rem = /minmax\(\s*([\d.]+)rem\s*,/.exec(floors[0]);
   assert.ok(rem, `a floor in rem: ${floors[0]}`);
-  assert.ok(Number(rem![1]) >= 13.5, `and one a two-line caption fits inside: ${floors[0]}`);
+  assert.ok(Number(rem![1]) >= 14, `and one the tallest card the record can draw fits inside: ${floors[0]}`);
+  // The other half of that sum. A dial grown without the floor following is the regression in
+  // its usual direction; a floor cut back with the dial left alone is the same bug by the other
+  // road, and both are a one-line edit somebody will make for a screenshot.
+  const dial = declaredEverywhere('.dial', 'width');
+  assert.equal(dial.length, 1, 'one dial size, at every width');
+  const dialRem = /([\d.]+)rem/.exec(dial[0]);
+  assert.ok(dialRem, `a dial in rem: ${dial[0]}`);
+  assert.ok(Number(dialRem![1]) <= 6, `and one the floor above was measured against: ${dial[0]}`);
   assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), '', 'and nothing opts out of it');
   assert.deepEqual(declaredEverywhere('.map.flat .node[data-role="agent"]', 'align-self'), [], 'at no width');
   // And what fills the cell sits in the middle of it, level with the dials beside it. A card
   // whose two lines of text hang from the top of a box the height of a dial reads as a cell
   // that failed to draw, which is the impression this whole change exists to remove.
   assert.equal(declared('.node[data-role="agent"]', 'justify-content'), 'center');
+  // And the cards beside it, which #170 gave the cell and not the centring: a card hung from
+  // the top of a cell a third taller than itself leaves 67px of white under its last line,
+  // which inside a border reads as a cell that failed to draw rather than as air.
+  assert.equal(declared('.map.flat .node', 'justify-content'), 'center');
 });
 
-// The cards of a berth still share one height, which is what keeps a row of dials from stepping
-// up and down; telling their row to stop stretching would have changed every session on the
-// page to make room for one strip.
-test('cards in a berth keep their shared height', () => {
-  assert.equal(declared('.berth-cards', 'align-items'), 'stretch');
+// The cards of a berth take their own heights. Stretching them to one drew the shorter of two
+// captions with 18.2px of white under its last line — a filled card with a shadow is an object,
+// and an object with a hole at the bottom reads as one that failed to fill rather than as air.
+// What keeps a row scannable is not their FEET being level, it is their dials: those are at the
+// top of each card, and cards that start at the same top have them level whatever height they
+// take. That is also why a berth is not centred the way a replay cell is (C11.1) — centring here
+// would be the one move that does take the dials out of line.
+test('cards in a berth take their own height, and keep their dials in line', () => {
+  assert.equal(declared('.berth-cards', 'align-items'), 'flex-start');
   assert.equal(declared('.berth-cards', 'align-self'), '', 'and nothing tells a card to opt out of it');
 });
 
@@ -950,4 +977,67 @@ test('the tabs are links, and the current one says so', () => {
   const html = renderPage(fleet([row()]), 'map');
   assert.match(html, /<a href="\/"[^>]*>Table<\/a>/);
   assert.match(html, /<a href="\/map" aria-current="page">Map<\/a>/);
+});
+
+// ── the context of an agent, drawn ───────────────────────────────────────────────────────
+//
+// A session carries a 96px dial with its number at 1.55rem. An agent carried `ctx 52%` at
+// 12.16px of grey, in the middle of "· Fable 5 · max". The two are the same quantity and only
+// one of them was visible — the reading Adrien could not find on the map.
+//
+// The vocabulary is the one the product already has: the table's Context column draws this
+// number as a bar. The strip borrows it. What it does NOT borrow is a dial — an arc at 18px
+// cannot be read (5% and 15% have the same silhouette), and a ring on an agent is the claim
+// #170 removed: an agent is not a smaller session, it is a different shape.
+test('an agent draws its context, rather than spelling it in the grey of a caption', () => {
+  const html = measured();
+  assert.match(html, /class="bar"><i style="width:61%"><\/i>/, 'the magnitude, in the table\'s own bar');
+  assert.match(html, /class="ctx-pct">61%</, 'and the number that is the authority');
+});
+
+// The word stays. A bar says a magnitude and never which quantity it is, and a bare 61% under a
+// line of prompt reads as the share of the prompt that is done — the mistake the caption was
+// already written to avoid.
+test('the drawn context still says which quantity it is', () => {
+  assert.match(measured(), /class="ctx">ctx <span class="bar"/);
+});
+
+// The rest of the line is unchanged: one snapshot, all of its fields, in the order they were.
+test('drawing the context does not drop what the snapshot published beside it', () => {
+  const html = measured();
+  assert.match(html, /Fable 5 · max/);
+  assert.ok(html.indexOf('class="ctx"') < html.indexOf('Fable 5'), 'the reading still leads the line');
+});
+
+// A strip with no percentage draws no bar. An empty track is what a session measured at 0%
+// wears, and "nothing was published" may not look like "nothing is being used".
+test('an agent the join found no reading for draws no bar at all', () => {
+  const html = strip({ ctxState: 'fresh', ctxPct: null, model: 'Fable 5', effort: 'max' });
+  assert.doesNotMatch(html, /class="bar"/);
+  assert.match(html, /class="sub">Fable 5 · max</, 'and the rest of the line is still printed');
+});
+
+// A percentage a payload spelled past 100 is drawn at the end of the track, never past it: the
+// bar is inside a fixed box and a width above 100% paints over the text beside it.
+test('a reading over the top fills the bar and stops there', () => {
+  assert.match(measured({ ctxPct: 140 }), /class="bar"><i style="width:100%"><\/i>/);
+});
+
+// The phone trap, and the one that matters most: `@media (max-width:46rem)` carries an unscoped
+// `.bar { display:none }` written for the table's strip. Left alone it hides the agent's bar on
+// the map too — the one screen Adrien reads this on.
+test('the bar the table drops on a phone is not the bar the map just drew', () => {
+  // The phone block hides `.bar` for the table's strip, where every value gets its column's
+  // name back and a second telling of a number is width a phone has not got. On the map that
+  // bar IS how an agent's reading is visible at all.
+  //
+  // What keeps them apart is SPECIFICITY, not order: a media query adds none of its own, so
+  // `.node .bar` (0,2,0) outside the block beats `.bar` (0,1,0) inside it wherever either
+  // sits. Asserting the order instead reads as if a rule had to be repeated in the block to
+  // win — it does not, and the next person to delete that repetition would see a red test and
+  // believe they had broken the phone.
+  assert.match(atMedia('(max-width: 46rem)'), /\.bar\s*\{[^}]*display:\s*none/, 'the table strip drops it');
+  const kept = declaredEverywhere('.node .bar', 'display');
+  assert.deepEqual(kept, ['inline-block'], 'the map declares it once, and outside every media block');
+  assert.deepEqual(declaredEverywhere('.node .bar', 'display', atMedia('(max-width: 46rem)')), [], 'no repeat inside');
 });

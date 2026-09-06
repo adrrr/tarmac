@@ -13,6 +13,43 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The dashboard is a page rather than a document.** There was one surface: white, with
+  everything on it — berth, card, chart, table, banner — drawn as the same hairline on that same
+  white, so a card inside a berth was two identical borders nested and nothing was ever ON
+  anything. There are two planes now. The page has a floor and a width, and the panels stand on
+  it: the table gets the panel it never had, the header becomes one, cards stand in their berths
+  with a 4% wash of their own state, and in dark a lit top edge does what a border cannot. The
+  wordmark and every VALUE — and only the values, never a project, a session, a model or a label
+  — are set in the face the numbers deserve. The tabs are a segmented control, the dial is a dial
+  (6rem, a heavier stroke, its number half again as large), the warning banners give up the full
+  amber frame for an accent down their left edge, and the replay banner keeps both and takes the
+  deeper shadow: it is the one claim on this page that could be a lie. Play is the only filled
+  button on the dashboard, its track fills as the day walks, and the paint that says a replay is
+  running swapped ends to stay visible in a screenshot. The charts keep their eight hues and stop
+  being washed out: how faint a set-aside line goes is a token now, so light and dark can differ,
+  and the canvas paints its axis haloes in the panel it is drawn on rather than in the floor.
+- **The context of a background agent is visible.** A session carried a 96px dial; an agent
+  carried `ctx 52%` at 12px of grey, in the middle of `· Fable 5 · max`. The same quantity, and
+  only one of them was on screen. The strip now draws it in the bar the table's Context column
+  already speaks — track, fill, and no colour from a state or a threshold — with the number
+  beside it and the word that says which quantity the bar is about. Not a small dial: an arc
+  that size cannot be read, and an agent is not a session drawn smaller. It is on the phone too,
+  which is where it was reported missing.
+- **Nothing hangs at the top of its cell any more.** Behind the scrubber a session card sat at
+  the top of a box a third taller than itself — 67px of white under its last line, which inside
+  a border reads as a render that failed. Cards centre in their cell like the agent strips
+  already did, and the row floor rises with the dial so a scrub still moves nothing. In a berth,
+  cards stop being stretched to a shared height and take their own: the dials stay level, which
+  is the line a row is read along, and the shorter caption stops carrying 18px of hole.
+- **The header fits a phone, and the footnotes fold.** At 390px five rows of chrome stood above
+  the first session; three do now, declared rather than left to the wrap — the name and the tabs,
+  the account, the age of the reading. Not two: the account's own row is 255px and the age is 92
+  against 346 of usable width, and the reset countdowns are the only words on the page that
+  appear nowhere else. The two footnotes under the fleet were four and nine lines of prose at the
+  foot of a page nobody scrolled there for; each prints its fact and folds what follows from it
+  behind a native disclosure. Every word is still on the page, the fact is still what
+  `aria-describedby` hands to a reader who meets `! 3h ago` before its legend, and the fold is a
+  thumb-sized target like the six controls beside it.
 - **A replay holds still.** Dragging the handle used to redraw the whole page at every step: the
   banner naming the minute was inserted into the flow on the first touch and taken back out on
   the way to live, so the page dropped a line going in and rose one coming out — and behind it

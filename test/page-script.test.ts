@@ -328,3 +328,38 @@ test('a miss one window later keeps the banner it did not raise', async () => {
   await page.show();
   assert.equal(page.el('offline').hidden, false);
 });
+
+// ── the footnote stays open across a poll ────────────────────────────────────────────────
+//
+// The fold lives inside `#live`, which the poll replaces wholesale every five seconds. Left
+// alone, a reader who opens a footnote gets about two seconds of it before the swap builds a
+// new one, shut — the note is less readable than it was before it was folded. What the reader
+// opened is remembered by id and put back after every swap.
+test('a footnote the reader opened is still open after the fleet is swapped under it', async () => {
+  const page = mount(() => ok('<div id="fleet-notes"><details class="note" id="note-stale"></details></div>'));
+  await page.advance(5000);
+  const note = page.el('note-stale');
+  // Fired on the container with the note as its target, which is what a capture listener there
+  // receives in a browser: `toggle` does not bubble, but a non-bubbling event still travels the
+  // capture phase from the window down to its target, so every ancestor listener on that path
+  // runs. This DOM has no propagation of its own, so the test hands the listener the event it
+  // would have been handed.
+  note.open = true;
+  page.el('live').fire('toggle', { target: note });
+  note.open = false; // what the swap does to it
+  await page.advance(5000);
+  assert.equal(page.el('note-stale').open, true, 'put back after the swap');
+});
+
+// And closing it is remembered too, or the page would re-open a note the reader shut.
+test('a footnote the reader closed again stays closed', async () => {
+  const page = mount(() => ok('<div id="fleet-notes"><details class="note" id="note-stale"></details></div>'));
+  await page.advance(5000);
+  const note = page.el('note-stale');
+  note.open = true;
+  page.el('live').fire('toggle', { target: note });
+  note.open = false;
+  page.el('live').fire('toggle', { target: note });
+  await page.advance(5000);
+  assert.equal(page.el('note-stale').open, false);
+});

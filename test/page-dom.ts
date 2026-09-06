@@ -55,11 +55,28 @@ class El {
   textContent = '';
   innerHTML = '';
   hidden = false;
+  /** What a <details> carries, and what the page puts back after a swap destroys one. */
+  open = false;
+  /** Its own id. The page reads it back off an event target to tell one note from another. */
+  id = '';
   /** What a canvas carries. `clientWidth` is what the drawing sizes itself off. */
   clientWidth = 360;
   width = 0;
   height = 0;
-  readonly style: Record<string, string> = {};
+  /**
+   * Inline style, with the one method a custom property needs. `style['--p'] = x` is a no-op in
+   * every browser — a dashed name is not an IDL attribute — so the page writes its own tokens
+   * through `setProperty`, and this stub has to answer the same call. A test then reads the
+   * value straight off the record.
+   */
+  readonly style: Record<string, string> & { setProperty(name: string, value: string): void } = Object.assign(
+    Object.create(null) as Record<string, string>,
+    {
+      setProperty(this: Record<string, string>, name: string, value: string): void {
+        this[name] = value;
+      },
+    },
+  );
   private ctx: Ctx2D | null = null;
   getContext(kind: string): Ctx2D | null {
     if (kind !== '2d') return null;
@@ -223,6 +240,7 @@ export function mountPage(
     let e = els.get(id);
     if (!e) {
       els.set(id, (e = new El()));
+      e.id = id;
       const as = shell[id];
       if (as) {
         e.hidden = as.hidden;
