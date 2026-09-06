@@ -481,6 +481,7 @@ export function renderLive(fleet: Fleet): string {
   // tell you not to accept.
   if (health.stale > 0 && stalled === 0) {
     notes.push({
+      key: 'stale',
       // The legend for the mark, and the only half of this a reader ever has to be handed: it
       // is what makes `! 3h ago` on a row something they can argue with.
       lead: `Readings past the ${formatDuration(health.staleAfterMs)} freshness threshold are dated where they sit.`,
@@ -537,7 +538,7 @@ ${body}
 function renderNote(n: NoteParts): string {
   return n.rest === ''
     ? `<div class="note">${esc(n.lead)}</div>`
-    : `<details class="note"><summary>${esc(n.lead)}</summary>${esc(n.rest)}</details>`;
+    : `<details class="note" id="note-${esc(n.key)}"><summary>${esc(n.lead)}</summary>${esc(n.rest)}</details>`;
 }
 
 /**
@@ -854,12 +855,18 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
           border-top:1px solid var(--line); padding-top:.75rem; }
   /* One rule for the block, not one per note: two paragraphs each with a line over them is a
      table of contents. */
-  #fleet-notes .note + .note { border-top:0; padding-top:0; margin-top:.5rem; }
+  /* The margin between two of them is also the clearance between two tap targets: each summary
+     draws an overlay .45rem above and below itself, so anything under .9rem here has the first
+     note's own bottom edge opening the second. Pinned by test/phone-view. */
+  #fleet-notes .note + .note { border-top:0; padding-top:0; margin-top:.95rem; }
   .note code { background:var(--surface-2); border:1px solid var(--line); border-radius:4px; padding:.05rem .3rem; }
   /* The fold. The fact is the summary and stays on the page; what follows from it is one press
      away. The marker is the browser's own — a disclosure a reader already knows how to work
      beats a caret this page would have had to teach. */
-  .note summary { font-size:.75rem; padding:.15rem 0; cursor:pointer; }
+  /* The padding is not decoration: it is the half of the 44px thumb target that can be drawn.
+     Spent on the overlay instead, the overlay reaches so far past the summary that two stacked
+     notes trade taps — the tabs' 7px bug, on a control set in the smallest type here. */
+  .note summary { font-size:.75rem; padding:.4rem 0; cursor:pointer; }
   .note summary:focus-visible { outline:2px solid var(--wait); outline-offset:2px; border-radius:4px; }
   details.note[open] summary { margin-bottom:.3rem; }
   /* Two marks, one weight: a reading that has gone cold, and a reading picked out of several
@@ -956,9 +963,11 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
   .note summary { position:relative; }
   @media (pointer: coarse) {
     nav a::after, .replay button::after { content:''; position:absolute; inset:-.7rem 0; }
-    /* The footnote's fold is a control like the rest of them, and set in the smallest type on
-       the page: it needs the most inset of any of these to clear 44. */
-    .note summary::after { content:''; position:absolute; inset:-.7rem 0; }
+    /* The footnote's fold is a control like the rest of them. Its inset is the smallest here
+       because two of them can stand one above the other and the margin between them is the
+       whole of their clearance: what 44px needs beyond the summary's own box is bought in
+       padding above, not in overlay. */
+    .note summary::after { content:''; position:absolute; inset:-.45rem 0; }
     .replaying-note button::after { content:''; position:absolute; inset:-.85rem 0; }${HISTORY_TOUCH_CSS}  }
   body[data-view="table"] .view-map { display:none; }
   body[data-view="map"] .view-table { display:none; }
@@ -1539,13 +1548,11 @@ ${HISTORY_CSS}
     td[data-label="Model"] .v:has(.dim)::before { content:'· model '; }
     td[data-label="Effort"] .v:has(.dim)::before { content:'· effort '; }
     td[data-label="Cost"] .v:has(.dim)::before { content:'· cost '; }
+    /* The table's strip only. The map's bar survives this on specificity — ".node .bar" above
+       is 0,2,0 against this rule's 0,1,0, and a media query adds none — so an agent's reading
+       is still drawn on the one screen it was reported missing from. No repeat of it here: a
+       rule that changes nothing is a rule the next reader has to prove harmless. */
     .bar { display:none; }
-    /* And the one the map just drew is not that one. The rule above is written for the table's
-       strip, where every value gets its column's name back and a second telling of a number is
-       width a phone has not got. On the map the bar IS how an agent's reading is visible at
-       all — dropped here, the whole of it would be fixed everywhere except on the screen it
-       was reported from. */
-    .node .bar { display:inline-block; }
 ${HISTORY_PHONE_CSS}  }
 </style>
 </head><body data-view="${view}">
@@ -1709,6 +1716,28 @@ function pageScript(view: View): string {
   var off = document.getElementById('offline'), why = document.getElementById('why');
   var limits = document.getElementById('limits');
   var last = Date.now(), failing = false, inFlight = false, since = 0, gen = 0;
+  // ── the footnotes, across a swap ────────────────────────────────────────────────────
+  // The folds live in the fragment this script replaces every five seconds, so a reader who
+  // opens one gets about two seconds of it before a new one is built shut — a note less
+  // readable folded than it was as a paragraph, which is the opposite of the change. What was
+  // opened is remembered by id and put back on the other side of every swap.
+  //
+  // Capture, because "toggle" does not bubble: it fires on the <details> and nowhere else, so
+  // a listener on the container only hears it on the way down. Delegated rather than bound to
+  // each note, because the notes are exactly what the swap destroys.
+  var openNotes = {};
+  live.addEventListener('toggle', function (ev) {
+    var t = ev && ev.target;
+    if (!t || !t.id || t.id.indexOf('note-') !== 0) return;
+    if (t.open) openNotes[t.id] = 1; else delete openNotes[t.id];
+  }, true);
+  function reopenNotes() {
+    for (var k in openNotes) {
+      if (!Object.prototype.hasOwnProperty.call(openNotes, k)) continue;
+      var d = document.getElementById(k);
+      if (d) d.open = true;
+    }
+  }
   // How many polls in a row have come back with nothing usable, and when the last of them was.
   // On a phone the page is read on a radio, and one dropped request is a tunnel rather than an
   // outage — the banner frames the table off and says the fleet cannot be read, which is the
@@ -1795,6 +1824,7 @@ function pageScript(view: View): string {
         if (body.trim() === '') throw new Error('The server answered with an empty page.');
         if (!mineStill()) return;
         live.innerHTML = body;
+        reopenNotes();
         // The account's gauges, lifted out of the fragment and into the header where they
         // belong. Here rather than in the fragment's own place on the page because a limit is
         // the account's and not a session's; here rather than in the shell alone because the

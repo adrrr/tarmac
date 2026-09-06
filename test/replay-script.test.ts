@@ -868,3 +868,14 @@ test('a replayed reading over the top fills the bar and stops there', async () =
   const html = page.el('replay-map').innerHTML;
   assert.match(html.slice(html.indexOf('data-role="agent"')), /class="bar"><i style="width:100%"><\/i>/);
 });
+
+// The track is drawn by the page, so it starts out saying nothing at all: `var(--p,0%)` until
+// something writes it. The record landing is the first moment there is a share to state, and
+// the handle is at the far end of the past — so the fill is written when the scrubber is
+// revealed, not only when a reader first drags it.
+test('the track states its share the moment the record is in hand', async () => {
+  const page = mount(record(10));
+  await page.advance(0);
+  assert.equal(page.el('scrub').disabled, false);
+  assert.equal(page.el('scrub').style['--p'], '0.00%', 'before anybody has touched it');
+});

@@ -262,3 +262,25 @@ test('the name takes a line of its own rather than width from the slider', () =>
   const css = /<style>([\s\S]*?)<\/style>/.exec(page())![1];
   assert.match(css, /\.replay \.replay-name\s*\{[^}]*flex-basis:\s*100%/);
 });
+
+// ── the banner that is allowed to shout ─────────────────────────────────────────────────
+//
+// `.warn` gave up its full amber frame for an accent down the left edge: what those boxes say
+// is true and not urgent, and a full-width amber block above the fleet made the first thing a
+// reader saw a warning about a footnote. The replay banner wears the same class and is the one
+// exception — a page showing a past minute as though it were the fleet is the worst thing this
+// dashboard can do — so every part of the frame the shared rule drops, its own rule puts back.
+// The two are one decision and they are pinned together: dropping the restoration leaves the
+// loudest claim on the page drawn as the quietest kind of note.
+test('the shared banner gives up its frame, and the replay banner takes it back', () => {
+  const css = replayCss();
+  const warn = /(?:^|\})\s*\.warn\s*\{([^}]*)\}/.exec(css);
+  assert.ok(warn, 'the shared rule');
+  assert.match(warn![1], /border:\s*0/, 'the frame goes');
+  assert.match(warn![1], /border-left:\s*3px solid var\(--warn\)/, 'and an accent replaces it');
+
+  const note = /\.replaying-note:not\(\[hidden\]\)\s*\{([^}]*)\}/.exec(css);
+  assert.ok(note, 'the replay banner rule');
+  assert.match(note![1], /border:\s*1px solid var\(--warn\)/, 'the frame comes back whole');
+  assert.match(note![1], /box-shadow:\s*var\(--shadow-2\)/, 'and it is the one box that lifts off the page');
+});

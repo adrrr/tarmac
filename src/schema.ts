@@ -107,6 +107,13 @@ export function guardVersions(seen: ReadonlyArray<string | null>): SchemaGuard {
  * at by a renderer looking for a full stop: a version number is full of them.
  */
 export interface NoteParts {
+  /**
+   * Which note this is, and it is not decoration: the block lives inside the fragment the page
+   * swaps every five seconds, so a fold the reader opened has to be found again on the other
+   * side of the swap. An index would not do — notes appear and disappear on their own — so
+   * each producer names its own, and the id it becomes is stable for the life of the page.
+   */
+  key: string;
   /** The fact. Always shown, and the whole of what a screen reader is handed by default. */
   lead: string;
   /** What follows from it. Behind the disclosure, and empty when there is nothing more. */
@@ -116,7 +123,7 @@ export interface NoteParts {
 /** What a human should be told, in the halves a page shows it in. `null` when there is nothing. */
 export function schemaNoteParts(guard: SchemaGuard): NoteParts | null {
   const said = schemaSaid(guard);
-  return said.length === 0 ? null : { lead: said[0]!, rest: said.slice(1).join(' ') };
+  return said.length === 0 ? null : { key: 'schema', lead: said[0]!, rest: said.slice(1).join(' ') };
 }
 
 /** The same notice, whole. What every caller outside the page still asks for. */

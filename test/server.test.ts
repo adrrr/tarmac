@@ -271,7 +271,7 @@ const amber = (fragment: string): string[] =>
  * not which element is carrying them.
  */
 const footnotes = (fragment: string): string[] =>
-  [...fragment.matchAll(/<(?:details|div) class="note">([\s\S]*?)<\/(?:details|div)>/g)].map((m) =>
+  [...fragment.matchAll(/<(?:details|div) class="note"[^>]*>([\s\S]*?)<\/(?:details|div)>/g)].map((m) =>
     m[1]!.replace(/<[^>]*>/g, ' '),
   );
 
@@ -2038,13 +2038,13 @@ test('a FIFO in the journal directory is a range that answers, not a request tha
 // reader who meets the mark before the legend.
 test('a footnote prints its fact and folds the rest of itself away', () => {
   const live = renderLive({ rows: [row({ stale: true, snapshotAgeMs: 4 * 3600_000 })], health: health({ stale: 1 }) });
-  const m = /<details class="note"><summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/.exec(live);
+  const m = /<details class="note" id="note-stale"><summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/.exec(live);
   assert.ok(m, 'the note is a disclosure');
   assert.match(m![1], /freshness threshold/, 'the fact is the summary');
   assert.doesNotMatch(m![1], /--stale-after/, 'the flag is not');
   assert.match(m![2], /--stale-after/, 'and is behind the fold');
   // Shut. A note nobody opened is a note nobody scrolled past either.
-  assert.doesNotMatch(live, /<details class="note" open/);
+  assert.doesNotMatch(live, /<details class="note"[^>]* open/);
 });
 
 // Nothing is lost by folding: every word of the notice is still on the page, in the order it
@@ -2063,4 +2063,14 @@ test('folding a footnote keeps every word the notice had', () => {
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ');
   assert.ok(flat.includes(whole), 'the notice, entire, somewhere on the page');
+});
+
+// A footnote is the one place on this page that prints a string straight off a snapshot file.
+// `guard.versions` is `str(payload.version)` with no validation behind it (`src/snapshots.ts`),
+// so a `version` field carrying markup reaches the summary. Folding the note doubled the number
+// of places that string is written into, and nothing was watching either of them.
+test('a version field carrying markup is escaped where the footnote prints it', () => {
+  const live = renderLive({ rows: [row()], health: health({ schemaGuard: guardVersions(['<img src=x onerror=b>']) }) });
+  assert.doesNotMatch(live, /<img src=x/, 'never as markup');
+  assert.match(live, /&lt;img src=x onerror=b&gt;/, 'and printed as the text it is');
 });

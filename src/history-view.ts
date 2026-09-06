@@ -793,11 +793,14 @@ export const HISTORY_CSS = `
   .hist-range .range-name { font-size:.7rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--dim); margin-right:.2rem; }
   .hist-range button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent; border:1px solid var(--line);
             border-radius:99px; padding:.15rem .8rem; cursor:pointer; font-variant-numeric:tabular-nums; }
-  /* The chosen range as a raised chip on the page's floor, the same figure the tabs cut. The
-     weight and the ink are still what say which one is on: --line-strong is under 3:1 and the
-     shadow is under nothing at all. */
-  .hist-range button[aria-pressed="true"] { font-weight:600; color:var(--fg); background:var(--surface);
-            border-color:var(--line-strong); box-shadow:var(--shadow-1); }
+  /* The chosen range as a raised chip on the page's floor, the same figure the tabs cut — with
+     one difference from the tabs that matters. There the ink carries the state (inactive --dim
+     at 5.6:1, active --fg at 18.8), so the chip is free to be decoration. Here all three
+     buttons are --fg already, so ink says nothing and weight alone would be the whole signal.
+     The border keeps --dim (4.8:1 on the floor) rather than --line-strong (1.8): a control this
+     page identifies by its edge needs an edge somebody can see. */
+  .hist-range button[aria-pressed="true"] { font-weight:600; background:var(--surface);
+            border-color:var(--dim); box-shadow:var(--shadow-1); }
   .hist-range button:disabled { opacity:.4; cursor:default; }
   .hist-range .covers { color:var(--dim); font-size:.75rem; margin-left:.4rem; }
   /* Off is not a fault, so it is not a .warn: a framed sentence in the page's own ink, with
@@ -1011,7 +1014,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
     var c = canvas.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { c: c, w: w, h: h, fg: cssVar('--fg'), dim: cssVar('--dim'), line: cssVar('--line'), bg: cssVar('--surface') || cssVar('--bg') };
+    return { c: c, w: w, h: h, fg: cssVar('--fg'), dim: cssVar('--dim'), line: cssVar('--line'), bg: cssVar('--surface') };
   }
   function plotBox(g) { return { l: 8, r: g.w - 8, t: 12, b: g.h - 18 }; }
   function hair(g, x1, y1, x2, y2, color, alpha) {

@@ -55,6 +55,10 @@ class El {
   textContent = '';
   innerHTML = '';
   hidden = false;
+  /** What a <details> carries, and what the page puts back after a swap destroys one. */
+  open = false;
+  /** Its own id. The page reads it back off an event target to tell one note from another. */
+  id = '';
   /** What a canvas carries. `clientWidth` is what the drawing sizes itself off. */
   clientWidth = 360;
   width = 0;
@@ -236,6 +240,7 @@ export function mountPage(
     let e = els.get(id);
     if (!e) {
       els.set(id, (e = new El()));
+      e.id = id;
       const as = shell[id];
       if (as) {
         e.hidden = as.hidden;

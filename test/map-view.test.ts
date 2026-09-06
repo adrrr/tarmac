@@ -427,7 +427,10 @@ test('an agent with no snapshot behind it prints none of the three', () => {
 test('a field the snapshot left empty is the only one dropped', () => {
   assert.match(measured({ ctxPct: null, ctxState: 'fresh' }), /class="sub">Fable 5 · max</);
   assert.match(measured({ effort: null }), /61%<\/span><\/span> · Fable 5</);
-  assert.doesNotMatch(measured({ effort: null }), / · $/m, 'and no separator left hanging');
+  // The separator belongs to the pair, not to the reading: a snapshot with a percentage and
+  // neither a model nor an effort is a line that ENDS at the number. The dot is joined in one
+  // place for that reason, and this is the case that would leave it hanging.
+  assert.match(measured({ model: null, effort: null }), /class="sub"><span class="ctx">[\s\S]*?61%<\/span><\/span><\/div>/);
 });
 
 // And it keeps the one thing that makes a number honest: a reading past the threshold may not
@@ -753,21 +756,38 @@ test('every node in the replay grid gets a cell of one size, so a scrub does not
   // The VALUE, and a value that has to clear the TALLEST card the record can produce, or the
   // floor is decoration: a row is `minmax(floor,auto)`, so anything taller pushes its own row
   // and every row under it. The card that decides it is a waiting session — dial, name, a
-  // caption clamped to two lines, and the two numbers under it — measured at 214px in Chrome
-  // on the demo. Asserted as a number rather than against the column minimum: a cell that
-  // happened to be square told us nothing about whether a node fits in it, and `minmax(0,auto)`
-  // and `minmax(8.5rem,auto)` are both squares of some column at some width.
+  // caption clamped to two lines, the kind and the cost — measured at 223.92px in Chrome, at
+  // every column width the grid produces from 136px up. Asserted as a number rather than
+  // against the column minimum: a cell that happened to be square told us nothing about whether
+  // a node fits in it, and `minmax(0,auto)` and `minmax(8.5rem,auto)` are both squares of some
+  // column at some width.
+  //
+  // 14rem is 224px, and the margin over that card is 0.08px. It was 13.5rem for a 5.5rem dial;
+  // the dial below is what took the card from 215.9 to 223.9, which is why the two numbers are
+  // asserted together and in one test. Either one moved alone reopens the reflow #170 removed.
   const floors = declaredEverywhere('.map.flat', 'grid-auto-rows');
   assert.equal(floors.length, 1, 'declared once, for every width — a floor under the cards is not a floor');
   const rem = /minmax\(\s*([\d.]+)rem\s*,/.exec(floors[0]);
   assert.ok(rem, `a floor in rem: ${floors[0]}`);
-  assert.ok(Number(rem![1]) >= 13.5, `and one a two-line caption fits inside: ${floors[0]}`);
+  assert.ok(Number(rem![1]) >= 14, `and one the tallest card the record can draw fits inside: ${floors[0]}`);
+  // The other half of that sum. A dial grown without the floor following is the regression in
+  // its usual direction; a floor cut back with the dial left alone is the same bug by the other
+  // road, and both are a one-line edit somebody will make for a screenshot.
+  const dial = declaredEverywhere('.dial', 'width');
+  assert.equal(dial.length, 1, 'one dial size, at every width');
+  const dialRem = /([\d.]+)rem/.exec(dial[0]);
+  assert.ok(dialRem, `a dial in rem: ${dial[0]}`);
+  assert.ok(Number(dialRem![1]) <= 6, `and one the floor above was measured against: ${dial[0]}`);
   assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), '', 'and nothing opts out of it');
   assert.deepEqual(declaredEverywhere('.map.flat .node[data-role="agent"]', 'align-self'), [], 'at no width');
   // And what fills the cell sits in the middle of it, level with the dials beside it. A card
   // whose two lines of text hang from the top of a box the height of a dial reads as a cell
   // that failed to draw, which is the impression this whole change exists to remove.
   assert.equal(declared('.node[data-role="agent"]', 'justify-content'), 'center');
+  // And the cards beside it, which #170 gave the cell and not the centring: a card hung from
+  // the top of a cell a third taller than itself leaves 67px of white under its last line,
+  // which inside a border reads as a cell that failed to draw rather than as air.
+  assert.equal(declared('.map.flat .node', 'justify-content'), 'center');
 });
 
 // The cards of a berth take their own heights. Stretching them to one drew the shorter of two
@@ -1007,11 +1027,17 @@ test('a reading over the top fills the bar and stops there', () => {
 // `.bar { display:none }` written for the table's strip. Left alone it hides the agent's bar on
 // the map too — the one screen Adrien reads this on.
 test('the bar the table drops on a phone is not the bar the map just drew', () => {
-  const phone = atMedia('(max-width: 46rem)');
-  assert.match(phone, /\.bar\s*\{[^}]*display:\s*none/, 'the table strip still drops it');
-  assert.match(phone, /\.node \.bar\s*\{[^}]*display:\s*inline-block/, 'and the map keeps it');
-  assert.ok(
-    phone.indexOf('.node .bar') > phone.indexOf('.bar {'),
-    'and does so after, or the cascade settles the other way',
-  );
+  // The phone block hides `.bar` for the table's strip, where every value gets its column's
+  // name back and a second telling of a number is width a phone has not got. On the map that
+  // bar IS how an agent's reading is visible at all.
+  //
+  // What keeps them apart is SPECIFICITY, not order: a media query adds none of its own, so
+  // `.node .bar` (0,2,0) outside the block beats `.bar` (0,1,0) inside it wherever either
+  // sits. Asserting the order instead reads as if a rule had to be repeated in the block to
+  // win — it does not, and the next person to delete that repetition would see a red test and
+  // believe they had broken the phone.
+  assert.match(atMedia('(max-width: 46rem)'), /\.bar\s*\{[^}]*display:\s*none/, 'the table strip drops it');
+  const kept = declaredEverywhere('.node .bar', 'display');
+  assert.deepEqual(kept, ['inline-block'], 'the map declares it once, and outside every media block');
+  assert.deepEqual(declaredEverywhere('.node .bar', 'display', atMedia('(max-width: 46rem)')), [], 'no repeat inside');
 });

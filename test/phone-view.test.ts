@@ -140,7 +140,18 @@ test('every control a thumb has to hit is at least 44px tall on a coarse pointer
   }
 });
 
-// Stacked targets, which none of the older three are: the keys sit in a grid two columns wide,
+// The second set of stacked targets, and the one the sentence below used to say did not exist:
+// two footnotes stand under the fleet whenever a reading is stale AND a Claude Code version is
+// unchecked, separated by their own margin alone. Same arithmetic as the keys — an overlay that
+// reaches further than half the gap overlaps its neighbour, and the one below wins because it
+// paints later, so a tap meant to unfold the first note unfolds the second.
+test('two stacked footnotes have targets that do not overlap each other', () => {
+  const gap = px(declaredEverywhere('#fleet-notes .note + .note', 'margin-top', cssOutsideMedia()).at(-1)!);
+  const inset = Math.abs(shorthandY(declaredEverywhere('.note summary::after', 'inset', atMedia('(pointer: coarse)')).at(-1)!));
+  assert.ok(2 * inset <= gap, `two footnote targets overlap by ${2 * inset - gap}px`);
+});
+
+// Stacked targets, of which the keys were the first: the keys sit in a grid two columns wide,
 // and two rows of them are separated by the legend's row gap alone. Overlays that reach further
 // than half that gap overlap, and the key underneath wins because it paints later — a reader
 // isolating `portfolio` gets `research`. The tabs learned this at .3rem of horizontal inset and

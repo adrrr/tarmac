@@ -949,7 +949,11 @@ test('a clock the wire spelled as null is no window at all, not the first of Jan
 // its own white card. The panel's own surface is the colour behind those labels.
 test('the canvas paints its haloes in the panel it is drawn on, not the floor under the page', () => {
   const src = historyScript();
-  assert.match(src, /bg:\s*cssVar\('--surface'\)\s*\|\|\s*cssVar\('--bg'\)/);
+  assert.match(src, /bg:\s*cssVar\('--surface'\)/);
+  // And not the floor. `cssVar` ends in `|| '#888'`, so it never answers falsy and a
+  // `|| cssVar('--bg')` written after it would be a branch nothing can reach — a fallback that
+  // reads like a guarantee and is not one.
+  assert.doesNotMatch(src, /bg:[^,}]*cssVar\('--bg'\)/);
 });
 
 // How faint a line goes when it is not the one being read. At .45 on white the weakest of the
@@ -964,4 +968,16 @@ test('how faint a set-aside series goes is read from the sheet, so light and dar
   // isolation and its end point stayed at .45, so isolating one project left seven bright dots
   // hanging over seven faded lines.
   assert.equal((src.match(/: fadeAlpha\(iso\)/g) ?? []).length, 2, 'a line and its end point fade by the same rule');
+});
+
+// The chosen range, and the one place on this page where a chip cannot lean on ink. The tabs
+// carry their state in the ink (inactive --dim, active --fg); all three range buttons are --fg
+// already, so there the border is the signal and it has to be one somebody can see. --dim is
+// 4.8:1 on the page floor; --line-strong is 1.8, which with weight alone left the pressed pill
+// reading as unpressed.
+test('the chosen range is ringed in ink a reader can see, not in a hairline', () => {
+  const rule = /\.hist-range button\[aria-pressed="true"\]\s*\{([^}]*)\}/.exec(HISTORY_CSS);
+  assert.ok(rule, 'the pressed rule');
+  assert.match(rule![1], /border-color:\s*var\(--dim\)/);
+  assert.doesNotMatch(rule![1], /border-color:\s*var\(--line(-strong)?\)/);
 });
