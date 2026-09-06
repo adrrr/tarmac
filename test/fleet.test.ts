@@ -175,6 +175,55 @@ test('does not count a session whose legacy snapshot is still being read', () =>
   assert.equal(health.unfilable, 0, 'so nothing here is blind for want of a filable id');
 });
 
+// A background agent has no TUI and never draws a frame, so no statusline can ever file a
+// snapshot for it (#29). Counted in the coverage population it was one permanently blind row,
+// and one agent beside one chained terminal made `list` say "chained on 1/2 sessions — run
+// tarmac install": advice already taken, which cannot succeed for the entry that raised it.
+// The map made the same call for the agent strip and says so in docs/MANUAL.md; the fleet-wide
+// line is the last place still counting them.
+test('leaves a background agent out of what a statusline could ever cover', () => {
+  const sessions = [
+    session({ sessionId: 'a' }),
+    session({ sessionId: 'b', kind: 'background', pid: null, status: 'working', busy: true }),
+  ];
+  const snapshots = new Map([['a', telemetry({ sessionId: 'a' })]]);
+  const { health } = buildFleet({ sessions, snapshots, now: NOW });
+  assert.equal(health.sessions, 2, 'the fleet still has two entries');
+  assert.equal(health.chainable, 1, 'one of them is a terminal that can draw a frame');
+  assert.equal(health.covered, 1, 'and it is covered, so nothing is missing');
+});
+
+// The tolerance the map already applies to the same word: if NOTHING on the fleet calls itself
+// `interactive`, the value moved rather than every terminal on the machine going background at
+// once. Reading it the other way would empty the coverage population on the release that
+// renames it, and a denominator of zero is a banner that can never be raised again.
+test('counts every entry when nothing on the fleet calls itself interactive', () => {
+  const sessions = [session({ sessionId: 'a', kind: 'terminal' }), session({ sessionId: 'b', kind: 'background' })];
+  const { health } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  assert.equal(health.chainable, 2);
+});
+
+// An absent kind is not evidence of an agent either, same rule as the map's and the status's:
+// unrecognised means unknown, never "the quiet one".
+test('counts an entry that gives no kind at all', () => {
+  const sessions = [session({ sessionId: 'a' }), session({ sessionId: 'b', kind: null })];
+  const { health } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  assert.equal(health.chainable, 2);
+});
+
+// `unfilable` explains part of the same population, so it is counted over the same rows. An
+// agent whose id is not the UUID the wrapper files under is not a session waiting on an id it
+// will never get: it is not waiting on anything.
+test('does not blame a background agent for an id the wrapper would never file', () => {
+  const sessions = [
+    session({ sessionId: 'ea6a607c-42e0-4773-af4d-ae5f5938d819' }),
+    session({ sessionId: 'agent-abc', kind: 'background', pid: null }),
+  ];
+  const { health } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  assert.equal(health.chainable, 1);
+  assert.equal(health.unfilable, 0);
+});
+
 test('flags total drift as a schema break, not a per-session hiccup', () => {
   const sessions = [session({ sessionId: 'a' }), session({ sessionId: 'b' })];
   const snapshots = new Map([

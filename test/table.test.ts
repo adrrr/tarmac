@@ -119,6 +119,16 @@ test('says nothing about unfilable ids when every uncovered session is a frame a
   assert.match(out, /! statusline chained on 1\/3 sessions$/m, 'the bare line, with nothing appended');
 });
 
+// #29: an agent draws no frame, so `run tarmac install` is advice that cannot succeed for it.
+// The map already refuses to print those words on an agent strip. The fleet-wide line counted
+// them anyway, and one agent beside one chained terminal was enough to raise it.
+test('says nothing when the only uncovered entry is a background agent', () => {
+  const rows = [row(), row({ sessionId: 's2', kind: 'background', pid: null, ctxState: 'absent', ctxPct: null })];
+  const out = renderTable(fleet(rows, { sessions: 2, chainable: 1, covered: 1 }));
+  assert.equal(/chained on/.test(out), false, 'no coverage line at all');
+  assert.match(out, /2 sessions · /, 'and the fleet is still two entries');
+});
+
 // C1: `readSnapshots` has always counted the payloads it could not key to a session — a
 // renamed `session_id` is exactly that — and no renderer read the count. The fleet then
 // looked unchained, and the advice was "run tarmac install": already done, and powerless

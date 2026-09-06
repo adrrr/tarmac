@@ -96,7 +96,10 @@ test('no reading in the shown minute is stale, and every session is chained', ()
   for (const r of rows) {
     assert.ok(r.snapshotAgeMs !== null && r.snapshotAgeMs < DEFAULT_STALE_AFTER_MS, `${r.project} is dated`);
   }
-  assert.equal(health.covered, health.sessions, 'every session chained: no coverage banner');
+  // Against `chainable`, not `sessions`: the two background agents in this fleet draw no TUI
+  // frame, so they are not part of what a status line could cover (#29).
+  assert.equal(health.chainable, health.sessions - 2, 'the two invented agents');
+  assert.equal(health.covered, health.chainable, 'every session chained: no coverage banner');
   assert.equal(health.drift, 0);
   assert.equal(health.schemaBroken, false);
   assert.equal(health.noSessionId, 0);
@@ -333,9 +336,13 @@ test('serve --demo answers a full fleet with no claude on the machine and no sna
   const { child, port } = await serveDemo();
   t.after(() => child.kill('SIGKILL'));
 
-  const fleet = JSON.parse(await get(port, '/api/fleet')) as { rows: Array<{ name: string; cwd: string }>; health: { sessions: number; covered: number } };
+  const fleet = JSON.parse(await get(port, '/api/fleet')) as {
+    rows: Array<{ name: string; cwd: string }>;
+    health: { sessions: number; chainable: number; covered: number };
+  };
   assert.equal(fleet.rows.length, DEMO_SESSIONS, 'the demo went through the live sources, which are broken here');
-  assert.equal(fleet.health.covered, DEMO_SESSIONS);
+  assert.equal(fleet.health.covered, fleet.health.chainable, 'every session a frame can reach is chained');
+  assert.equal(fleet.health.chainable, DEMO_SESSIONS - 2, 'the two agents are not part of that count');
   for (const r of fleet.rows) assert.ok(r.cwd.startsWith(`${DEMO_HOME}/`), `a row off this machine: ${r.cwd}`);
 
   const page = await get(port, '/');
