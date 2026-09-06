@@ -129,7 +129,7 @@ the journal, if you keep one. `<canvas>` and the page's own script, no library.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/curves-dark.png">
   <img src="docs/media/curves-light.png" width="1100"
-       alt="The curves page of the demo fleet, on the 7d range out of the invented journal. Context is a row of small multiples, one line per session, each a sawtooth that climbs through the day and breaks where the session was recycled, none of them carrying the arrow that marks a climbing line, since the panel counts nothing climbing over this range. Cost is one stacked bar per day in a fixed project order, seven days between $128 and $221. Quota is the seven-day line climbing over the five-hour window's highs. A banner above names one unrecognised status, and the header is badged demo data.">
+       alt="The curves page of the demo fleet, on the 7d range out of the invented journal. Context is a row of small multiples, one band per project: four sawtooths that climb through the day and break where the session was recycled, and storefront, a short stroke a day near the baseline. None carries the arrow that marks a climbing line, since the panel counts nothing climbing over this range. Cost is one stacked bar per day in a fixed project order, seven days between $128 and $221. Quota is the seven-day line climbing over the five-hour window's highs. A banner above names one unrecognised status, and the header is badged demo data.">
 </picture>
 
 A context line breaks where its session did, so a recycle at three in the morning reads as a
@@ -237,11 +237,12 @@ and what would have worked. Spellings, edge cases and the two health fields
 ```bash
 npm test                       # typecheck (src + test + scripts), then run the suite
 npm run build                  # flat JavaScript into dist/
-node scripts/demo-fleet.ts     # the invented fleet the captures above are taken of
+node scripts/demo-fleet.ts     # a second invented fleet, served on a port
 ```
 
-Every capture on this page is taken of a fleet that does not exist. A screenshot of a real
-machine carries working directories, prompts and costs, and nothing real enters this repo.
+Every capture on this page is taken of `serve --demo`, a fleet that does not exist. A
+screenshot of a real machine carries working directories, prompts and costs, and nothing real
+enters this repo.
 What CI covers, which Node version develops and which one ships:
 [the manual](docs/MANUAL.md#developing). Capturing the fixtures for a new Claude Code build:
 [the manual](docs/MANUAL.md#capturing-a-new-claude-code-version).
