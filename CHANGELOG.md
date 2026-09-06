@@ -22,7 +22,6 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - **`/api/history?range=` carries `from` and `to`**, the window the reader charged its records
   against. Every day of the range is in it, including the ones nothing was written in, which is
   what the charts need to draw the range that was asked for.
-
 - **`health.covered`, `health.unfilable` and `health.drift` are counted over the sessions a
   status line could write for.** `tarmac list --json` and `/api/fleet` carry a new
   `health.chainable` beside them, the size of that population, and it is the denominator the
@@ -38,10 +37,19 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   whose journal was younger than the range drew one column alone in the middle of an empty plot,
   and the identical picture at both ranges. Every day of the range has a slot now, a day nothing
   was written in draws nothing in its own place, the axis names each day at 7d and each fifth date
-  at 30d, and the stretch in front of a young journal says once, quietly, where the record begins.
-  Bars are capped at 48px so one day of data is a bar and not a wall, and the per-column total is
-  dropped at 30d where thirty of them are noise — a tap still prices any column. Every grid the
-  window feeds is bounded, so a window off the wire cannot allocate a tab into silence.
+  at 30d, and the stretch in front of a young journal says once, quietly, `no readings before
+  <date>` — the oldest trace in the window, which is all this can see. The bar cap goes from 24px
+  to 48px, so seven daily bars fill the panel rather than leaving a third of it empty, and the
+  per-column total is dropped at 30d where thirty of them are noise — a tap still prices any
+  column. Nothing the window feeds is unbounded any more: the grids are capped, the axis is drawn
+  over what the grid covers rather than over what the window claims, and the tick walk has a
+  ceiling — a window off the wire used to come back as tens of thousands of labels a frame.
+- **The quota chart no longer paints the end of a range nobody read to.** With the axis running to
+  the close of the window, the end dot sat against the right edge and the last five-hour bar ran
+  there too: on a week a serve was up for one day of, thirteen unmeasured hours drawn at the
+  height of a peak reached that morning. The dot sits on the curve's own last point and the last
+  window closes with the record, which is the rule this chart already kept for a turnover it
+  slept through.
 - **A background agent no longer sends you to run `tarmac install`.** An agent session has no TUI
   and never draws a frame, so no status line can ever file a snapshot for it. Counted among the
   blind, one agent beside one chained terminal was enough to raise `statusline chained on 1/2

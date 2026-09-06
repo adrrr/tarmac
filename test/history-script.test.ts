@@ -580,6 +580,29 @@ test('the five-hour skyline stops at the last hour measured, not at the close of
   );
 });
 
+// A finger over a long range is inside a slot a day or an hour wide, not near a point: the
+// nearest-point rule the 24h chart is read by names the wrong day for most of the plot, and the
+// worst of it is the first slot, where half of it rounds to the second day.
+test('a tap on a long range names the day it landed in, not the nearest boundary', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : stub()));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  // A tenth of the way across a seven-day plot is inside Sunday, the first column: 0.1 is short
+  // of the 0.143 its right edge sits at. Read as a point on a six-interval axis it rounds to
+  // Monday, a whole column along.
+  m.p.el('cost-canvas').fire('pointerdown', { clientX: PL + 0.1 * (PR - PL) });
+  await settle(m);
+  assert.equal(m.p.el('cost-sub').textContent, 'Sun 23');
+
+  // And the far end of the plot is the LAST column, not one past it: the same rule read as
+  // points leaves the last slot unreachable by half its own width.
+  m.p.el('cost-canvas').fire('pointerdown', { clientX: PL + 0.99 * (PR - PL) });
+  await settle(m);
+  assert.equal(m.p.el('cost-sub').textContent, 'Sat 29');
+});
+
 // An axis may not promise a span the chart does not draw. The grid is capped, `d.to` is not, and
 // the two long charts handed the raw one straight to the tick walk: a window off the wire came
 // back as tens of thousands of labels and hundreds of thousands of canvas calls a frame, which
