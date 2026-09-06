@@ -36,6 +36,17 @@ const RESET_WATCHED_MS = 600000;
 const MIN = 60000;
 const HOUR = 3600000;
 
+/**
+ * The longest window this view will draw over, in days.
+ *
+ * Both ends of a range's window come off the wire, and the page's rule is that nothing off the
+ * wire may take it down. A `to` a century out is 1800 columns and 876,000 hour slots in every
+ * band, reallocated on every resize, every tap and every change of scheme — not a throw, and
+ * worse than one: a tab that stops answering with no error to read. Sixty times the longest
+ * range, which no answer this page understands can reach.
+ */
+const MAX_DAYS = 1800;
+
 /** One drawable line: a project's colour, a clock, and one reading per step. */
 export interface Series {
   name: string | null;
@@ -276,7 +287,7 @@ export function ctxLines(samples: any[], cadence: number, roster: Slot[]): Line[
 export function ctxRows(hours: any[], roster: Slot[], from: number, to: number): Series[] {
   if (hours.length === 0) return [];
   var t0 = hourOf(from);
-  var n = gridLen(t0, to - HOUR, HOUR);
+  var n = hourSlots(from, to);
   if (n === 0) return [];
   var anchored = false;
   var i, j;
@@ -348,15 +359,24 @@ export function nextDay(t: number): number {
  * reader charged its records against is the domain, and a day nobody wrote in is a slot with
  * nothing in it rather than a day the axis closes up.
  *
- * The ceiling is not defensiveness for its own sake: the two ends come off the wire, and a `to`
- * a century out would walk this loop for as long as the tab was open. Sixty times the longest
- * range, which no answer this page understands can reach.
+ * Bounded by `MAX_DAYS`, which every grid in this file is: the two ends come off the wire, and a
+ * `to` a century out would walk this loop for as long as the tab was open.
  */
 export function daySlots(from: number, to: number): number[] {
   var out: number[] = [];
   if (!isFinite(from) || !isFinite(to)) return out;
-  for (var d = startOfDay(from); d < to && out.length < 1800; d = nextDay(d)) out.push(d);
+  for (var d = startOfDay(from); d < to && out.length < MAX_DAYS; d = nextDay(d)) out.push(d);
   return out;
+}
+
+/**
+ * How many hour slots a range's window holds, to the same ceiling the day grid keeps.
+ *
+ * One place rather than two identical expressions: the bands and the quota curve are drawn over
+ * one window and a grid either of them read differently would be two charts about two ranges.
+ */
+export function hourSlots(from: number, to: number): number {
+  return Math.min(gridLen(hourOf(from), to - HOUR, HOUR), MAX_DAYS * 24);
 }
 
 /**
@@ -567,7 +587,7 @@ export function quotaOfHours(hours: any[], resets: any[], from: number, to: numb
   // The range's own grid, like the bands next door: a week the serve was up for one day of is a
   // curve at the end of a week, not a curve stretched over one.
   out.t0 = hourOf(from);
-  var n = gridLen(out.t0, to - HOUR, HOUR);
+  var n = hourSlots(from, to);
   if (n === 0) return out;
   for (var z = 0; z < n; z++) {
     out.five.push(null);
@@ -673,6 +693,7 @@ const PURE = [
   startOfDay,
   nextDay,
   daySlots,
+  hourSlots,
   costHourly,
   costDaily,
   dayStart,
@@ -891,7 +912,7 @@ export function historyScript(): string {
   return `
 (function () {
   var INTERACTIVE = ${JSON.stringify(INTERACTIVE)};
-  var SLOTS = ${SLOTS}, RESET_WATCHED_MS = ${RESET_WATCHED_MS}, MIN = ${MIN}, HOUR = ${HOUR};
+  var SLOTS = ${SLOTS}, RESET_WATCHED_MS = ${RESET_WATCHED_MS}, MIN = ${MIN}, HOUR = ${HOUR}, MAX_DAYS = ${MAX_DAYS};
   var H = ${JSON.stringify(HEIGHTS)};
   var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];

@@ -896,3 +896,23 @@ test('the quota curve spans the whole range too, and its readings keep their own
   assert.equal(q.seven[33], 20);
   assert.equal(q.five.filter((v) => v !== null).length, 1);
 });
+
+// The two ends of the window come off the wire, and the page's own rule is that nothing off the
+// wire may take it down. A `to` a century out is 876,000 hour slots in every band — reallocated
+// on every resize, every tap and every change of scheme — which is not a throw and is worse than
+// one: a tab that stops answering, with no error to read. The day grid was bounded from the
+// start; the hour grid under it has to be bounded by the same ceiling.
+test('a window a century wide is drawn to a ceiling, and never allocated in full', () => {
+  const t0 = at(2026, 8, 29, 0, 0);
+  const far = t0 + 100 * 365 * 86_400_000;
+
+  const rows = ctxRows([hour(t0, [{ ctxPct: 40 }])], rosterOf(['alpha']), t0, far);
+  const q = quotaOfHours([hour(t0, [{}], 40, 20)], [], t0, far);
+
+  assert.ok(rows[0].v.length <= 43_200, `a band of ${rows[0].v.length} hours`);
+  assert.ok(q.five.length <= 43_200, `a quota curve of ${q.five.length} hours`);
+  // Not clamped to nothing either: the ceiling is a ceiling, and a real month still fits under it
+  // whole.
+  const month = ctxRows([hour(t0, [{ ctxPct: 40 }])], rosterOf(['alpha']), t0, t0 + 30 * 86_400_000);
+  assert.equal(month[0].v.length, 720);
+});

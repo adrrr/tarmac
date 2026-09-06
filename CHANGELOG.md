@@ -40,7 +40,8 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   was written in draws nothing in its own place, the axis names each day at 7d and each fifth date
   at 30d, and the stretch in front of a young journal says once, quietly, where the record begins.
   Bars are capped at 48px so one day of data is a bar and not a wall, and the per-column total is
-  dropped at 30d where thirty of them are noise — a tap still prices any column.
+  dropped at 30d where thirty of them are noise — a tap still prices any column. Every grid the
+  window feeds is bounded, so a window off the wire cannot allocate a tab into silence.
 - **A background agent no longer sends you to run `tarmac install`.** An agent session has no TUI
   and never draws a frame, so no status line can ever file a snapshot for it. Counted among the
   blind, one agent beside one chained terminal was enough to raise `statusline chained on 1/2
