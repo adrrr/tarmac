@@ -908,7 +908,12 @@ ${HISTORY_CSS}
   /* The two things the reader has to be able to read while dragging: the minute under the
      handle, and what the whole range covers. Tabular, so neither jitters as it counts. */
   #replay-at { font-variant-numeric:tabular-nums; font-weight:600; }
+  /* One line, and the pointer is told there is more behind it. What came off this line is a
+     paragraph of standing prose about the record, which is now the title and a span for a
+     screen reader — moved, never dropped: it is what keeps an ungrouped map from reading as a
+     rendering that broke. */
   .replay .covers { flex-basis:100%; color:var(--dim); font-size:.75rem; }
+  .replay .covers[title] { cursor:help; }
   /* The banner wears the warning style on purpose: a page showing a past minute as though it were the
      fleet is the worst thing this dashboard could do, so it wears the loudest thing it has. */
   /* Sticky, because the handle is at the bottom of a map that can be taller than the
@@ -1328,6 +1333,10 @@ ${HISTORY_PHONE_CSS}  }
   <button type="button" id="play" data-playing="false">Play</button>
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
+  <!-- What the line above could not fit, for a reader who cannot hover a title: the standing
+       properties of the record — nothing replayed is dated, and the past is drawn ungrouped.
+       Its own element rather than a child of the line, which the script rewrites wholesale. -->
+  <span class="sr" id="covers-note"></span>
 </div>
 ${view === 'history' ? renderHistoryView({ historyEnabled, demo }) : ''}
 <script>${pageScript(view)}</script>${view === 'history' ? `\n<script>${historyScript()}</script>` : ''}
@@ -1524,6 +1533,7 @@ function pageScript(view: View): string {
 
   var replay = document.getElementById('replay'), scrub = document.getElementById('scrub');
   var playBtn = document.getElementById('play'), covers = document.getElementById('covers');
+  var coversNote = document.getElementById('covers-note');
   var rview = document.getElementById('replay-view'), rmap = document.getElementById('replay-map');
   var rmeta = document.getElementById('replay-meta'), note = document.getElementById('replaying');
   var rlimits = document.getElementById('replay-limits');
@@ -1567,41 +1577,55 @@ function pageScript(view: View): string {
     return hhmm(t) + (new Date(t).getUTCDate() === new Date(ref).getUTCDate() ? '' : ' yesterday');
   }
 
-  // What the range covers, in the record's own terms. Never "a day": that is the size of the
+  // What the range covers, in the record's own terms and in ONE line: the span, how many
+  // readings are in it, and how many minutes have none. Never "a day" — that is the size of the
   // ring, and a serve ten minutes old has seen ten minutes.
-  function coversText() {
+  //
+  // One line because this is the line under the hand of whoever is dragging the handle, and it
+  // was three of technical prose. What came off it is below, in KEEPS, and it is MOVED rather
+  // than dropped: the standing properties of the record are the honest part of this feature.
+  function coversRange() {
     var n = record.samples.length;
-    if (n === 0) {
-      // A record empty because every reading FAILED is not a record that has just started, and
-      // this was the one branch that threw that away: ten hours of a collector that could not
-      // run read exactly like a serve thirty seconds old.
-      return record.missed
-        ? 'Nothing recorded — this serve started at ' + hhmm(record.since) + ' UTC and '
-          + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' were due and never read.'
-        : 'Nothing recorded yet — this serve started at ' + hhmm(record.since) + ' UTC'
-          + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
-    }
     var last = record.samples[n - 1].t;
-    return 'Covering ' + edge(record.since, last) + ' – ' + hhmm(last) + ' UTC'
-      // Not "when the page loaded": the record is asked for again when a tab that has been
-      // away comes back, so the sentence names the last time this page asked rather than a
-      // moment it may be hours past.
-      + ', as this page last had it — ' + n + ' reading' + (n === 1 ? '' : 's')
+    return 'Covering ' + edge(record.since, last) + ' – ' + hhmm(last) + ' UTC · '
+      + n + ' reading' + (n === 1 ? '' : 's')
       // A gap that says it is a gap is not a gap. The handle steps through readings, not
-      // through minutes, and a record with holes in it is not a smooth walk.
-      + (record.missed ? ', ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '')
-      + '. The record keeps each reading, not how old that reading was, so nothing replayed here is dated.'
-      // The other thing the ring does not hold, said where the reader meets it: the argument
-      // for an ungrouped replay was written in the README, the manual, the changelog and a
-      // comment in this sheet, and nowhere the reader can see it. Shown less and told nothing,
-      // a reader reads it as a rendering that broke.
-      //
-      // A standing property of the record, never an event. This line sits in the scrubber's own
-      // block, outside the live fragment and outside the replay one, so it is on the page from
-      // the moment the record lands — and a sentence saying the grouping had gone would be
-      // printed under a live map with the grouping on it.
-      + ' It keeps a project name and never the directory a node was read in, so the past is'
-      + ' drawn ungrouped, in the order the sample carries.';
+      // through minutes, and a record with holes in it is not a smooth walk — which is why this
+      // one clause stayed on the visible line while the paragraph below it went.
+      + (record.missed ? ' · ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '');
+  }
+
+  // The two standing properties of the record, off the line and never out of reach: in the
+  // title for a pointer, and in a span only a screen reader meets. Both are things this page
+  // would otherwise be caught not saying — the ring never kept how old a reading was, and it
+  // never kept the directory a node was read in, so a replayed map is undated and ungrouped.
+  // Shown less and told nothing, a reader reads an ungrouped map as a rendering that broke.
+  var KEEPS = 'The record keeps each reading, not how old that reading was, so nothing replayed'
+    + ' here is dated. It keeps a project name and never the directory a node was read in, so the'
+    + ' past is drawn ungrouped, in the order the sample carries.';
+
+  // The line, and what it could not fit. A message that IS the whole of what there is to say
+  // carries no second copy of itself: a tooltip repeating the line it sits on is how a reader
+  // learns to ignore the next one.
+  function say(line, more) {
+    covers.textContent = line;
+    coversNote.textContent = more;
+    if (more === '') covers.removeAttribute('title');
+    else covers.setAttribute('title', more);
+  }
+
+  // What there is to say when there is no range: a message that is the whole of itself, and
+  // carries none of KEEPS — there is nothing replayed for those properties to be true of.
+  //
+  // A record empty because every reading FAILED is not a record that has just started, and this
+  // was the one branch that threw that away: ten hours of a collector that could not run read
+  // exactly like a serve thirty seconds old.
+  function emptyText() {
+    return record.missed
+      ? 'Nothing recorded — this serve started at ' + hhmm(record.since) + ' UTC and '
+        + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' were due and never read.'
+      : 'Nothing recorded yet — this serve started at ' + hhmm(record.since) + ' UTC'
+        + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
   }
 
   function ready() {
@@ -1611,7 +1635,7 @@ function pageScript(view: View): string {
     // space. Up only where there is something to replay: a record with no samples in it has no
     // second state for this line to be telling the present apart from.
     liveState.hidden = n === 0;
-    covers.textContent = coversText();
+    say(n === 0 ? emptyText() : coversRange(), n === 0 ? '' : KEEPS);
     scrub.max = String(n === 0 ? 0 : n - 1);
     scrub.disabled = n === 0;
     playBtn.disabled = n === 0;
@@ -1623,7 +1647,7 @@ function pageScript(view: View): string {
     replay.hidden = false;
     scrub.disabled = true;
     playBtn.disabled = true;
-    covers.textContent = said;
+    say(said, '');
   }
 
   function load() {

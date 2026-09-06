@@ -128,11 +128,41 @@ test('the line under the handle says the past is drawn ungrouped, and why', asyn
   const page = mount(record(10));
   await page.advance(0);
   assert.equal(page.el('replaying').hidden, true, 'the live map is up, and the line is already there');
-  assert.match(page.el('covers').textContent, /drawn ungrouped/);
-  assert.match(page.el('covers').textContent, /never the directory/, 'naming what the record actually keeps');
+  const said = (): string => page.el('covers-note').textContent + page.el('covers').getAttribute('title');
+  assert.match(said(), /drawn ungrouped/);
+  assert.match(said(), /never the directory/, 'naming what the record actually keeps');
   page.el('scrub').drag(3);
   assert.equal(page.el('replaying').hidden, false, 'and it is still there once the past is up');
-  assert.match(page.el('covers').textContent, /drawn ungrouped/);
+  assert.match(said(), /drawn ungrouped/);
+});
+
+// Three lines of technical prose is what the last two paragraphs above bought, under a handle
+// somebody is dragging — and the first thing anyone sees of this product is a recording of that
+// drag. The visible line is the range and nothing else: what this record covers, and how many
+// readings are in it. Nothing is DELETED, which is the trade this line is not allowed to make:
+// the prose is the honest part, and it goes where hovering and a screen reader both reach it.
+test('the visible line is the range, and the prose it used to carry is not lost', async () => {
+  const page = mount(record(10));
+  await page.advance(0);
+  const line = page.el('covers').textContent;
+  assert.ok(line.length <= 72, `one line, not three: ${line.length} chars — ${line}`);
+  assert.match(line, /10 readings/, 'what is in the record');
+  assert.doesNotMatch(line, /ungrouped|dated/, 'and none of the standing prose about it');
+  assert.equal(page.el('covers').getAttribute('title'), page.el('covers-note').textContent, 'the same words, for a pointer and for a reader who has none');
+  assert.match(page.el('covers-note').textContent, /nothing replayed here is dated/);
+});
+
+// The branches that have nothing but a sentence to give: a record with no readings in it, and
+// one that could not be read at all. There is no standing prose to fold away, and a tooltip
+// that repeats the line it is on is a tooltip that teaches a reader to ignore the next one.
+test('a line that is the whole message carries no second copy of itself', async () => {
+  const empty = mount({ since: CLOCK, cadence: MIN, samples: [], missed: 0 });
+  await empty.advance(0);
+  assert.equal(empty.el('covers').getAttribute('title'), null);
+  assert.equal(empty.el('covers-note').textContent, '');
+  const gone = mount(() => Promise.resolve({ ok: false, body: 'the record is gone' }));
+  await gone.advance(0);
+  assert.equal(gone.el('covers').getAttribute('title'), null);
 });
 
 // The state line goes up with the handle and never before it: it is the live half of the
