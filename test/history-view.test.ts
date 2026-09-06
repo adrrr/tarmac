@@ -935,3 +935,33 @@ test('a clock the wire spelled as null is no window at all, not the first of Jan
   assert.equal(daySlots(day, day + 2 * 86_400_000).length, 2);
   assert.equal(hourSlots(day, day + 2 * 86_400_000), 48);
 });
+
+// ── what the drawing reads out of the sheet ─────────────────────────────────────────────
+//
+// Two values the canvas takes from CSS. No assertion can read a pixel, and neither of these
+// reaches the recorder either — both are set as properties on the 2d context, which the stub
+// stores and never lists. So they are pinned at the source the browser is served, the way the
+// sheet's own rules are pinned next door.
+
+// The halo behind an axis label and the ring round an end point are painted in the page's
+// background so the ink they sit on does not run into the line under them. That was --bg, and
+// --bg is now the FLOOR the panels stand on: read as-is, every chart would paint grey haloes on
+// its own white card. The panel's own surface is the colour behind those labels.
+test('the canvas paints its haloes in the panel it is drawn on, not the floor under the page', () => {
+  const src = historyScript();
+  assert.match(src, /bg:\s*cssVar\('--surface'\)\s*\|\|\s*cssVar\('--bg'\)/);
+});
+
+// How faint a line goes when it is not the one being read. At .45 on white the weakest of the
+// eight hues fell to 1.65:1, which is the washed-out light mode in every screenshot. It is also
+// the one drawing value that has to differ by theme — a dark sheet needs less fading, not more —
+// so it is a token and not a number in the script: the sheet already knows which theme it is in.
+test('how faint a set-aside series goes is read from the sheet, so light and dark can differ', () => {
+  const src = historyScript();
+  assert.match(src, /cssVar\([^)]*'--fade'\)/, 'the faded alpha comes from a token');
+  assert.match(src, /'--fade-iso'/, 'and so does the deeper fade of an isolated series');
+  // A line and the dot that ends it fade together. They did not: the line went to .2 under an
+  // isolation and its end point stayed at .45, so isolating one project left seven bright dots
+  // hanging over seven faded lines.
+  assert.equal((src.match(/: fadeAlpha\(iso\)/g) ?? []).length, 2, 'a line and its end point fade by the same rule');
+});

@@ -215,9 +215,14 @@ test('the thumb is the thing you can grab, and the track the thing it runs on', 
   const size = (part: string, prop: string): number => {
     const m = new RegExp(`::${part}[^{]*\\{([^}]*)\\}`).exec(css);
     assert.ok(m, part);
-    const v = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([\\d.]+)rem`).exec(m![1]);
+    // Either unit, in CSS pixels at a 16px root. The handle is a drawn object at a fixed size
+    // and is spelled in px; the sheet around it is in rem. What this sum is about is the RATIO
+    // of two lengths, and a ratio does not care which unit each was written in — reading only
+    // one of them turned a re-spelled declaration into a failure about geometry that had not
+    // moved.
+    const v = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([\\d.]+)(rem|px)`).exec(m![1]);
     assert.ok(v, `${part} has no ${prop}`);
-    return Number(v![1]);
+    return Number(v![1]) * (v![2] === 'rem' ? 16 : 1);
   };
   for (const [thumb, track] of [
     ['-webkit-slider-thumb', '-webkit-slider-runnable-track'],

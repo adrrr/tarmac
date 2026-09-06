@@ -706,15 +706,67 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
 <style>
   /* --wait is a fourth hue rather than the warning one: a session blocked on a human is not
      a fault, and painting it amber puts it in the same column as "tarmac cannot read this". */
-  :root { color-scheme: light dark; --fg:#111; --dim:#6b7280; --line:#e5e7eb; --bg:#fff; --warn:#b45309; --warnbg:#fffbeb; --busy:#047857; --wait:#1d4ed8; }
-  @media (prefers-color-scheme: dark) { :root { --fg:#e5e7eb; --dim:#9ca3af; --line:#374151; --bg:#0b0f14; --warn:#fbbf24; --warnbg:#231a06; --busy:#34d399; --wait:#93c5fd; } }
+  /* Two planes, not one. Everything on this page used to be a hairline on the same white:
+     a card inside a berth was two identical rules nested, and nothing was ever ON anything.
+     --bg is now the FLOOR and --surface the panels standing on it, which is the whole of what
+     makes a table read as a panel rather than as a document. The old names all survive, so
+     every rule written against them still resolves. */
+  :root { color-scheme: light dark;
+          --fg:#0f1218; --dim:#5f6875;
+          --bg:#f3f4f6; --surface:#fff; --surface-2:#f7f8fa;
+          /* A hairline is decoration; a control's edge is not. The second is darker and is
+             still under the 3:1 a non-text control would need to be identified by — so no
+             control on this page is identified by its border alone: the active tab keeps its
+             ink and its weight, the scrubber's thumb is ringed in --fg, states keep their hue. */
+          --line:#e2e5ea; --line-strong:#b9c1cb;
+          --warn:#b45309; --warnbg:#fffbeb; --busy:#047857; --wait:#1d4ed8;
+          --shadow-1:0 1px 2px rgba(16,24,40,.06);
+          --shadow-2:0 1px 2px rgba(16,24,40,.06), 0 12px 28px -14px rgba(16,24,40,.22);
+          /* The lit top edge of a raised surface. It is a dark-mode trick and reads as dirt in
+             light, so in light it is nothing — declared all the same, because every rule that
+             wants it lists it unconditionally. */
+          --edge:0 0 0 0 transparent;
+          --r-sm:8px; --r-md:12px; --r-lg:14px; --r-pill:99px;
+          --gutter:1.5rem; --maxw:80rem;
+          /* The face the numbers wear. Values only — a table set in mono is a terminal dump,
+             not an instrument. */
+          --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,"Cascadia Mono","Segoe UI Mono","Roboto Mono",monospace;
+          /* How faint a chart's line goes when another one is being read. Here rather than in
+             the script because it is the one drawing value that differs by theme, and the
+             script has no business asking a browser which theme it is in. */
+          --fade:.72; --fade-iso:.3; }
+  @media (prefers-color-scheme: dark) { :root {
+          --fg:#e6eaf0; --dim:#8b97a6;
+          --bg:#0a0d11; --surface:#12171e; --surface-2:#171d25;
+          --line:#232b35; --line-strong:#454f5e;
+          --warn:#fbbf24; --warnbg:color-mix(in srgb,#fbbf24 10%,#12171e); --busy:#34d399; --wait:#93c5fd;
+          --shadow-1:0 1px 2px rgba(0,0,0,.55);
+          --shadow-2:0 1px 2px rgba(0,0,0,.55), 0 12px 28px -14px rgba(0,0,0,.75);
+          --edge:inset 0 1px 0 rgba(255,255,255,.045);
+          --fade:.6; } }
   /* Eight categorical hues for the history view, kept apart from the four above: those four
      say what a session is DOING, and a chart that borrowed one would be colouring a project
      with the word for busy. */${HISTORY_PALETTE}
-  body { margin:0; padding:2rem 1.25rem; background:var(--bg); color:var(--fg);
+  /* The floor is the html element's, not the body's: the body is now a column with a width, so
+     its own background would stop at the column's edge and leave white gutters. */
+  html { background:var(--bg); }
+  /* A page, not a document. Unbounded, the table spread eight columns over 1440px and the map
+     left 400px of dead white on the right — nothing framed the content, so nothing read as a
+     product. */
+  body { margin-inline:auto; max-width:var(--maxw); padding:1.5rem var(--gutter) 2rem;
+         background:var(--bg); color:var(--fg);
          font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",sans-serif; }
-  header { display:flex; align-items:baseline; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
-  h1 { font-size:1.1rem; margin:0; letter-spacing:.02em; }
+  /* The header is a panel like the rest, rather than six unrelated objects on a line. A card
+     and not a full-bleed band: a band stopped at the column's width leaves two cut corners at
+     the top of the page, and a real full-bleed one needs 100vw, which opens a horizontal
+     scrollbar on any OS that draws classic scroll bars. */
+  header { display:flex; align-items:center; gap:.85rem; flex-wrap:wrap; margin:0 0 1rem;
+           background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg);
+           box-shadow:var(--shadow-1), var(--edge); padding:.6rem .9rem; }
+  /* The wordmark in the face the numbers wear. It was the smallest thing on the page that
+     mattered — 15.4px beside a 20px dial and an amber badge — and mono separates the name of
+     the product from the UI around it for zero bytes and zero claim. */
+  h1 { font-family:var(--mono); font-size:1.05rem; font-weight:600; margin:0; letter-spacing:.02em; }
   .meta { color:var(--dim); font-size:.85rem; }${
     demo
       ? `
@@ -722,7 +774,10 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
      what it says is not chrome, and a badge a reader's eye files with the furniture is a badge
      that is not in the screenshot as far as anybody looking at the screenshot is concerned.
      Shipped only on a demo, so a plain serve is byte-for-byte the page it always was. */
-  .demo-tag { background:var(--warnbg); color:var(--warn); border:1px solid currentColor; border-radius:99px;
+  /* Filled rather than outlined. It is the one element on this page whose job is to shout, and
+     the page around it got quieter: a hairline pill on the header's own white no longer reads
+     as a stamp. */
+  .demo-tag { background:color-mix(in srgb, var(--warn) 12%, var(--surface)); color:var(--warn); border:1px solid currentColor; border-radius:99px;
               padding:.05rem .55rem; font-size:.75rem; font-weight:600; letter-spacing:.02em; white-space:nowrap; }`
       : ''
   }
@@ -734,15 +789,21 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
      whole page down, which is the jump this pair exists to remove. The minimum is there
      because only one of the two carries a button, and a button's own line box is taller than
      a line of this text. */
-  .warn, .live-state { border:1px solid currentColor; border-radius:6px;
-          padding:.35rem .65rem; margin:.3rem 0; font-size:.8rem; line-height:1.45; }
+  .warn, .live-state { border:1px solid currentColor; border-radius:var(--r-sm);
+          padding:.4rem .7rem; margin:.3rem 0; font-size:.8rem; line-height:1.45; }
   /* And the floor on the two that take turns, never on the box: put on the shared rule it grew
      the offline banner and the noscript warning by 5.5px each — a page redrawn to settle an
      argument between two other elements. It clears the taller of the pair's own contents, which
      is the banner's button: 12px of text in a line box its padding and border take past 21px,
      against 18.56px for a line of the live text. */
   .replaying-note, .live-state { min-height:1.5rem; }
-  .warn { background:var(--warnbg); color:var(--warn); }
+  /* An accent down the left edge instead of a frame at full intensity. What these say is true
+     and worth keeping — "1 session reports a status tarmac does not know" — and it is not
+     urgent: a full-width amber box above the fleet made the first thing a reader saw a
+     warning about a footnote. The mark stays, the shout goes. */
+  .warn { background:var(--warnbg); color:var(--fg); border:0;
+          border-left:3px solid var(--warn); border-radius:0 var(--r-sm) var(--r-sm) 0; }
+  .warn strong { color:var(--warn); }
   .warn:last-of-type { margin-bottom:.9rem; }
   /* The live half: the same box with none of the alarm. Grey on nothing, its border spent on
      holding the size rather than on drawing one — what is normal reads as chrome, and the page
@@ -759,17 +820,45 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
      around it, because what it carries is true rather than urgent — the threshold that dated a
      reading, the payload shapes nobody has captured yet. It reads as chrome to someone
      scanning their sessions and as an answer to someone who came looking for it. */
-  .note { color:var(--dim); font-size:.75rem; line-height:1.5; margin:.9rem 0 0; max-width:95ch; }
+  /* 72ch and a rule above it. At 95ch the paragraph ran the width of a 1440px screen, which is
+     past the measure anybody reads at, and the page ended on a grey slab. A hairline and a
+     column make it the footnote it always was. */
+  .note { color:var(--dim); font-size:.75rem; line-height:1.5; margin:1.5rem 0 0; max-width:72ch;
+          border-top:1px solid var(--line); padding-top:.75rem; }
+  /* One rule for the block, not one per note: two paragraphs each with a line over them is a
+     table of contents. */
+  #fleet-notes .note + .note { border-top:0; padding-top:0; margin-top:.5rem; }
+  .note code { background:var(--surface-2); border:1px solid var(--line); border-radius:4px; padding:.05rem .3rem; }
   /* Two marks, one weight: a reading that has gone cold, and a reading picked out of several
      that were not about the same window. Both say the number beside them may not be what the
      reader takes it for, so neither may end up quieter than the other. */
   .stale, .mixed { color:var(--warn); font-weight:600; }
-  .wrap { overflow-x:auto; }
+  /* The one place on the page that had no panel. overflow hidden is also what clips the 3px
+     state accent on the first cell to the panel's corners. */
+  .wrap { overflow-x:auto; background:var(--surface); border:1px solid var(--line);
+          border-radius:var(--r-lg); box-shadow:var(--shadow-1), var(--edge); }
   table { border-collapse:collapse; width:100%; min-width:44rem; }
-  th { text-align:left; font-weight:600; font-size:.75rem; text-transform:uppercase; letter-spacing:.06em;
-       color:var(--dim); padding:.4rem .6rem; border-bottom:1px solid var(--line); white-space:nowrap; }
+  /* A shaded head and a row that answers the pointer: the difference between a <table> and a
+     view. The head is the nested surface, one step off the panel it sits in. */
+  th { text-align:left; font-weight:600; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;
+       color:var(--dim); padding:.45rem .6rem; background:var(--surface-2);
+       border-bottom:1px solid var(--line); white-space:nowrap; }
+  th:first-child, td:first-child { padding-left:.85rem; }
+  th:last-child, td:last-child { padding-right:.85rem; }
   td { padding:.5rem .6rem; border-bottom:1px solid var(--line); white-space:nowrap; }
+  /* The panel draws the bottom edge; a last row that draws its own puts two lines there. */
+  tbody tr:last-child td { border-bottom:0; }
+  /* Only where there is a pointer to hover with. On a touchscreen :hover sticks to whatever was
+     tapped last, which would leave one row shaded for as long as the reader looks at it. */
+  @media (hover:hover) and (pointer:fine) { tbody tr:hover td { background:var(--surface-2); } }
   td.num { font-variant-numeric:tabular-nums; }
+  /* ── the face of a number ────────────────────────────────────────────────────────────
+     The values, and only the values. Not a project, not a session name, not a model, not a
+     label: a dashboard set entirely in mono is a terminal dump, and the discipline of putting
+     the instrument face on the measurements alone is the whole of what separates the two.
+     .why is deliberately absent — it holds words ("no reading"), not a reading. */
+  .pct, td.num, .gauge .num, .chart-stat, #replay-at, .key .k-val, .asof {
+          font-family:var(--mono); font-variant-numeric:tabular-nums; letter-spacing:0; }
   .dim { color:var(--dim); }
   /* Shape + word + border, so the state survives a reader who cannot tell our two hues
      apart, and a print. */
@@ -800,10 +889,15 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
   .offline strong { white-space:nowrap; }
   /* The tabs, and what they hide. The shell owns the choice — not the fragment — so a poll
      that swaps the fleet underneath cannot put the reader back on a view they left. */
-  nav { display:flex; gap:.15rem; }
+  /* A segmented control: a sunk track with a raised chip on the tab you are reading, rather
+     than three words of which one has a ring round it. The chip is DECORATION — --line-strong
+     and the shadow are both under the 3:1 a border would need to identify a control on its
+     own, so the ink and the weight stay the signal, exactly as before. */
+  nav { display:flex; gap:2px; background:var(--surface-2); border:1px solid var(--line);
+        border-radius:var(--r-pill); padding:2px; }
   nav a { color:var(--dim); text-decoration:none; font-size:.8rem; font-weight:600; text-transform:uppercase;
-          letter-spacing:.06em; padding:.15rem .55rem; border-radius:99px; border:1px solid transparent; }
-  nav a[aria-current="page"] { color:var(--fg); border-color:var(--line); }
+          letter-spacing:.06em; padding:.2rem .6rem; border-radius:var(--r-pill); border:0; }
+  nav a[aria-current="page"] { color:var(--fg); background:var(--surface); box-shadow:var(--shadow-1); }
   /* A finger is not a cursor. Every control on this page is a pill sized for a pointer that
      lands on a single pixel — about 26px of box against the 44 a thumb is asked to hit — and
      the fix cannot be more padding: that would redraw the page for everyone to solve a problem
@@ -834,12 +928,17 @@ ${HISTORY_CSS}
      the fleet is what the page is about, and these two numbers are the weather it flies in.
      Laid out with flex behind the same :not([hidden]) guard the replay containers carry —
      the replayed pair ships hidden, and a display in a stylesheet beats the attribute. */
+  /* Separated from the tabs by a rule rather than by a gap the eye reads as another gap: the
+     header holds two groups that have nothing to do with each other, and a line is the cheapest
+     way to say so. In the header only — the replayed pair below the banner has no neighbour to
+     be divided from. */
   .limits:not([hidden]) { display:flex; gap:1rem; flex-wrap:wrap; align-items:center; }
+  header .limits:not([hidden]) { padding-left:.9rem; border-left:1px solid var(--line); }
   .gauge { display:flex; align-items:baseline; gap:.35rem; font-size:.8rem; }
   /* Not upper-cased, alone among the small labels on this page: "5H" is not an hour, and a
      unit that has been shouted reads as a different unit. */
   .gauge .lbl { color:var(--dim); font-weight:600; letter-spacing:.04em; }
-  .gauge .num { font-variant-numeric:tabular-nums; font-weight:650; }
+  .gauge .num { font-variant-numeric:tabular-nums; font-weight:600; }
   .gauge .reset { color:var(--dim); }
   /* Same bargain as the row bars: a glance at a magnitude, in the quiet ink of a secondary
      fact, beside the number that is the authority. Its own class rather than .bar — that one
@@ -882,14 +981,21 @@ ${HISTORY_CSS}
      label for the button rather than for the pair, and take width from the slider to do it. */
   .replay .replay-name { flex-basis:100%; font-size:.7rem; font-weight:700; letter-spacing:.07em;
             text-transform:uppercase; color:var(--dim); }
-  .replay button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent;
-            border:1px solid var(--line); border-radius:99px; padding:.15rem .8rem; cursor:pointer; }
-  .replay button:hover:not(:disabled) { border-color:var(--dim); }
+  /* The one filled button on the whole dashboard, and the only place the page spends maximum
+     contrast: everything else here is a reading, and this is the single thing a reader is
+     invited to press. */
+  .replay button { font:inherit; font-size:.8rem; font-weight:600; color:var(--bg); background:var(--fg);
+            border:1px solid var(--fg); border-radius:var(--r-pill); padding:.2rem .95rem; cursor:pointer; }
+  .replay button:hover:not(:disabled) { opacity:.88; }
   /* Pressed, and it looks it. The WORD on this button says which of the two it does next —
      "Pause" while the day walks — which is right and is also the one thing a glance cannot
      catch: a screenshot of a stopped replay reads exactly like a screenshot of a running one.
      The attribute carries the other fact, the one that can be painted. */
-  #play[data-playing="true"] { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  /* Inverted, now that the resting button is the filled one. The pair is what it always was —
+     the WORD says which of the two the next press does, the ATTRIBUTE says which of them is
+     happening, and only the second survives a screenshot — so the two paints simply swapped
+     ends. Stopped is the solid invitation; running is the same button hollowed out. */
+  #play[data-playing="true"] { background:var(--surface); color:var(--fg); border-color:var(--fg); }
   .replay button:disabled { opacity:.4; cursor:default; }
   /* The handle. A range input is drawn by the browser until appearance:none hands its two
      shadow parts over — and what the browser drew was a fat grey groove belonging to no page,
@@ -898,18 +1004,29 @@ ${HISTORY_CSS}
      other; the values are one pair, so a thumb retuned in one is retuned in both.
      The rail is the track's own hue, the thumb the page's ink, ringed in the background so it
      reads as an object ON the rail rather than a lump of it. */
+  /* accent-color goes: it was the last thing on this page a browser drew for us, and on the one
+     screen anybody will screenshot. --p is the share of the range already walked, written by the
+     script on every input and every step of a play — it is what makes the bar FILL as the day
+     runs, which is the whole of the motion in a recording of this view. Firefox has a track
+     part for that and needs no variable; webkit has none, so the fill is a gradient stop. */
   .replay input[type="range"] { flex:1; min-width:10rem; -webkit-appearance:none; appearance:none;
-            background:transparent; height:1.15rem; cursor:pointer; accent-color:var(--fg); }
-  .replay input[type="range"]::-webkit-slider-runnable-track { height:.25rem; border-radius:99px; background:var(--line); }
-  .replay input[type="range"]::-moz-range-track { height:.25rem; border-radius:99px; background:var(--line); }
+            background:transparent; height:1.5rem; margin:0; cursor:pointer; accent-color:auto; }
+  .replay input[type="range"]::-webkit-slider-runnable-track { height:6px; border-radius:var(--r-pill);
+            background:linear-gradient(to right, var(--dim) 0 var(--p,0%), var(--line) var(--p,0%) 100%); }
+  .replay input[type="range"]::-moz-range-track { height:6px; border-radius:var(--r-pill); background:var(--line); }
+  .replay input[type="range"]::-moz-range-progress { height:6px; border-radius:var(--r-pill); background:var(--dim); }
   /* The margin is what centres a webkit thumb on its track: that engine lays the thumb out from
-     the top of the track box, so half the difference of the two heights is what is owed back. */
+     the top of the track box, so half the difference of the two heights is what is owed back.
+     Ringed in --fg rather than filled with it: 18:1 against the page, which is what identifies
+     the handle — the track's own edge is nowhere near the 3:1 a control would need. */
   .replay input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none;
-            width:.85rem; height:.85rem; margin-top:-.3rem; border-radius:99px;
-            background:var(--fg); border:2px solid var(--bg); }
-  .replay input[type="range"]::-moz-range-thumb { width:.85rem; height:.85rem; border-radius:99px;
-            background:var(--fg); border:2px solid var(--bg); }
-  .replay input[type="range"]:disabled { opacity:.4; cursor:default; }
+            width:16px; height:16px; margin-top:-5px; border-radius:var(--r-pill);
+            background:var(--surface); border:2px solid var(--fg); box-shadow:var(--shadow-1); cursor:grab; }
+  .replay input[type="range"]::-moz-range-thumb { width:16px; height:16px; border-radius:var(--r-pill);
+            background:var(--surface); border:2px solid var(--fg); box-shadow:var(--shadow-1); cursor:grab; }
+  .replay input[type="range"]:active::-webkit-slider-thumb { cursor:grabbing; }
+  .replay input[type="range"]:active::-moz-range-thumb { cursor:grabbing; }
+  .replay input[type="range"]:disabled { opacity:.45; cursor:default; }
   /* What appearance:none took away and the page owes back: a control that can be reached by
      tab and not seen once it is there is a control a keyboard reader loses. The hue is the one
      this page already spends on "a human is being waited for", which is what a focus ring is. */
@@ -929,8 +1046,14 @@ ${HISTORY_CSS}
   /* Sticky, because the handle is at the bottom of a map that can be taller than the
      viewport: a reader dragging with the "this is the past" banner scrolled off the top is
      a reader the banner is not warning. */
+  /* The one box on this page still allowed to shout. The banners above it gave up their frame
+     for a left accent; this one keeps the whole frame, takes the deeper shadow and lifts off
+     the page — because a dashboard showing a past minute as though it were the fleet is the
+     worst thing this product could do. */
   .replaying-note:not([hidden]) { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap;
-            position:sticky; top:0; z-index:1; }
+            position:sticky; top:0; z-index:1;
+            border:1px solid var(--warn); border-left-width:3px; border-radius:var(--r-sm);
+            box-shadow:var(--shadow-2); }
   .replaying-note button { font:inherit; font-size:.75rem; font-weight:600; color:inherit;
             background:transparent; border:1px solid currentColor; border-radius:99px;
             padding:.05rem .7rem; cursor:pointer; }
@@ -985,10 +1108,20 @@ ${HISTORY_CSS}
      directory's background work, under the terminals someone is sitting at — and NOT because
      one of those terminals dispatched it, which nothing here knows. */
   .berth-strips { display:flex; flex-direction:column; gap:.4rem; margin-top:.6rem; }
-  .node { border:1px solid var(--line); border-radius:10px; padding:.8rem .85rem .7rem;
+  /* A card standing on the berth's floor rather than a second hairline drawn inside a first.
+     Three planes now — floor, berth, card — where there used to be one white and two identical
+     borders. The berth keeps no fill and no shadow of its own: a shadow inside a shadow reads
+     as neither. */
+  .node { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);
+          box-shadow:var(--shadow-1), var(--edge); padding:.8rem .85rem .7rem;
           display:flex; flex-direction:column; align-items:center; text-align:center; }
-  .node[data-state="busy"] { border-color:color-mix(in srgb, var(--busy) 45%, var(--line)); }
-  .node[data-state="waiting"] { border-color:color-mix(in srgb, var(--wait) 45%, var(--line)); }
+  /* A wash of the state's own hue at 4%, under the border that already carries it. It invents
+     no information — same hue, same node, quieter than the edge — and it is what makes "these
+     four are working" readable across a berth without reading a single word. */
+  .node[data-state="busy"] { border-color:color-mix(in srgb, var(--busy) 45%, var(--line));
+          background:color-mix(in srgb, var(--busy) 4%, var(--surface)); }
+  .node[data-state="waiting"] { border-color:color-mix(in srgb, var(--wait) 45%, var(--line));
+          background:color-mix(in srgb, var(--wait) 4%, var(--surface)); }
   /* An agent is not a smaller session — it is a strip. It was a card at three quarters scale,
      which put a dial on a session that has no terminal to draw a statusline frame with: a ring
      that can never fill, captioned with the words of a fault someone could go and repair. The
@@ -1055,22 +1188,24 @@ ${HISTORY_CSS}
   .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
   .dial { position:relative; width:5.5rem; height:5.5rem; }
   .dial svg { width:100%; height:100%; display:block; overflow:visible; }
-  .track { fill:none; stroke:var(--line); stroke-width:5; }
+  /* Thicker, and the ring becomes a dial rather than a progress graphic. Purely CSS: the
+     percentage is carried by stroke-dasharray off DIAL_R, which no stroke width touches. */
+  .track { fill:none; stroke:var(--line); stroke-width:6.5; }
   /* Butt caps, not round: a rounded cap adds half a stroke width at each end, which draws a
      1% reading at three times its extent. The prettier cap overstates every small number. */
-  .arc { fill:none; stroke:var(--dim); stroke-width:5; }
+  .arc { fill:none; stroke:var(--dim); stroke-width:6.5; }
   .node[data-state="busy"] .arc { stroke:var(--busy); }
   /* A reading past the freshness threshold is drawn as what it is: thin, faded, and in the
      warning hue — never the solid arc of a live one. Its EXTENT stays true, because the
      number is still the truth of an earlier moment; and a dash pattern here would overwrite
      stroke-dasharray, which is what carries the percentage. */
   .node[data-reading="stale"] .arc, .node[data-reading="undated"] .arc {
-          stroke:var(--warn); stroke-width:2.5; opacity:.7; }
+          stroke:var(--warn); stroke-width:3.5; opacity:.7; }
   /* A replayed reading. Its EXTENT is what the record vouches for; its age is the one thing
      the ring never kept, so it may not wear the solid arc that means "as current as a reading
      gets" — nor the warning hue of a stale one, which would claim the opposite. Between the
      two: full colour, a shade lighter, and no date underneath it. */
-  .node[data-reading="undatable"] .arc { stroke-width:4; opacity:.85; }
+  .node[data-reading="undatable"] .arc { stroke-width:5.5; opacity:.85; }
   /* Nothing was measured. Keyed on the measurement and never on the age of the file: a
      solid empty ring is what a session measured at 0% wears, and the two must not match. */
   .track.unmeasured { stroke-dasharray:2 6; stroke-linecap:round; }
@@ -1096,8 +1231,11 @@ ${HISTORY_CSS}
   @media (prefers-reduced-motion: reduce) { .halo { animation:none; opacity:.35; transform:scale(1.18); } }
   .val { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
          font-variant-numeric:tabular-nums; }
-  .pct { font-size:1.25rem; font-weight:650; letter-spacing:-.01em; }
-  .pct i { font-style:normal; font-size:.7em; font-weight:500; color:var(--dim); }
+  /* 650 was a weight the sans had and the system mono faces do not — asked for it, they round
+     back to 400 and the number came out lighter than before. 600 is a weight they carry. The
+     negative tracking goes with the sans it was measured on. */
+  .pct { font-size:1.5rem; font-weight:600; }
+  .pct i { font-style:normal; font-size:.62em; font-weight:500; color:var(--dim); }
   .why { font-size:.68rem; color:var(--dim); line-height:1.2; max-width:4.4rem; }
   .why b { display:block; font-size:1.25rem; font-weight:400; }
   .who { margin-top:.5rem; display:flex; align-items:baseline; gap:.3rem; max-width:100%; }
@@ -1697,6 +1835,10 @@ function pageScript(view: View): string {
     scrub.max = String(n === 0 ? 0 : n - 1);
     scrub.disabled = n === 0;
     playBtn.disabled = n === 0;
+    // The record grows by a reading a minute, so the same index is a smaller share of it every
+    // time this runs. Refilled here, or a handle nobody has touched since the last poll draws
+    // the fraction of an hour ago.
+    fill();
   }
 
   // Revealed, not hidden, when the record cannot be had: a scrubber that silently never
@@ -1895,12 +2037,32 @@ function pageScript(view: View): string {
         : '$' + cost.toFixed(2) + (reporting < n ? ' (' + reporting + '/' + n + ' reporting cost)' : ''));
   }
 
+  /**
+   * How much of the record is behind the handle, as the track's own gradient reads it.
+   *
+   * Webkit gives a range input two shadow parts and no third one for the walked half, so the
+   * fill is a stop in the track's background and this is where the stop is. Firefox has
+   * ::-moz-range-progress and needs none of it, which is why the value is a token rather than a
+   * background written from here: one number, two engines, and the sheet decides what each
+   * does with it.
+   *
+   * A record of one reading has a max of 0 and nothing to divide by. Infinity and NaN are both
+   * answers a browser throws the whole gradient away for, leaving a track that never fills for
+   * anybody — so a span of nothing is nought per cent, which is where the handle is.
+   */
+  function fill() {
+    var m = Number(scrub.max);
+    var share = m > 0 ? (Number(scrub.value) / m) * 100 : 0;
+    scrub.style.setProperty('--p', (share >= 0 && share <= 100 ? share : 0).toFixed(2) + '%');
+  }
+
   function draw(i) {
     var s = record && record.samples[i];
     if (!s) return;
     at = i;
     replaying = true;
     scrub.value = String(i);
+    fill();
     // The handle's own value is an index, so a reader who cannot see the banner would be read
     // "3" while the fleet on screen is three hours old. The minute travels with the handle.
     var minute = hhmm(s.t) + ' UTC';

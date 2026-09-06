@@ -59,7 +59,20 @@ class El {
   clientWidth = 360;
   width = 0;
   height = 0;
-  readonly style: Record<string, string> = {};
+  /**
+   * Inline style, with the one method a custom property needs. `style['--p'] = x` is a no-op in
+   * every browser — a dashed name is not an IDL attribute — so the page writes its own tokens
+   * through `setProperty`, and this stub has to answer the same call. A test then reads the
+   * value straight off the record.
+   */
+  readonly style: Record<string, string> & { setProperty(name: string, value: string): void } = Object.assign(
+    Object.create(null) as Record<string, string>,
+    {
+      setProperty(this: Record<string, string>, name: string, value: string): void {
+        this[name] = value;
+      },
+    },
+  );
   private ctx: Ctx2D | null = null;
   getContext(kind: string): Ctx2D | null {
     if (kind !== '2d') return null;

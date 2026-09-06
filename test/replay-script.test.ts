@@ -812,3 +812,28 @@ for (const [what, rateLimits] of [
     assert.equal(page.el('replay-limits').innerHTML, server);
   });
 }
+
+// The track behind the handle is drawn by the page now, not by the browser, and a drawn track
+// has no idea where the handle is. --p is what tells it: the share of the record already walked,
+// written on every move and every step of a play. It is the whole of the motion in a recording
+// of this view — without it the bar sits uniform while the day runs under it.
+test('the track knows how much of the record has been walked', async () => {
+  const page = mount(record(10));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  assert.equal(page.el('scrub').style['--p'], '0.00%', 'at the far end of the past');
+  page.el('scrub').drag(3);
+  assert.equal(page.el('scrub').style['--p'], '33.33%', 'three of the nine steps in');
+  page.el('scrub').drag(9);
+  assert.equal(page.el('scrub').style['--p'], '100.00%', 'and full at the last reading held');
+});
+
+// A record with one reading in it has no span to divide by, and a share of nothing is not
+// Infinity or NaN — both of which a browser answers by dropping the whole gradient stop and
+// leaving a track that never fills for anybody.
+test('a record of one minute leaves a track a browser can still paint', async () => {
+  const page = mount(record(1));
+  await page.advance(0);
+  page.el('scrub').drag(0);
+  assert.equal(page.el('scrub').style['--p'], '0.00%');
+});
