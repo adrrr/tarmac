@@ -17,8 +17,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   two long ranges drew the same seven columns as each other on the one serve built to show the
   page full. Daily cost now varies the way a fleet's does — quiet weekends, ordinary weekdays, and
   a day something big shipped — and it is still a function of the day and nothing else, so two
-  reads of one demo are the same answer and a capture can be re-taken. The invented seven-day
-  window rolls once a week rather than climbing for a month.
+  reads of one demo are the same answer and a capture can be re-taken. The two calendar days the
+  ring reaches into are left unscaled, so the journal and the record behind the scrubber never
+  price a minute they both hold differently. The invented seven-day window rolls once a week
+  rather than climbing for a month.
 - **`/api/history?range=` carries `from` and `to`**, the window the reader charged its records
   against. Every day of the range is in it, including the ones nothing was written in, which is
   what the charts need to draw the range that was asked for.

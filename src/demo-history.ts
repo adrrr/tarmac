@@ -18,10 +18,11 @@
 // and it exists to be reported and never to be opened.
 //
 // One story, not two. Every record is `demoFleetAt` played through the same `record` a real
-// sampler calls and then through the store's own allowlist, so the last day of the journal and
-// the ring behind the scrubber are the same readings, minute for minute. The days before it are
-// that same day again, scaled: see `demoDayFactor`, which is where a month of columns stops
-// being a month of one column.
+// sampler calls and then through the store's own allowlist, so every minute the journal and the
+// ring share is the same reading in both — which is the last TWO calendar days, the ring being
+// twenty-four hours long and midnights being where they are. The days before those are that same
+// day again, scaled: see `demoDayFactor`, which is where a month of columns stops being a month
+// of one column.
 
 import { demoFleetAt, DEMO_HOME, DEMO_MINUTES } from './demo.ts';
 import { createHistory } from './history.ts';
@@ -56,8 +57,10 @@ const DAY = 86_400_000;
  * one demo are one answer and a screenshot can be taken twice. The multiplier off Knuth's
  * constant is a spread, not randomness — it just has to be unmemorable and stable.
  *
- * The newest day is never scaled. It is the ring's own day, minute for minute, and the one thing
- * this journal may not do is disagree with the record behind the scrubber.
+ * Never asked about a day the ring reaches into — `demoJournalDay` answers 1 for those without
+ * coming here, and there are two of them, the ring being twenty-four hours long. The one thing
+ * this journal may not do is disagree with the record behind the scrubber about a minute they
+ * both hold. What is left for this to scale is the past nobody can compare against.
  *
  * The long day is a weekday, which is what keeps the shape readable: the peaks are then above
  * every ordinary day and the weekends below every one of them, rather than a Saturday at $220
@@ -189,7 +192,15 @@ export function demoJournalDay(date: string, dayStart: number): string | null {
   // What this whole day cost, against the day the ring holds. Decided once for the day rather
   // than per reading: the reader charges a day what a session's highest reading in it exceeds its
   // lowest, and a multiplier that moved inside the day would be charged that movement as spending.
-  const factor = demoDayFactor(Math.round((midnightOf(dayOf(last))! - midnight) / DAY), d.getDay());
+  //
+  // A day the RING reaches into is never scaled, and that is two calendar days rather than one:
+  // `dayStart` is twenty-four hours back, so the ring straddles a midnight on every clock but
+  // midnight itself. Scaled on the older of the two, 719 of the ring's 1440 minutes went into the
+  // journal at another price — the cost chart billing yesterday 14% above what the scrubber shows
+  // for the same minutes, which is the one disagreement this module exists to prevent. `end` is
+  // this day's last moment, so a day the ring reaches into is one that ends at or after its first.
+  const factor =
+    end >= dayStart ? 1 : demoDayFactor(Math.round((midnightOf(dayOf(last))! - midnight) / DAY), d.getDay());
   let text = '';
   for (let k = from; k <= to; k++) {
     const t = dayStart + k * MINUTE;
