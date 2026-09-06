@@ -728,9 +728,33 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
   }
   /* Honest, and out of the way of the fleet: three of these stacked at full padding pushed
      the table below the fold on a laptop, which is its own kind of hidden. */
-  .warn { background:var(--warnbg); color:var(--warn); border:1px solid currentColor; border-radius:6px;
+  /* One box, worn by whichever line is up. The replay banner and the line saying the page is
+     live take turns in the same place in the flow, so their box is declared once: two rules
+     would only ever have to disagree by a pixel of padding for entering a replay to move the
+     whole page down, which is the jump this pair exists to remove. The minimum is there
+     because only one of the two carries a button, and a button's own line box is taller than
+     a line of this text. */
+  .warn, .live-state { border:1px solid currentColor; border-radius:6px;
           padding:.35rem .65rem; margin:.3rem 0; font-size:.8rem; line-height:1.45; }
+  /* And the floor on the two that take turns, never on the box: put on the shared rule it grew
+     the offline banner and the noscript warning by 5.5px each — a page redrawn to settle an
+     argument between two other elements. It clears the taller of the pair's own contents, which
+     is the banner's button: 12px of text in a line box its padding and border take past 21px,
+     against 18.56px for a line of the live text. */
+  .replaying-note, .live-state { min-height:1.5rem; }
+  .warn { background:var(--warnbg); color:var(--warn); }
   .warn:last-of-type { margin-bottom:.9rem; }
+  /* The live half: the same box with none of the alarm. Grey on nothing, its border spent on
+     holding the size rather than on drawing one — what is normal reads as chrome, and the page
+     raises its voice only for the minute that is not now. */
+  .live-state:not([hidden]) { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap; }
+  .live-state { color:var(--dim); border-color:transparent; }
+  .live-state strong { font-weight:600; }
+  body.replaying .live-state { display:none; }
+  /* On the map and nowhere else, like the scrubber it belongs to: the table and the curves have
+     no replay, so a line telling them apart from one answers a question their reader cannot
+     ask. Written on the body rather than shipped conditionally, so one shell serves all three. */
+  body:not([data-view="map"]) #live-state { display:none; }
   /* The footnote: same words, none of the weight. Dim, small, below the fleet and with no box
      around it, because what it carries is true rather than urgent — the threshold that dated a
      reading, the payload shapes nobody has captured yet. It reads as chrome to someone
@@ -860,12 +884,46 @@ ${HISTORY_CSS}
             text-transform:uppercase; color:var(--dim); }
   .replay button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent;
             border:1px solid var(--line); border-radius:99px; padding:.15rem .8rem; cursor:pointer; }
-  .replay input[type="range"] { flex:1; min-width:10rem; accent-color:var(--dim); }
-  .replay input[type="range"]:disabled { opacity:.4; }
+  .replay button:hover:not(:disabled) { border-color:var(--dim); }
+  /* Pressed, and it looks it. The WORD on this button says which of the two it does next —
+     "Pause" while the day walks — which is right and is also the one thing a glance cannot
+     catch: a screenshot of a stopped replay reads exactly like a screenshot of a running one.
+     The attribute carries the other fact, the one that can be painted. */
+  #play[data-playing="true"] { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  .replay button:disabled { opacity:.4; cursor:default; }
+  /* The handle. A range input is drawn by the browser until appearance:none hands its two
+     shadow parts over — and what the browser drew was a fat grey groove belonging to no page,
+     on the one control a reader of this view spends the most time touching. Both engines are
+     spelled out because they name the same two parts differently and neither falls back to the
+     other; the values are one pair, so a thumb retuned in one is retuned in both.
+     The rail is the track's own hue, the thumb the page's ink, ringed in the background so it
+     reads as an object ON the rail rather than a lump of it. */
+  .replay input[type="range"] { flex:1; min-width:10rem; -webkit-appearance:none; appearance:none;
+            background:transparent; height:1.15rem; cursor:pointer; accent-color:var(--fg); }
+  .replay input[type="range"]::-webkit-slider-runnable-track { height:.25rem; border-radius:99px; background:var(--line); }
+  .replay input[type="range"]::-moz-range-track { height:.25rem; border-radius:99px; background:var(--line); }
+  /* The margin is what centres a webkit thumb on its track: that engine lays the thumb out from
+     the top of the track box, so half the difference of the two heights is what is owed back. */
+  .replay input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none;
+            width:.85rem; height:.85rem; margin-top:-.3rem; border-radius:99px;
+            background:var(--fg); border:2px solid var(--bg); }
+  .replay input[type="range"]::-moz-range-thumb { width:.85rem; height:.85rem; border-radius:99px;
+            background:var(--fg); border:2px solid var(--bg); }
+  .replay input[type="range"]:disabled { opacity:.4; cursor:default; }
+  /* What appearance:none took away and the page owes back: a control that can be reached by
+     tab and not seen once it is there is a control a keyboard reader loses. The hue is the one
+     this page already spends on "a human is being waited for", which is what a focus ring is. */
+  .replay input[type="range"]:focus-visible, .replay button:focus-visible,
+  .replaying-note button:focus-visible { outline:2px solid var(--wait); outline-offset:2px; }
   /* The two things the reader has to be able to read while dragging: the minute under the
      handle, and what the whole range covers. Tabular, so neither jitters as it counts. */
   #replay-at { font-variant-numeric:tabular-nums; font-weight:600; }
+  /* One line, and the pointer is told there is more behind it. What came off this line is a
+     paragraph of standing prose about the record, which is now the title and a span for a
+     screen reader — moved, never dropped: it is what keeps an ungrouped map from reading as a
+     rendering that broke. */
   .replay .covers { flex-basis:100%; color:var(--dim); font-size:.75rem; }
+  .replay .covers[title] { cursor:help; }
   /* The banner wears the warning style on purpose: a page showing a past minute as though it were the
      fleet is the worst thing this dashboard could do, so it wears the loudest thing it has. */
   /* Sticky, because the handle is at the bottom of a map that can be taller than the
@@ -891,7 +949,18 @@ ${HISTORY_CSS}
      flat grid this view was before, which is the honest drawing of what it holds. */
   .map { gap:.9rem; }
   .map.berths { display:flex; flex-wrap:wrap; align-items:flex-start; }
-  .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
+  /* One cell per node, and every cell the same: the replay is the one surface where the fleet
+     changes under a still hand — each position of the handle is another minute, and sessions
+     come and go between two of them. A grid whose rows are the size of what is in them redraws
+     the page at every step of a scrub, which is what made a drag look like a page breaking.
+     The floor has to clear the TALLEST card the record can produce, or it is decoration: a row
+     is minmax(floor,auto), so one node taller than the floor pushes its own row and every row
+     under it — the jump, by the other road. The card that decides it is a waiting session:
+     a dial, a name, a caption clamped to two lines and the two numbers under it, 214px in
+     Chrome. One value at every width: the columns narrow on a phone and the cards do not, so a
+     floor cut to match them would sit under the cards it is supposed to hold up. */
+  .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));
+          grid-auto-rows:minmax(13.5rem,auto); }
   /* The berth: a frame around the nodes read in one directory, and the label is the whole of
      what it claims. Quiet on purpose — a hairline and a caption in the grey the rest of the
      page uses for a heading, because the loud thing on this view is a session's state, and a
@@ -925,14 +994,15 @@ ${HISTORY_CSS}
      that can never fill, captioned with the words of a fault someone could go and repair. The
      honest form is the one the table already speaks in — text on a line, left-aligned, its
      state in the same glyph and in a three-pixel accent down the left edge. */
-  /* align-self, never the grid's own align-items: a strip is half the height of the card
-     beside it and must not be stretched to match, but the CARDS in a row still share one
-     height — telling the grid to stop stretching would have changed every session on the page
-     to make room for this one. Scoped to the flat grid, which is the only place a strip has a
-     card beside it: docked in a berth it is a full-width band, and "start" in that column
-     would shrink it to the width of its own prompt. */
-  .map.flat .node[data-role="agent"] { align-self:start; }
-  .node[data-role="agent"] { align-items:stretch; text-align:left;
+  /* Behind the scrubber an agent fills its cell like every other node. It kept its own height
+     for as long as the grid's rows did — a strip at half a card, sitting at the top of its
+     row — and that is exactly what made the map dance: an agent appearing between two minutes
+     of a scrub moved every dial under it. The SHAPE stays different, which is the honest part
+     (no dial, no arc that could never fill, its text left-aligned); the CELL is the same. */
+  /* Its text sits in the middle of whatever box it is given, which in the flat grid is the
+     height of a dial: hung from the top of one, two lines of text read as a cell that failed
+     to draw. Docked in a berth the box is the text's own height and this does nothing. */
+  .node[data-role="agent"] { align-items:stretch; justify-content:center; text-align:left;
           padding:.5rem .7rem .55rem; border-radius:8px;
           background:color-mix(in srgb, var(--line) 18%, transparent);
           /* The box goes back to the neutral line the tinted rule above gave it: the accent is
@@ -943,6 +1013,26 @@ ${HISTORY_CSS}
   .node[data-role="agent"][data-state="waiting"] { border-left-color:var(--wait); }
   .node[data-role="agent"][data-state="unknown"] { border-left-color:var(--warn); }
   .node[data-role="agent"] .who { margin-top:0; width:100%; }
+  /* A cell is 10.5rem wide, and every caption on it is one nowrap line: cut to that column, a
+     replayed agent at 320px drew its project as "a…" while the word BACKGROUND beside it kept
+     all of its own, and a waiting reason — the one caption this page calls why a node is not
+     working — lost two thirds of itself. The cell has height to spare and no width to give, so
+     they wrap DOWN it instead. Scoped to the flat grid: a strip docked in a berth is a band the
+     width of its frame, and the prompt on it has no length limit — wrapping that one down its
+     berth is the paragraph the ellipsis is there to prevent.
+
+     Two lines, then an ellipsis. Free to wrap as far as it likes, a caption is a card free to
+     grow — and a card taller than the row floor takes its row and every row under it, which is
+     the jump this grid exists to remove, re-entered through the fix for the clipping. A waiting
+     reason has no length limit anywhere in this codebase: the source publishes what it likes
+     and sessions.ts copies it through. */
+  .map.flat .node .sub { white-space:normal; overflow-wrap:anywhere;
+          display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
+  .map.flat .node[data-role="agent"] .who { flex-wrap:wrap; }
+  /* And the label that says an agent is not a terminal stays beside the name it qualifies. The
+     margin that pushes it to the far end of a strip's one line drops it, alone and
+     right-aligned, onto a second line the moment that line is allowed to wrap. */
+  .map.flat .node[data-role="agent"] .kind { margin-left:0; }
   /* A strip's project, which since the berths is the REPLAY's business alone: a live strip
      prints none — the frame around it says the directory — and behind the scrubber there is no
      frame, and the project is the only name the ring kept. The rule stayed when the markup
@@ -1027,6 +1117,9 @@ ${HISTORY_CSS}
   .sub.waiting-for { color:var(--wait); font-weight:600; }
   .asof { font-size:.72rem; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:.15rem; }
   .asof.stale { color:var(--warn); font-weight:600; }
+  /* The columns narrow here; the row floor does not follow them. A card at 320px is taller than
+     one at 1280, not shorter — its captions have less width and more lines — so a floor cut to
+     the narrow column would sit under every card on the page and hold nothing up. */
   @media (max-width: 30rem) { .map.flat { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); } .map { gap:.6rem; } }
 
   /* Below this the table stops being a table. What replaces it is the strip described down at
@@ -1050,13 +1143,14 @@ ${HISTORY_CSS}
        them. The negative margin gives it the page's own gutters back, so the bar reaches the
        edges of the phone and the rule above it reads as an edge rather than a floating line.
 
-       The sentence under the handle stays. Hiding it for the length of a replay was the obvious
-       way to keep the bar short, and it silently undid a fix this file argues for forty lines
-       into coversText: two of its three parts are standing properties of the RECORD, not the
-       range — nothing replayed here is dated, and the past is drawn ungrouped — and they were
-       put in the reader's view precisely because they had lived "nowhere the reader can see it"
-       and an ungrouped map reads as a rendering that broke. A phone replaying is exactly when a
-       reader is staring at one. The bar is taller for it. */
+       The line under the handle stays. Hiding it for the length of a replay was the obvious way
+       to keep the bar short, and it silently undid the fix coversRange and KEEPS argue for
+       below: two of the things that line says are standing properties of the RECORD, not of the
+       range — nothing replayed here is dated, and the past is drawn ungrouped — and they are in
+       the reader's view precisely because they had lived "nowhere the reader can see it", where
+       an ungrouped map reads as a rendering that broke. A phone replaying is exactly when a
+       reader is staring at one, and a phone has no hover to reach a title with: the two words
+       are on the line itself for that reason, and only their paragraph is behind it. */
     body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3;
          background:var(--bg); border-top:1px solid var(--line);
          padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
@@ -1114,11 +1208,6 @@ ${HISTORY_CSS}
        background session named after its prompt, a name with no length limit. Not the exotic
        case: when nothing in the fleet calls itself interactive, every row is drawn as a card. */
     .berth-cards .node { flex:1 1 8.5rem; width:auto; min-width:0; }
-    /* A strip sharing a phone's width with a card is an ellipsis where the prompt was — the
-       one line saying what this agent was told to do is the first thing a narrow column takes
-       away. It spans the row instead, like the cells below it. The berth docks its own strips
-       full width at every size, so what this rule is left covering is the REPLAY's flat grid. */
-    .node[data-role="agent"] { grid-column:1 / -1; }
     /* Line one: who, and in what state. The project leads and carries the weight; the session
        name travels beside it in the page's grey. That order is deliberate and it is a red line
        — a background session is NAMED AFTER ITS PROMPT, and a prompt set as the heading of a
@@ -1237,6 +1326,22 @@ ${HISTORY_PHONE_CSS}  }
   <strong>&#9888; refresh failing</strong> — nothing on this page has moved since the time in the header.
   <span id="why"></span>
 </div>
+<!-- Which of the two fleets is on screen, said in the place the banner below will stand. The
+     banner used to be inserted into the flow the moment a reader took hold of the handle and
+     removed again when they let go, so the page dropped a line on the way in and rose one on
+     the way out — at the exact moment a reader is comparing two minutes of it. The space is
+     spent either way now, and a page that only speaks up when it is showing the past is a page
+     that says nothing on the way back. Up with the scrubber and for the same reason: with no
+     record there is no second state to be telling this one apart from. -->
+<!-- Served up, unlike the controls below it. It is not one of them: it says the page is showing
+     the fleet now, which is true of a served page before any script runs and true of one where
+     none ever will, and the way BACK from a replay is a button that lives in the banner. Shipped
+     hidden it was the fault this pair exists to remove — the map paints, the record lands a
+     moment later, and a line appears and pushes the whole fleet down. -->
+<div class="live-state" id="live-state">
+  <strong>&#9679; live</strong>
+  <span>&mdash; the fleet as the header dates it.</span>
+</div>
 <!-- The one claim on this page that could be a lie, so it is the loudest element on it and it
      carries the minute it is showing. Hidden until a script raises it: with no script there
      is no replay, and a banner about one would be a warning about nothing. -->
@@ -1268,9 +1373,15 @@ ${HISTORY_PHONE_CSS}  }
   <!-- "Replay", and nothing about how much of the day it holds: the range is the record's to
        state, in the sentence below, which is built around never calling ten minutes a day. -->
   <span class="replay-name">Replay</span>
-  <button type="button" id="play">Play</button>
+  <!-- The word says what the next press does; the attribute says what is happening now, which
+       is the half a stylesheet can paint and a glance can catch. -->
+  <button type="button" id="play" data-playing="false">Play</button>
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
+  <!-- What the line above could not fit, for a reader who cannot hover a title: the standing
+       properties of the record — nothing replayed is dated, and the past is drawn ungrouped.
+       Its own element rather than a child of the line, which the script rewrites wholesale. -->
+  <span class="sr" id="covers-note"></span>
 </div>
 ${view === 'history' ? renderHistoryView({ historyEnabled, demo }) : ''}
 <script>${pageScript(view)}</script>${view === 'history' ? `\n<script>${historyScript()}</script>` : ''}
@@ -1467,6 +1578,7 @@ function pageScript(view: View): string {
 
   var replay = document.getElementById('replay'), scrub = document.getElementById('scrub');
   var playBtn = document.getElementById('play'), covers = document.getElementById('covers');
+  var coversNote = document.getElementById('covers-note');
   var rview = document.getElementById('replay-view'), rmap = document.getElementById('replay-map');
   var rmeta = document.getElementById('replay-meta'), note = document.getElementById('replaying');
   var rlimits = document.getElementById('replay-limits');
@@ -1509,47 +1621,79 @@ function pageScript(view: View): string {
     return hhmm(t) + (new Date(t).getUTCDate() === new Date(ref).getUTCDate() ? '' : ' yesterday');
   }
 
-  // What the range covers, in the record's own terms. Never "a day": that is the size of the
+  // What the range covers, in the record's own terms and in ONE line: the span, how many
+  // readings are in it, and how many minutes have none. Never "a day" — that is the size of the
   // ring, and a serve ten minutes old has seen ten minutes.
-  function coversText() {
+  //
+  // One line because this is the line under the hand of whoever is dragging the handle, and it
+  // was three of technical prose. What came off it is below, in KEEPS, and it is MOVED rather
+  // than dropped: the standing properties of the record are the honest part of this feature.
+  function coversRange() {
     var n = record.samples.length;
-    if (n === 0) {
-      // A record empty because every reading FAILED is not a record that has just started, and
-      // this was the one branch that threw that away: ten hours of a collector that could not
-      // run read exactly like a serve thirty seconds old.
-      return record.missed
-        ? 'Nothing recorded — this serve started at ' + hhmm(record.since) + ' UTC and '
-          + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' were due and never read.'
-        : 'Nothing recorded yet — this serve started at ' + hhmm(record.since) + ' UTC'
-          + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
-    }
     var last = record.samples[n - 1].t;
-    return 'Covering ' + edge(record.since, last) + ' – ' + hhmm(last) + ' UTC'
-      // Not "when the page loaded": the record is asked for again when a tab that has been
-      // away comes back, so the sentence names the last time this page asked rather than a
-      // moment it may be hours past.
-      + ', as this page last had it — ' + n + ' reading' + (n === 1 ? '' : 's')
+    return 'Covering ' + edge(record.since, last) + ' – ' + hhmm(last) + ' UTC · '
+      + n + ' reading' + (n === 1 ? '' : 's')
       // A gap that says it is a gap is not a gap. The handle steps through readings, not
-      // through minutes, and a record with holes in it is not a smooth walk.
-      + (record.missed ? ', ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '')
-      + '. The record keeps each reading, not how old that reading was, so nothing replayed here is dated.'
-      // The other thing the ring does not hold, said where the reader meets it: the argument
-      // for an ungrouped replay was written in the README, the manual, the changelog and a
-      // comment in this sheet, and nowhere the reader can see it. Shown less and told nothing,
-      // a reader reads it as a rendering that broke.
-      //
-      // A standing property of the record, never an event. This line sits in the scrubber's own
-      // block, outside the live fragment and outside the replay one, so it is on the page from
-      // the moment the record lands — and a sentence saying the grouping had gone would be
-      // printed under a live map with the grouping on it.
-      + ' It keeps a project name and never the directory a node was read in, so the past is'
-      + ' drawn ungrouped, in the order the sample carries.';
+      // through minutes, and a record with holes in it is not a smooth walk — which is why this
+      // one clause stayed on the visible line while the paragraph below it went.
+      + (record.missed ? ' · ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '')
+      // The two words the paragraph below explains, kept where every reader meets them. A title
+      // has no hover on a touchscreen and no keyboard, and a hidden span is for a screen reader:
+      // moving the whole of it would have left the sighted phone reader — the one this page
+      // argues about, staring at an ungrouped map — with neither half, and an ungrouped map that
+      // says nothing about being ungrouped reads as a rendering that broke.
+      + ' · undated, ungrouped';
   }
 
+  // The two standing properties of the record, off the line and never out of reach: in the
+  // title for a pointer, and in a span only a screen reader meets. Both are things this page
+  // would otherwise be caught not saying — the ring never kept how old a reading was, and it
+  // never kept the directory a node was read in, so a replayed map is undated and ungrouped.
+  // Shown less and told nothing, a reader reads an ungrouped map as a rendering that broke.
+  var KEEPS = 'The record keeps each reading, not how old that reading was, so nothing replayed'
+    + ' here is dated. It keeps a project name and never the directory a node was read in, so the'
+    + ' past is drawn ungrouped, in the order the sample carries.'
+    // The third of them, and the one that qualifies the range itself rather than what is drawn
+    // from it: the record is asked for again only when a tab that has been away comes back, so
+    // the minute this range ends on is the last one this page ASKED for. A map left open on a
+    // desk all afternoon would otherwise read as a record that stops where the fleet did.
+    + ' The range ends where this page last asked for the record, not at this minute.';
+
+  // The line, and what it could not fit. A message that IS the whole of what there is to say
+  // carries no second copy of itself: a tooltip repeating the line it sits on is how a reader
+  // learns to ignore the next one.
+  function say(line, more) {
+    covers.textContent = line;
+    coversNote.textContent = more;
+    if (more === '') covers.removeAttribute('title');
+    else covers.setAttribute('title', more);
+  }
+
+  // What there is to say when there is no range: a message that is the whole of itself, and
+  // carries none of KEEPS — there is nothing replayed for those properties to be true of.
+  //
+  // A record empty because every reading FAILED is not a record that has just started, and this
+  // was the one branch that threw that away: ten hours of a collector that could not run read
+  // exactly like a serve thirty seconds old.
+  function emptyText() {
+    return record.missed
+      ? 'Nothing recorded — this serve started at ' + hhmm(record.since) + ' UTC and '
+        + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' were due and never read.'
+      : 'Nothing recorded yet — this serve started at ' + hhmm(record.since) + ' UTC'
+        + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
+  }
+
+  // Nothing here touches the state line, and that is the rule rather than an omission: it is
+  // served up, and it says the page is showing the fleet as the header dates it — true of a
+  // record with a day in it, of one a serve is too young to have taken, and of one that could
+  // not be read at all. Hidden on the empty answer it removed a line the server had already
+  // painted: a serve samples on an interval with no leading call, so every page opened on a
+  // fresh one is answered with an empty sample list for a minute, and the fleet jumped up
+  // 42px, 33ms in.
   function ready() {
     var n = record.samples.length;
     replay.hidden = false;
-    covers.textContent = coversText();
+    say(n === 0 ? emptyText() : coversRange(), n === 0 ? '' : KEEPS);
     scrub.max = String(n === 0 ? 0 : n - 1);
     scrub.disabled = n === 0;
     playBtn.disabled = n === 0;
@@ -1561,7 +1705,7 @@ function pageScript(view: View): string {
     replay.hidden = false;
     scrub.disabled = true;
     playBtn.disabled = true;
-    covers.textContent = said;
+    say(said, '');
   }
 
   function load() {
@@ -1777,6 +1921,10 @@ function pageScript(view: View): string {
   function stopPlay() {
     if (playing) { clearInterval(playing); playing = null; }
     playBtn.textContent = 'Play';
+    // Both halves, every time: the word for the press that comes next, the attribute for what
+    // is happening now. Set here rather than only where a reader clicks, because the walk also
+    // ends on its own at the last reading.
+    playBtn.setAttribute('data-playing', 'false');
   }
 
   // Back to now, in one gesture, with nothing of the past left behind a hidden attribute.
@@ -1801,6 +1949,7 @@ function pageScript(view: View): string {
     // has played nothing.
     draw(at < 0 || at >= record.samples.length - 1 ? 0 : at);
     playBtn.textContent = 'Pause';
+    playBtn.setAttribute('data-playing', 'true');
     playing = setInterval(function () {
       // It stops at the end rather than looping back: a day that restarts on its own is a
       // day whose beginning and end are impossible to tell apart.

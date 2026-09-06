@@ -128,11 +128,96 @@ test('the line under the handle says the past is drawn ungrouped, and why', asyn
   const page = mount(record(10));
   await page.advance(0);
   assert.equal(page.el('replaying').hidden, true, 'the live map is up, and the line is already there');
-  assert.match(page.el('covers').textContent, /drawn ungrouped/);
-  assert.match(page.el('covers').textContent, /never the directory/, 'naming what the record actually keeps');
+  const said = (): string => page.el('covers-note').textContent + page.el('covers').getAttribute('title');
+  assert.match(said(), /drawn ungrouped/);
+  assert.match(said(), /never the directory/, 'naming what the record actually keeps');
   page.el('scrub').drag(3);
   assert.equal(page.el('replaying').hidden, false, 'and it is still there once the past is up');
-  assert.match(page.el('covers').textContent, /drawn ungrouped/);
+  assert.match(said(), /drawn ungrouped/);
+});
+
+// Three lines of technical prose is what the last two paragraphs above bought, under a handle
+// somebody is dragging — and the first thing anyone sees of this product is a recording of that
+// drag. The visible line is the range and nothing else: what this record covers, and how many
+// readings are in it. Nothing is DELETED, which is the trade this line is not allowed to make:
+// the prose is the honest part, and it goes where hovering and a screen reader both reach it.
+test('the visible line is the range, and the prose it used to carry is not lost', async () => {
+  const page = mount(record(10));
+  await page.advance(0);
+  const line = page.el('covers').textContent;
+  assert.ok(line.length <= 80, `one line, not three: ${line.length} chars — ${line}`);
+  assert.match(line, /10 readings/, 'what is in the record');
+  // The two words stay ON the line, at every viewport, and only their explanation moves. A
+  // title has no hover on a touchscreen and no keyboard, and a visually hidden span is for a
+  // screen reader — so a sighted phone reader, who is exactly the reader this page argues
+  // about, would have been left with neither half. Two words are what the argument needs: an
+  // ungrouped map reads as a rendering that broke unless something on screen says it is not.
+  assert.match(line, /undated/, 'the record dates nothing it replays');
+  assert.match(line, /ungrouped/, 'and groups nothing either');
+  assert.doesNotMatch(line, /never the directory|not how old/, 'the paragraph itself is off the line');
+  assert.equal(page.el('covers').getAttribute('title'), page.el('covers-note').textContent, 'the same words, for a pointer and for a reader who has none');
+  const more = page.el('covers-note').textContent;
+  assert.match(more, /nothing replayed here is dated/);
+  assert.match(more, /never the directory a node was read in/);
+  // The clause that used to qualify the upper edge of the range, and the reason it may not be
+  // dropped: the record is asked for again only when a tab comes back, so a map left open all
+  // afternoon shows a range that ends where this page last asked — not at this minute.
+  assert.match(more, /last asked for the record/);
+});
+
+// The branch every fixture here had been skipping: `record()` hardcodes `missed: 0`, so the one
+// clause that can lengthen this line was never measured. A record with holes is not the exotic
+// case — it is any serve whose collector missed a minute — and the line has to stay a line.
+test('a record with holes says so on the line, and the line stays short', async () => {
+  const page = mount({ ...record(10), missed: 7 });
+  await page.advance(0);
+  const line = page.el('covers').textContent;
+  assert.match(line, /7 minutes with no reading/, 'a gap that says it is a gap is not a gap');
+  assert.match(line, /undated, ungrouped/, 'and the two words survive the longest branch');
+  assert.ok(line.length <= 100, `still a line, not a paragraph: ${line.length} chars — ${line}`);
+});
+
+// The branches that have nothing but a sentence to give: a record with no readings in it, and
+// one that could not be read at all. There is no standing prose to fold away, and a tooltip
+// that repeats the line it is on is a tooltip that teaches a reader to ignore the next one.
+test('a line that is the whole message carries no second copy of itself', async () => {
+  const empty = mount({ since: CLOCK, cadence: MIN, samples: [], missed: 0 });
+  await empty.advance(0);
+  assert.equal(empty.el('covers').getAttribute('title'), null);
+  assert.equal(empty.el('covers-note').textContent, '');
+  const gone = mount(() => Promise.resolve({ ok: false, body: 'the record is gone' }));
+  await gone.advance(0);
+  assert.equal(gone.el('covers').getAttribute('title'), null);
+});
+
+// The state line is served up and stays up: it is the live half of the banner, and the two
+// take turns in one place. The body class is what swaps them, so entering a replay adds no
+// line and leaving it removes none — which is the whole of what this pair is for.
+test('the state line is up before the record lands and stays up through a replay', async () => {
+  const page = mount(record(10));
+  assert.equal(page.el('live-state').hidden, false, 'served up, so the record landing shifts nothing');
+  await page.advance(0);
+  assert.equal(page.el('live-state').hidden, false);
+  page.el('scrub').drag(3);
+  assert.equal(page.el('live-state').hidden, false, 'still in the flow while the past is on screen');
+  assert.equal(page.body.classes.has('replaying'), true, 'which is what hides it, in the stylesheet');
+});
+
+// It never comes down, and the two branches that used to take it down are the reason this is a
+// test. A serve takes its first reading one interval AFTER it starts listening — the sampler is
+// an interval with no leading call — so every page opened on a fresh serve asks for the record
+// and is answered `samples: []` for a minute. Hiding the line on that answer removed a line the
+// server had already PAINTED: the fleet jumped 42px up, 33ms in, on the view whose whole point
+// this lot is that it holds still. The line is not about the replay in the first place — it says
+// the page is showing the fleet as the header dates it, which is true with no record at all.
+test('the state line stays up on a record with nothing in it, and on one that cannot be read', async () => {
+  const empty = mount({ since: CLOCK, cadence: MIN, samples: [], missed: 0 });
+  await empty.advance(0);
+  assert.equal(empty.el('live-state').hidden, false, 'a serve too young to have sampled');
+  assert.equal(empty.el('scrub').disabled, true, 'and the handle is still dead, which is the honest part');
+  const gone = mount(() => Promise.resolve({ ok: false, body: 'the record is gone' }));
+  await gone.advance(0);
+  assert.equal(gone.el('live-state').hidden, false, 'and a record that could not be read');
 });
 
 // A gap that says it is a gap is not a gap — but a scrubber whose positions are readings and
@@ -213,6 +298,30 @@ test('a replayed dial says in its markup that the record cannot date it', async 
   await page.advance(0);
   page.el('scrub').drag(0);
   assert.match(page.el('replay-map').innerHTML, /data-reading="undatable"/);
+});
+
+// The word on the button says which of the two it does next; the attribute says which of the
+// two is happening. They are not the same fact, and only the second can be painted — a button
+// that looks pressed while the day walks is the difference between a screenshot of a paused
+// replay and one of a running replay.
+test('the play button publishes whether it is running, not only what it does next', async () => {
+  const page = mount(record(4));
+  await page.advance(0);
+  assert.equal(page.el('play').getAttribute('data-playing'), 'false');
+  page.el('play').fire('click');
+  assert.equal(page.el('play').getAttribute('data-playing'), 'true', 'while the day walks');
+  page.el('play').fire('click');
+  assert.equal(page.el('play').getAttribute('data-playing'), 'false', 'and back when it is paused');
+});
+
+// The walk stops on its own at the end of the record, and the button has to come back with it.
+test('a walk that runs out puts the button back', async () => {
+  const page = mount(record(3));
+  await page.advance(0);
+  page.el('play').fire('click');
+  await page.advance(5000);
+  assert.equal(page.el('play').textContent, 'Play');
+  assert.equal(page.el('play').getAttribute('data-playing'), 'false');
 });
 
 // The whole point of holding the day in the page: a drag is a lookup, not a request. A

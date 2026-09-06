@@ -103,10 +103,13 @@ session gets its own frame rather than somebody else's.
 Above the fleet are the account's five-hour and seven-day
 [gauges](docs/MANUAL.md#the-accounts-two-windows). Under it is a scrubber over the day this
 serve has seen. Drag it and the nodes render the fleet as it was at that minute. Press play
-and the day walks past. Replayed, the nodes are drawn flat and unframed. The record keeps a
-project name and never the directory it was read in, and a basename is not a directory. Two
-checkouts of `atlas` answer to the same word, so a frame drawn on it would claim a shared
-directory nobody can check.
+and the day walks past. Replayed, the nodes are drawn flat and unframed, every one of them in a
+cell of one size: a session that appears between two minutes of a scrub moves nothing but the
+nodes after it in the sample's own order, and the banner naming the minute stands in a place the
+page keeps for it. A row the grid gains still pushes what is under it, and on a phone the banner
+wraps where the live line does not. The record keeps a project name and never the directory it
+was read in, and a basename is not a directory. Two checkouts of `atlas` answer to the same
+word, so a frame drawn on it would claim a shared directory nobody can check.
 
 The map follows the rules the table follows. A reading past the freshness threshold is drawn
 thin, amber and dated. A percentage nobody measured is an empty dotted dial, never a ring at

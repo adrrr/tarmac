@@ -289,13 +289,14 @@ test('nothing pins the scrubber on a live page, or on a laptop', () => {
   assert.doesNotMatch(cssOutsideMedia(), /body\.replaying \.replay[^{]*\{[^}]*position:\s*sticky/, 'not on a laptop');
 });
 
-// The sentence under the handle is not hidden on a phone, and this test is why rather than an
+// The line under the handle is not hidden on a phone, and this test is why rather than an
 // accident. Folding it away for the length of a replay is the obvious way to keep the pinned bar
-// short, and it undoes a fix `coversText` argues for in this same file: two of its three parts
-// are standing properties of the RECORD and not its range — nothing replayed here is dated, and
-// the past is drawn ungrouped — and they were put in the reader's view precisely because they
-// had lived "nowhere the reader can see it", where an ungrouped map reads as a rendering that
-// broke. A phone replaying is exactly when a reader is looking at one.
+// short, and it undoes the fix `coversRange` argues for in `render.ts`: two of the things that
+// line says are standing properties of the RECORD and not of its range — nothing replayed here
+// is dated, and the past is drawn ungrouped — and they are in the reader's view precisely
+// because they had lived "nowhere the reader can see it", where an ungrouped map reads as a
+// rendering that broke. A phone replaying is exactly when a reader is looking at one, and a
+// phone has no hover: those two words are on the line, not in its title.
 test('the sentence under the handle is never folded away, on any viewport', () => {
   for (const css of [sheet(), PHONE()]) {
     for (const [, raw, declarations] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {

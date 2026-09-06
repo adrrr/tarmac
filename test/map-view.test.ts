@@ -739,13 +739,38 @@ test("a strip's left accent is the node's own hue, the one its glyph already car
   }
 });
 
-// A strip is half the height of the card beside it and may not be stretched to match — but
-// that is the strip's business alone, and only where it HAS a card beside it, which since the
-// berths is the replay's flat grid. The cards of a berth still share one height, which is what
-// keeps a row of dials from stepping up and down; telling their row to stop stretching would
-// have changed every session on the page to make room for one strip.
-test('a strip in the flat grid sits at its top, and cards in a berth keep their shared height', () => {
-  assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), 'start');
+// The replay is the one surface where the fleet CHANGES under a still hand: every position of
+// the handle is another minute, sessions come and go between two of them, and a grid whose
+// cells are the size of what is in them redraws the whole page at each step. Half-height
+// strips among full-height cards were the worst of it — a dial row that moved down 75px the
+// minute an agent appeared above it. So behind the scrubber every node gets ONE cell: same
+// column, same row, whatever is drawn inside it. The live berths keep their own shape; there
+// nothing moves without a poll.
+test('every node in the replay grid gets a cell of one size, so a scrub does not move the map', () => {
+  // The VALUE, and a value that has to clear the TALLEST card the record can produce, or the
+  // floor is decoration: a row is `minmax(floor,auto)`, so anything taller pushes its own row
+  // and every row under it. The card that decides it is a waiting session — dial, name, a
+  // caption clamped to two lines, and the two numbers under it — measured at 214px in Chrome
+  // on the demo. Asserted as a number rather than against the column minimum: a cell that
+  // happened to be square told us nothing about whether a node fits in it, and `minmax(0,auto)`
+  // and `minmax(8.5rem,auto)` are both squares of some column at some width.
+  const floors = declaredEverywhere('.map.flat', 'grid-auto-rows');
+  assert.equal(floors.length, 1, 'declared once, for every width — a floor under the cards is not a floor');
+  const rem = /minmax\(\s*([\d.]+)rem\s*,/.exec(floors[0]);
+  assert.ok(rem, `a floor in rem: ${floors[0]}`);
+  assert.ok(Number(rem![1]) >= 13.5, `and one a two-line caption fits inside: ${floors[0]}`);
+  assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), '', 'and nothing opts out of it');
+  assert.deepEqual(declaredEverywhere('.map.flat .node[data-role="agent"]', 'align-self'), [], 'at no width');
+  // And what fills the cell sits in the middle of it, level with the dials beside it. A card
+  // whose two lines of text hang from the top of a box the height of a dial reads as a cell
+  // that failed to draw, which is the impression this whole change exists to remove.
+  assert.equal(declared('.node[data-role="agent"]', 'justify-content'), 'center');
+});
+
+// The cards of a berth still share one height, which is what keeps a row of dials from stepping
+// up and down; telling their row to stop stretching would have changed every session on the
+// page to make room for one strip.
+test('cards in a berth keep their shared height', () => {
   assert.equal(declared('.berth-cards', 'align-items'), 'stretch');
   assert.equal(declared('.berth-cards', 'align-self'), '', 'and nothing tells a card to opt out of it');
 });
@@ -776,13 +801,51 @@ function atMedia(query: string): string {
   throw new Error(`@media ${query} is never closed`);
 }
 
-// A strip in half a phone's width is an ellipsis where the prompt was: the one line that says
-// what this agent was told to do is the first thing a narrow column takes away. It spans the
-// row instead, which is what the table's own cells do at the same breakpoint. The rule is the
-// REPLAY grid's now — a live strip is docked full width by the berth around it at every size —
-// and the replay is the surface that still lays nodes out as one flat grid.
-test('a strip spans the width of a phone rather than sharing it with a card', () => {
-  assert.match(atMedia('(max-width: 46rem)'), /\.node\[data-role="agent"\][^{]*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
+// The rule that made a strip span the whole width of a phone was written for a line of prompt
+// with no length limit — and the replay grid, the only place it ever applied, is the one
+// surface that holds no prompt at all: the ring keeps a project name and no names of sessions.
+// What it bought was a full-width band appearing and disappearing between two minutes of a
+// scrub, which is the jump this lot exists to remove. A replayed agent is a cell like any
+// other, at every width.
+test('a replayed agent never spans the row, at any width', () => {
+  assert.doesNotMatch(atMedia('(max-width: 46rem)'), /\.node\[data-role="agent"\][^{]*\{[^}]*grid-column/);
+  assert.deepEqual(declaredEverywhere('.node[data-role="agent"]', 'grid-column'), []);
+});
+
+// What that rule was really protecting, kept without the full-width band that came with it. A
+// cell is 10.5rem wide and its captions are one nowrap line each: at 320px the project name of
+// a replayed agent was laid out at 22px of the 73px it needs — "api-gateway" drawn as "a…" —
+// while the word BACKGROUND beside it kept all 78 of its own. And a waiting reason is free
+// text, the one caption this page calls "why this node is not working". A cell has height to
+// spare and no room to give, so both wrap down it rather than being cut across it.
+test('a caption in the replay grid wraps down its cell rather than being cut to it', () => {
+  assert.equal(declared('.map.flat .node .sub', 'white-space'), 'normal');
+  assert.equal(declared('.map.flat .node .sub', 'overflow-wrap'), 'anywhere', 'a path or a long word breaks too');
+  assert.equal(declared('.map.flat .node[data-role="agent"] .who', 'flex-wrap'), 'wrap', 'and the kind gives the name its line back');
+  // Never the live map: a docked strip is a band the width of its berth, and a prompt with no
+  // length limit wrapping down it is the paragraph the ellipsis is there to prevent.
+  assert.equal(declared('.sub', 'white-space'), 'nowrap', 'the strip keeps its one line');
+});
+
+// And it wraps to TWO lines, never as far as it likes. A waiting reason is free text with no
+// length limit anywhere in this codebase (`sessions.ts` copies whatever the source published),
+// so a caption free to wrap is a card free to grow — and a card taller than the row floor takes
+// its row and every row under it with it, which is the jump this whole lot removes, re-entered
+// through the fix for the one before it. Two lines, then an ellipsis, and the floor above has
+// the room for them.
+test('a caption wraps to two lines and stops, so no node can grow its own row', () => {
+  assert.equal(declared('.map.flat .node .sub', '-webkit-line-clamp'), '2');
+  assert.equal(declared('.map.flat .node .sub', 'display'), '-webkit-box', 'the clamp needs the box it counts lines in');
+  assert.equal(declared('.map.flat .node .sub', 'overflow'), 'hidden', 'and the third line is cut, not merely uncounted');
+});
+
+// The label that says an agent is not a terminal, kept beside the name it qualifies. `.kind`
+// is pushed to the far end of its line by `margin-left:auto`, which is right on a strip — one
+// line, name left, kind right — and wrong the moment the line is allowed to wrap: the label
+// dropped alone onto a second line, right-aligned under a name it no longer touched.
+test('a wrapped kind label follows its name rather than floating off alone', () => {
+  assert.equal(declared('.map.flat .node[data-role="agent"] .kind', 'margin-left'), '0');
+  assert.equal(declared('.node .kind', 'margin-left'), 'auto', 'and the strip keeps the rule this one cancels');
 });
 
 // ── the berth, as layout ─────────────────────────────────────────────────────────────────
