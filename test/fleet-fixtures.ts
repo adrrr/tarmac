@@ -32,6 +32,11 @@ export const row = (over: Partial<FleetRow> = {}): FleetRow => ({
 
 export const health = (over: Partial<FleetHealth> = {}): FleetHealth => ({
   sessions: 1,
+  // Every entry can carry a snapshot, which is a fleet with no background agent in it — what
+  // a fixture is unless it says otherwise. It follows `sessions` rather than being pinned at
+  // 1 so that a fixture naming a bigger fleet keeps a coverage population that size, and a
+  // fixture that wants an agent in it says `chainable` for itself.
+  chainable: over.sessions ?? 1,
   covered: 1,
   unfilable: 0,
   drift: 0,

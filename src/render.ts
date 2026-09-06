@@ -10,7 +10,8 @@
 import { formatDuration } from './config.ts';
 import { HISTORY_MAX_BYTES } from './history-store.ts';
 import type { Config, Source } from './config.ts';
-import { buildMap, INTERACTIVE, stateOf } from './map.ts';
+import { buildMap, stateOf } from './map.ts';
+import { INTERACTIVE } from './sessions.ts';
 import {
   HISTORY_CSS,
   HISTORY_PHONE_CSS,
@@ -234,14 +235,14 @@ export function renderTable({ rows, health }: Fleet): string {
   // have to fit an errno as well as a path that points nowhere.
   if (health.snapshotsError) warns.push(`! snapshots unavailable — ${health.snapshotsError}`);
   else if (health.schemaBroken) warns.push('! every snapshot drifted — the statusline payload schema moved');
-  else if (health.covered < health.sessions)
+  else if (health.covered < health.chainable)
     warns.push(
       // The count travels, for the same reason `unreadable` does one line up: without it
       // this line reads as "run install", and for a session id the wrapper declines to file
       // that is advice already taken which can never work.
       health.unfilable > 0
-        ? `! statusline chained on ${health.covered}/${health.sessions} sessions — ${health.unfilable} session(s) with an id tarmac never files`
-        : `! statusline chained on ${health.covered}/${health.sessions} sessions`,
+        ? `! statusline chained on ${health.covered}/${health.chainable} sessions — ${health.unfilable} session(s) with an id tarmac never files`
+        : `! statusline chained on ${health.covered}/${health.chainable} sessions`,
     );
   if (health.stale > 0)
     warns.push(`! ${health.stale} reading(s) marked "!" are older than ${formatDuration(health.staleAfterMs)} (--stale-after)`);
@@ -424,14 +425,14 @@ export function renderLive(fleet: Fleet): string {
     warnings.push(
       `Every snapshot drifted — Claude Code's statusline schema has probably moved. Context readings are dead until the payload shape is re-checked.`,
     );
-  } else if (health.covered < health.sessions) {
-    const blind = health.sessions - health.covered;
+  } else if (health.covered < health.chainable) {
+    const blind = health.chainable - health.covered;
     warnings.push(
       health.unfilable === 0
-        ? `Statusline chained on ${health.covered}/${health.sessions} sessions — the rest report no context. Run \`tarmac install\` and give them one TUI frame.`
+        ? `Statusline chained on ${health.covered}/${health.chainable} sessions — the rest report no context. Run \`tarmac install\` and give them one TUI frame.`
         : health.unfilable >= blind
-          ? `Statusline chained on ${health.covered}/${health.sessions} sessions — the rest carry a session id that is not the UUID tarmac files snapshots under, so no frame will ever produce one. Installing again will not change that.`
-          : `Statusline chained on ${health.covered}/${health.sessions} sessions — ${blind} report no context, and ${health.unfilable} of them will never be filed: the session id is not the UUID tarmac files snapshots under. For the others, run \`tarmac install\` and give them one TUI frame.`,
+          ? `Statusline chained on ${health.covered}/${health.chainable} sessions — the rest carry a session id that is not the UUID tarmac files snapshots under, so no frame will ever produce one. Installing again will not change that.`
+          : `Statusline chained on ${health.covered}/${health.chainable} sessions — ${blind} report no context, and ${health.unfilable} of them will never be filed: the session id is not the UUID tarmac files snapshots under. For the others, run \`tarmac install\` and give them one TUI frame.`,
     );
   }
   if (health.unknownStatus > 0) {

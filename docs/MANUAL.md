@@ -31,6 +31,7 @@ change visible, and the table below is how.
 | the key is gone or retyped | `— schema drift`, and a warning if it happened to every session |
 | no snapshot for a live session | `— not chained` |
 | a live session whose id it will never file under | `— not chained`, and a count saying how many, never "run tarmac install" |
+| a background agent, which has no TUI to draw a frame | `— not chained`, and no place in the coverage line, which counts what an install could cover |
 | a reading older than the threshold | the value, dated. A stale number is still true, of an earlier moment |
 | a status string it does not know | that string, never "idle" |
 | a session halted until you answer something | `waiting`, and which answer: `permission prompt`, `dialog open`, … |
@@ -220,6 +221,15 @@ and never among the covered, because a snapshot an older wrapper filed under a n
 still read. The field separates "no frame drawn yet", which `tarmac install` and one frame fix,
 from "no frame will ever produce one", which nothing fixes. Both renderers say which of the two
 they are looking at rather than defaulting to install advice.
+
+`health.chainable` is the population those two are counted over, and it is not `health.sessions`.
+A background agent has no TUI, so it never draws a frame and no status line can ever file a
+snapshot for it. It is a session on the fleet, in the table and on the map, and it is not
+something an install could cover, so the coverage line leaves it out of both its numbers: one
+agent beside one chained terminal used to read `statusline chained on 1/2 sessions`, sending you
+to run an install that could not change it. Which entries those are is decided by `kind`, by the
+rule the map uses for its agent strips, and if nothing on the fleet calls itself `interactive` the
+word moved rather than every terminal going background, so every entry counts again.
 
 ## What `serve` listens on
 
