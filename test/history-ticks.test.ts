@@ -19,7 +19,6 @@ import { health, row } from './fleet-fixtures.ts';
 
 process.env.TZ = 'Europe/Paris';
 
-const DAY = 86_400_000;
 /** The plot a 360px canvas gives, which is what a tick's x is read against. See `plotBox`. */
 const L = 8;
 const R = 352;
@@ -30,6 +29,15 @@ const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct
 const midnight = (date: string): number => {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+};
+
+/**
+ * The midnight that closes a day — 23, 24 or 25 hours along. The axis ends at the close of the
+ * range, which the reader states in calendar days like everything else here.
+ */
+const nextMidnight = (t: number): number => {
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
 };
 
 const word = (t: number): string => {
@@ -50,6 +58,10 @@ async function span(days: string[], range: '7d' | '30d' = '7d'): Promise<Page> {
           : {
               enabled: true,
               range: range,
+              // The window the reader charged the days against, which is what the axis is drawn
+              // over: the days ASKED for, not the ones that turned out to be on disk.
+              from: midnight(days[0]),
+              to: nextMidnight(midnight(days[days.length - 1])),
               hours: [],
               resets: [],
               days: days.map((date) => ({ date, byProject: [{ project: 'alpha', costUsd: 3 }] })),
@@ -79,7 +91,7 @@ const dayTicks = (p: Page): { text: string; x: number }[] =>
  */
 const centres = (days: string[]): { text: string; x: number }[] => {
   const t0 = midnight(days[0]);
-  const t1 = midnight(days[days.length - 1]) + DAY;
+  const t1 = nextMidnight(midnight(days[days.length - 1]));
   const at = (t: number): number => L + ((t - t0) / (t1 - t0)) * (R - L);
   return days.map((date, i) => {
     const start = midnight(date);
@@ -116,6 +128,15 @@ test('the week a clock springs forward keeps its ticks on their own columns', as
   await assertAxis(['2026-03-26', '2026-03-27', '2026-03-28', '2026-03-29', '2026-03-30', '2026-03-31', '2026-04-01']);
 });
 
+// The three weeks above all put the shift in the MIDDLE of the fixture, where the width of the
+// last column decides nothing: the axis ends at the range's close either way. A week that ENDS
+// on the twenty-five-hour day is the one that reads the last column's own width — the span the
+// buckets carry — and a flat 86400000 there closes the axis an hour early, sliding every name
+// on it a little to the right of its column.
+test('the week that ends on the day a clock falls back keeps its last column whole', async () => {
+  await assertAxis(['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25']);
+});
+
 // A month labels every fifth date rather than every day, and it walks the same loop. The
 // evening the walk slipped into is still the 25th, so the month drew `Oct 25` twice, eleven
 // pixels apart, which is the two of them overprinting each other.
@@ -126,7 +147,7 @@ test('a month names each fifth date once, and at the date itself', async () => {
     days.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
   }
   const t0 = midnight(days[0]);
-  const t1 = midnight(days[days.length - 1]) + DAY;
+  const t1 = nextMidnight(midnight(days[days.length - 1]));
   const want = days
     .filter((date) => new Date(midnight(date)).getDate() % 5 === 0)
     .map((date) => ({

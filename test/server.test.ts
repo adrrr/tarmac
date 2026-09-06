@@ -1933,6 +1933,8 @@ function heldRead(): { read: () => Promise<RangeHistory>; started: () => number;
 /** The thinnest answer the route can serve: a range that read nothing and says so. */
 const emptyRange = (range: HistoryRange): RangeHistory => ({
   range,
+  from: 0,
+  to: 0,
   hours: [],
   days: [],
   resets: [],
