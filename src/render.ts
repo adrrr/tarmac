@@ -235,15 +235,20 @@ export function renderTable({ rows, health }: Fleet): string {
   // have to fit an errno as well as a path that points nowhere.
   if (health.snapshotsError) warns.push(`! snapshots unavailable — ${health.snapshotsError}`);
   else if (health.schemaBroken) warns.push('! every snapshot drifted — the statusline payload schema moved');
-  else if (health.covered < health.chainable)
+  else if (health.covered < health.chainable) {
+    // The count travels, for the same reason `unreadable` does one line up: without it
+    // this line reads as "run install", and for a session id the wrapper declines to file
+    // that is advice already taken which can never work. And when the denominator is
+    // smaller than the fleet, the line says who it left out: "1/2 sessions" over a
+    // four-row table is a comparison the reader should not have to resolve alone.
+    const excluded = health.sessions - health.chainable;
+    const counted = `${health.covered}/${health.chainable} sessions${excluded > 0 ? ` (${excluded} agent(s) draw no frame)` : ''}`;
     warns.push(
-      // The count travels, for the same reason `unreadable` does one line up: without it
-      // this line reads as "run install", and for a session id the wrapper declines to file
-      // that is advice already taken which can never work.
       health.unfilable > 0
-        ? `! statusline chained on ${health.covered}/${health.chainable} sessions — ${health.unfilable} session(s) with an id tarmac never files`
-        : `! statusline chained on ${health.covered}/${health.chainable} sessions`,
+        ? `! statusline chained on ${counted} — ${health.unfilable} session(s) with an id tarmac never files`
+        : `! statusline chained on ${counted}`,
     );
+  }
   if (health.stale > 0)
     warns.push(`! ${health.stale} reading(s) marked "!" are older than ${formatDuration(health.staleAfterMs)} (--stale-after)`);
   const skewed = rows.filter(ahead).length;
@@ -427,12 +432,17 @@ export function renderLive(fleet: Fleet): string {
     );
   } else if (health.covered < health.chainable) {
     const blind = health.chainable - health.covered;
+    // Same naming as the table line: the denominator is the chainable population, and the
+    // rows below list agents as "not chained" too — without the parenthesis the banner and
+    // the rows disagree on how many are missing.
+    const excluded = health.sessions - health.chainable;
+    const counted = `${health.covered}/${health.chainable} sessions${excluded > 0 ? ` (${excluded} agent(s) draw no frame)` : ''}`;
     warnings.push(
       health.unfilable === 0
-        ? `Statusline chained on ${health.covered}/${health.chainable} sessions — the rest report no context. Run \`tarmac install\` and give them one TUI frame.`
+        ? `Statusline chained on ${counted} — the rest report no context. Run \`tarmac install\` and give them one TUI frame.`
         : health.unfilable >= blind
-          ? `Statusline chained on ${health.covered}/${health.chainable} sessions — the rest carry a session id that is not the UUID tarmac files snapshots under, so no frame will ever produce one. Installing again will not change that.`
-          : `Statusline chained on ${health.covered}/${health.chainable} sessions — ${blind} report no context, and ${health.unfilable} of them will never be filed: the session id is not the UUID tarmac files snapshots under. For the others, run \`tarmac install\` and give them one TUI frame.`,
+          ? `Statusline chained on ${counted} — the rest carry a session id that is not the UUID tarmac files snapshots under, so no frame will ever produce one. Installing again will not change that.`
+          : `Statusline chained on ${counted} — ${blind} report no context, and ${health.unfilable} of them will never be filed: the session id is not the UUID tarmac files snapshots under. For the others, run \`tarmac install\` and give them one TUI frame.`,
     );
   }
   if (health.unknownStatus > 0) {
