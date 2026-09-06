@@ -750,6 +750,10 @@ test('every node in the replay grid gets a cell of one size, so a scrub does not
   assert.match(declared('.map.flat', 'grid-auto-rows'), /minmax\(/, 'the rows have a floor of their own');
   assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), '', 'and nothing opts out of it');
   assert.deepEqual(declaredEverywhere('.map.flat .node[data-role="agent"]', 'align-self'), [], 'at no width');
+  // And what fills the cell sits in the middle of it, level with the dials beside it. A card
+  // whose two lines of text hang from the top of a box the height of a dial reads as a cell
+  // that failed to draw, which is the impression this whole change exists to remove.
+  assert.equal(declared('.node[data-role="agent"]', 'justify-content'), 'center');
 });
 
 // The cards of a berth still share one height, which is what keeps a row of dials from stepping

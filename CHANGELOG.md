@@ -13,6 +13,29 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **A replay holds still.** Dragging the handle used to redraw the whole page at every step: the
+  banner naming the minute was inserted into the flow on the first touch and taken back out on
+  the way to live, so the page dropped a line going in and rose one coming out — and behind it
+  the flat grid gave each row the height of whatever was in it, with half-height agent strips
+  among full-height dials, so a session appearing between two minutes moved every node under it.
+  The banner has a place kept for it now: live, the same box says `● live` in the page's grey,
+  and entering a replay swaps a line rather than adding one. Every node behind the scrubber gets
+  a cell of one size, an agent included — it keeps the shape that is honest, its text and no
+  dial it could never fill, and gives up only the height. On a phone, where the banner wraps to
+  three lines and the header's gauges take a row of their own, the swap is smaller than it was
+  and not yet nothing.
+- **The scrubber and its buttons are drawn by the page.** The one control this view is spent
+  touching was whatever the browser had: a fat grey groove on one engine, a blue pill on
+  another. Both engines now get the same thin rail and the same standing thumb, the focus ring
+  `appearance:none` takes away is given back to the handle and to both buttons, and Play carries
+  what it is doing in an attribute as well as in its word — a stopped replay no longer
+  screenshots as a running one.
+- **The line under the handle is one line.** It was three of technical prose under the hand of
+  whoever is dragging. What it says now is what this record covers and how many readings are in
+  it; the two standing properties of the record — nothing replayed is dated, the past is drawn
+  ungrouped — are the title of that line and a span a screen reader reaches. Moved, not dropped:
+  an ungrouped map that says nothing about being ungrouped reads as a rendering that broke.
+
 - **`health.covered`, `health.unfilable` and `health.drift` are counted over the sessions a
   status line could write for.** `tarmac list --json` and `/api/fleet` carry a new
   `health.chainable` beside them, the size of that population, and it is the denominator the

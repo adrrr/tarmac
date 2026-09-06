@@ -629,14 +629,24 @@ only: the table has no scrubber, and a full ring is megabytes.
 
 A replay is never allowed to pass for the present:
 
-- a sticky banner names the minute on screen and carries one button back to live
+- a sticky banner names the minute on screen and carries one button back to live. It stands in
+  a place the page keeps for it: live, the same box says `● live` in the page's grey, so
+  entering and leaving a replay swaps a line rather than inserting and removing one. The page
+  used to drop a line on the way in and rise one on the way out, at the moment a reader is
+  comparing two minutes of it
 - the live fragment, with its map, its totals, its timestamp and its warnings, all of them
   about now, is hidden while the past is up, so two fleets of two moments are never stacked
 - **no halos.** The halo means a reading landed moments ago, which is never true of a sample
 - a session absent from a sample is absent from the map, never a dial at zero
 - an agent replays as its kind and its numbers. The ring holds no names, so neither does this.
   A replayed card is headed by its project where a live one, framed by a berth that already
-  says the directory, is headed by its session name
+  says the directory, is headed by its session name. It fills a cell the size of every other
+  cell — the strip's own half-height belongs to the live map, where nothing moves without a
+  poll. Behind the scrubber the fleet changes under a still hand, and a grid whose rows are the
+  size of what is in them redraws the page at every step of a drag. It keeps the shape that is
+  honest, text and no dial, and gives up only the height
+- the grid it is drawn in has a row of one size, so a session appearing between two minutes of
+  a scrub moves nothing but the nodes after it in the sample's own order
 - **no berths.** The ring keeps a project name and never the working directory it was read in,
   and a basename is not a directory. A frame drawn on it would group two checkouts of `atlas`
   into one, claiming the very thing a berth exists to be trusted about. So a replayed fleet is
@@ -653,16 +663,21 @@ Every minute the replay spells — the banner, the line under the handle, the `a
 handle carries — is UTC, the clock the summary line already dates the fleet on, and each of them
 says `UTC` rather than leaving a reader to assume it is their own.
 
-The range says what it really covers. A serve ten minutes old offers ten minutes, and a record
-whose every reading failed says *that* rather than reading like a serve which has just started.
-The handle steps through readings, not minutes, so the line under it also names how many
-minutes have none.
+The range says what it really covers, in the one line under the handle: the span, how many
+readings are in it, and how many minutes have none — the handle steps through readings, not
+minutes. A serve ten minutes old offers ten minutes, and a record whose every reading failed
+says *that* rather than reading like a serve which has just started.
+
+Two standing properties of the record used to print on that line as well, and now hang off it:
+nothing replayed is dated, and the past is drawn ungrouped. They are the title of that line for
+a pointer, and a visually hidden span for a reader who has none. Moved rather than dropped —
+shown less and told nothing, a reader reads an ungrouped map as a rendering that broke.
 
 One thing it deliberately does not do is date the readings it draws. The ring keeps each
 reading, never how old that reading was, so a replayed arc can be neither the solid one of a
 fresh reading nor the thin amber one of a stale reading. It gets a third weight of its own: full
-colour, a shade lighter, `data-reading="undatable"` in the markup. The line under the scrubber
-says why.
+colour, a shade lighter, `data-reading="undatable"` in the markup. The note behind the line
+under the scrubber says why.
 
 A record that is refreshed under a reader who has taken hold of it is not swapped: the answer
 re-asks whether anyone is scrubbing at the moment it lands, and a refresh that fails leaves the

@@ -986,7 +986,10 @@ ${HISTORY_CSS}
      row — and that is exactly what made the map dance: an agent appearing between two minutes
      of a scrub moved every dial under it. The SHAPE stays different, which is the honest part
      (no dial, no arc that could never fill, its text left-aligned); the CELL is the same. */
-  .node[data-role="agent"] { align-items:stretch; text-align:left;
+  /* Its text sits in the middle of whatever box it is given, which in the flat grid is the
+     height of a dial: hung from the top of one, two lines of text read as a cell that failed
+     to draw. Docked in a berth the box is the text's own height and this does nothing. */
+  .node[data-role="agent"] { align-items:stretch; justify-content:center; text-align:left;
           padding:.5rem .7rem .55rem; border-radius:8px;
           background:color-mix(in srgb, var(--line) 18%, transparent);
           /* The box goes back to the neutral line the tinted rule above gave it: the accent is
