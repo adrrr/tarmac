@@ -11,6 +11,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.0] - 2026-09-06
+
 ### Added
 
 - **`tarmac serve --demo`, so the first run is not an empty screen.** One session and no record
