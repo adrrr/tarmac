@@ -19,24 +19,29 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   the flat grid gave each row the height of whatever was in it, with half-height agent strips
   among full-height dials, so a session appearing between two minutes moved every node under it.
   The banner has a place kept for it now: live, the same box says `● live` in the page's grey,
-  and entering a replay swaps a line rather than adding one. That line is served up rather than
-  raised when the record lands, so loading the map does not shift either. Every node behind the
-  scrubber gets a cell of one size, an agent included — it keeps the shape that is honest, its
-  text and no dial it could never fill, and gives up only the height; below 480px the cell
-  narrows with its column rather than standing 168px tall over 90px of content.
+  and entering a replay swaps a line rather than adding one. That line is served up and never
+  raised or lowered by the script, so a serve too young to have taken a reading — every serve,
+  for its first minute — does not answer the page with an empty record and take a painted line
+  back off it. Every node behind the scrubber gets a cell of one size, an agent included: it
+  keeps the shape that is honest, its text and no dial it could never fill, and gives up only
+  the height. The floor of a row is the tallest card the record can produce, and captions are
+  clamped to two lines to keep it so — a waiting reason is free text with no length limit, and
+  one free to wrap is a card free to take its row and every row under it.
   What still moves, measured on the demo: the account's gauges leave the header on replay and
   are drawn again above the replayed fleet, which inserts their row — 22px on a laptop, and on a
   phone a wrapped header row as well. Their place is argued where they are rendered (a past
   reading may not stand above the banner that dates it) and was left alone. On a phone the
-  banner also wraps to three lines where the live line takes one.
+  banner also wraps to three lines where the live line takes one, another 53px. And a scrub that
+  takes the grid from one row to two pushes what is under it, which is what a grid does.
 - **The scrubber and its buttons are drawn by the page.** The one control this view is spent
   touching was whatever the browser had: a fat grey groove on one engine, a blue pill on
   another. Both engines now get the same thin rail and the same standing thumb, the focus ring
   `appearance:none` takes away is given back to the handle and to both buttons, and Play carries
   what it is doing in an attribute as well as in its word — a stopped replay no longer
   screenshots as a running one.
-- **The line under the handle is one line.** It was three of technical prose under the hand of
-  whoever is dragging. What it says now is what this record covers, how many readings are in it,
+- **The line under the handle is a line, not a paragraph.** It was three of technical prose
+  under the hand of whoever is dragging — one on a laptop now, two on a phone. What it says is
+  what this record covers, how many readings are in it,
   and the two words that qualify them: `undated, ungrouped`. Their paragraph — and the clause
   saying the range ends where this page last asked for the record rather than at this minute —
   is the title of that line and a span a screen reader reaches. The words stay on screen because

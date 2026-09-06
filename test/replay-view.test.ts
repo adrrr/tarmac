@@ -83,14 +83,19 @@ test('the state line and the banner are one box, so the swap costs no vertical p
   for (const prop of ['padding', 'font-size', 'line-height', 'margin']) {
     assert.match(shared![1], new RegExp(`${prop}\\s*:`), prop);
   }
-  // The minimum, by its VALUE. Asserted as "the property is declared" this passed on
-  // `min-height:0`, which is the property gone and the pair back to their own line boxes —
-  // and those differ: the banner's button is 12px of text plus .05rem of padding and a border
-  // either side, against a line box of .8rem × 1.45. The floor has to clear both, so it is a
-  // length rather than a keyword and it is not a token one.
-  const floor = /min-height:\s*([\d.]+)rem/.exec(shared![1]);
-  assert.ok(floor, `the box declares a min-height in rem: ${shared![1]}`);
-  assert.ok(Number(floor![1]) >= 1.2, `and one that clears both line boxes: ${floor![0]}`);
+  assert.doesNotMatch(shared![1], /min-height/, 'the floor belongs to the pair that swaps, not to every warning on the page');
+  // The minimum, by its VALUE, and on the two elements that take turns — nowhere else. Put on
+  // the shared box it grew the offline banner and the noscript warning by 5.5px each, which is
+  // a page redrawn to settle an argument between two other elements. Asserted as "the property
+  // is declared" it passed on `min-height:0`, the property gone; asserted at 1.2rem it passed
+  // on a floor UNDER the banner's own content — the button is 12px of text in a line box its
+  // padding and border take past 21px, against 18.56px for a line of the live text. A floor
+  // below the taller of those two is a floor the pair steps over, one of them at a time.
+  const pair = /\.replaying-note,\s*\.live-state\s*\{([^}]*)\}/.exec(css);
+  assert.ok(pair, 'the floor is declared for the banner and the live line');
+  const floor = /min-height:\s*([\d.]+)rem/.exec(pair![1]);
+  assert.ok(floor, `in rem: ${pair![1]}`);
+  assert.ok(Number(floor![1]) >= 1.35, `and clearing the taller of the two: ${floor![0]}`);
   const own = /(?:^|\})\s*\.live-state(?::not\(\[hidden\]\))?\s*\{([^}]*)\}/.exec(css);
   assert.ok(own, 'and the live line has a rule of its own for what it does not share');
   for (const prop of ['padding', 'font-size', 'min-height']) {

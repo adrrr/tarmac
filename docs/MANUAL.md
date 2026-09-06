@@ -633,9 +633,10 @@ A replay is never allowed to pass for the present:
   a place the page keeps for it: live, the same box says `● live` in the page's grey, so
   entering and leaving a replay swaps a line rather than inserting and removing one. The page
   used to drop a line on the way in and rise one on the way out, at the moment a reader is
-  comparing two minutes of it. The account's gauges are the one thing that still moves: they
-  leave the header and are drawn again above the replayed fleet, which costs their row — the
-  price of the rule below, that a past reading may not stand above the banner dating it
+  comparing two minutes of it. Two things still move. The account's gauges leave the header and
+  are drawn again above the replayed fleet, which costs their row — the price of the rule below,
+  that a past reading may not stand above the banner dating it. And on a phone the banner wraps
+  to three lines where the live line takes one, so the swap is not free at that width
 - the live fragment, with its map, its totals, its timestamp and its warnings, all of them
   about now, is hidden while the past is up, so two fleets of two moments are never stacked
 - **no halos.** The halo means a reading landed moments ago, which is never true of a sample
@@ -648,7 +649,11 @@ A replay is never allowed to pass for the present:
   size of what is in them redraws the page at every step of a drag. It keeps the shape that is
   honest, text and no dial, and gives up only the height
 - the grid it is drawn in has a row of one size, so a session appearing between two minutes of
-  a scrub moves nothing but the nodes after it in the sample's own order
+  a scrub moves nothing but the nodes after it in the sample's own order — a row the grid gains
+  still pushes what is under it, which is a grid, not a jump. The floor of that row is the
+  tallest card the record can produce, and the captions on a card are clamped to two lines to
+  keep it that: a waiting reason is free text with no length limit, and one free to wrap as far
+  as it likes is a card free to take its whole row with it
 - **no berths.** The ring keeps a project name and never the working directory it was read in,
   and a basename is not a directory. A frame drawn on it would group two checkouts of `atlas`
   into one, claiming the very thing a berth exists to be trusted about. So a replayed fleet is
@@ -665,10 +670,11 @@ Every minute the replay spells — the banner, the line under the handle, the `a
 handle carries — is UTC, the clock the summary line already dates the fleet on, and each of them
 says `UTC` rather than leaving a reader to assume it is their own.
 
-The range says what it really covers, in the one line under the handle: the span, how many
-readings are in it, and how many minutes have none — the handle steps through readings, not
-minutes. A serve ten minutes old offers ten minutes, and a record whose every reading failed
-says *that* rather than reading like a serve which has just started.
+The range says what it really covers, on the line under the handle: the span, how many readings
+are in it, and how many minutes have none — the handle steps through readings, not minutes. A
+serve ten minutes old offers ten minutes, and a record whose every reading failed says *that*
+rather than reading like a serve which has just started. It is one line on a laptop and can take
+two on a phone; what it is not is the paragraph it used to be.
 
 Two standing properties of the record used to print in full on that line, and are now named on
 it in two words — `undated, ungrouped` — with the paragraph behind them: nothing replayed is

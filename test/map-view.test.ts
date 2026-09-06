@@ -747,19 +747,18 @@ test("a strip's left accent is the node's own hue, the one its glyph already car
 // column, same row, whatever is drawn inside it. The live berths keep their own shape; there
 // nothing moves without a poll.
 test('every node in the replay grid gets a cell of one size, so a scrub does not move the map', () => {
-  // The VALUE, not the shape of it. Asserted as `/minmax\(/` this passed on `minmax(0,auto)`,
-  // which is a floor of nothing and the exact bug — a row the size of whatever is in it.
-  // Asserted as a comparison, because the floor is the column's own minimum: the cell is a
-  // square, and the sheet says so twice, once per width at which the columns change.
-  const floor = (v: string): string => /minmax\(\s*([^,]+),/.exec(v)?.[1].trim() ?? '';
-  const columns = declaredEverywhere('.map.flat', 'grid-template-columns');
-  const rows = declaredEverywhere('.map.flat', 'grid-auto-rows');
-  assert.ok(columns.length > 0, 'the grid declares its columns');
-  assert.equal(rows.length, columns.length, 'and a row floor everywhere it declares them');
-  for (let i = 0; i < rows.length; i++) {
-    assert.notEqual(floor(rows[i]), '', rows[i]);
-    assert.equal(floor(rows[i]), floor(columns[i]), `the cell is a square: ${rows[i]} against ${columns[i]}`);
-  }
+  // The VALUE, and a value that has to clear the TALLEST card the record can produce, or the
+  // floor is decoration: a row is `minmax(floor,auto)`, so anything taller pushes its own row
+  // and every row under it. The card that decides it is a waiting session — dial, name, a
+  // caption clamped to two lines, and the two numbers under it — measured at 214px in Chrome
+  // on the demo. Asserted as a number rather than against the column minimum: a cell that
+  // happened to be square told us nothing about whether a node fits in it, and `minmax(0,auto)`
+  // and `minmax(8.5rem,auto)` are both squares of some column at some width.
+  const floors = declaredEverywhere('.map.flat', 'grid-auto-rows');
+  assert.equal(floors.length, 1, 'declared once, for every width — a floor under the cards is not a floor');
+  const rem = /minmax\(\s*([\d.]+)rem\s*,/.exec(floors[0]);
+  assert.ok(rem, `a floor in rem: ${floors[0]}`);
+  assert.ok(Number(rem![1]) >= 13.5, `and one a two-line caption fits inside: ${floors[0]}`);
   assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), '', 'and nothing opts out of it');
   assert.deepEqual(declaredEverywhere('.map.flat .node[data-role="agent"]', 'align-self'), [], 'at no width');
   // And what fills the cell sits in the middle of it, level with the dials beside it. A card
@@ -826,6 +825,27 @@ test('a caption in the replay grid wraps down its cell rather than being cut to 
   // Never the live map: a docked strip is a band the width of its berth, and a prompt with no
   // length limit wrapping down it is the paragraph the ellipsis is there to prevent.
   assert.equal(declared('.sub', 'white-space'), 'nowrap', 'the strip keeps its one line');
+});
+
+// And it wraps to TWO lines, never as far as it likes. A waiting reason is free text with no
+// length limit anywhere in this codebase (`sessions.ts` copies whatever the source published),
+// so a caption free to wrap is a card free to grow — and a card taller than the row floor takes
+// its row and every row under it with it, which is the jump this whole lot removes, re-entered
+// through the fix for the one before it. Two lines, then an ellipsis, and the floor above has
+// the room for them.
+test('a caption wraps to two lines and stops, so no node can grow its own row', () => {
+  assert.equal(declared('.map.flat .node .sub', '-webkit-line-clamp'), '2');
+  assert.equal(declared('.map.flat .node .sub', 'display'), '-webkit-box', 'the clamp needs the box it counts lines in');
+  assert.equal(declared('.map.flat .node .sub', 'overflow'), 'hidden', 'and the third line is cut, not merely uncounted');
+});
+
+// The label that says an agent is not a terminal, kept beside the name it qualifies. `.kind`
+// is pushed to the far end of its line by `margin-left:auto`, which is right on a strip — one
+// line, name left, kind right — and wrong the moment the line is allowed to wrap: the label
+// dropped alone onto a second line, right-aligned under a name it no longer touched.
+test('a wrapped kind label follows its name rather than floating off alone', () => {
+  assert.equal(declared('.map.flat .node[data-role="agent"] .kind', 'margin-left'), '0');
+  assert.equal(declared('.node .kind', 'margin-left'), 'auto', 'and the strip keeps the rule this one cancels');
 });
 
 // ── the berth, as layout ─────────────────────────────────────────────────────────────────

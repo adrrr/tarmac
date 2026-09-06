@@ -165,6 +165,18 @@ test('the visible line is the range, and the prose it used to carry is not lost'
   assert.match(more, /last asked for the record/);
 });
 
+// The branch every fixture here had been skipping: `record()` hardcodes `missed: 0`, so the one
+// clause that can lengthen this line was never measured. A record with holes is not the exotic
+// case — it is any serve whose collector missed a minute — and the line has to stay a line.
+test('a record with holes says so on the line, and the line stays short', async () => {
+  const page = mount({ ...record(10), missed: 7 });
+  await page.advance(0);
+  const line = page.el('covers').textContent;
+  assert.match(line, /7 minutes with no reading/, 'a gap that says it is a gap is not a gap');
+  assert.match(line, /undated, ungrouped/, 'and the two words survive the longest branch');
+  assert.ok(line.length <= 100, `still a line, not a paragraph: ${line.length} chars — ${line}`);
+});
+
 // The branches that have nothing but a sentence to give: a record with no readings in it, and
 // one that could not be read at all. There is no standing prose to fold away, and a tooltip
 // that repeats the line it is on is a tooltip that teaches a reader to ignore the next one.
@@ -191,16 +203,21 @@ test('the state line is up before the record lands and stays up through a replay
   assert.equal(page.body.classes.has('replaying'), true, 'which is what hides it, in the stylesheet');
 });
 
-// The one case where it comes down: a record nothing can be replayed out of. There is no second
-// state for the line to be telling this one apart from, and the sentence under the handle is
-// already saying why there is nothing to drag.
-test('a record with nothing to replay takes the state line down', async () => {
+// It never comes down, and the two branches that used to take it down are the reason this is a
+// test. A serve takes its first reading one interval AFTER it starts listening — the sampler is
+// an interval with no leading call — so every page opened on a fresh serve asks for the record
+// and is answered `samples: []` for a minute. Hiding the line on that answer removed a line the
+// server had already PAINTED: the fleet jumped 42px up, 33ms in, on the view whose whole point
+// this lot is that it holds still. The line is not about the replay in the first place — it says
+// the page is showing the fleet as the header dates it, which is true with no record at all.
+test('the state line stays up on a record with nothing in it, and on one that cannot be read', async () => {
   const empty = mount({ since: CLOCK, cadence: MIN, samples: [], missed: 0 });
   await empty.advance(0);
-  assert.equal(empty.el('live-state').hidden, true, 'nothing recorded yet');
+  assert.equal(empty.el('live-state').hidden, false, 'a serve too young to have sampled');
+  assert.equal(empty.el('scrub').disabled, true, 'and the handle is still dead, which is the honest part');
   const gone = mount(() => Promise.resolve({ ok: false, body: 'the record is gone' }));
   await gone.advance(0);
-  assert.equal(gone.el('live-state').hidden, true, 'and none that could be read');
+  assert.equal(gone.el('live-state').hidden, false, 'and a record that could not be read');
 });
 
 // A gap that says it is a gap is not a gap — but a scrubber whose positions are readings and

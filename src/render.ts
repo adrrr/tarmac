@@ -735,7 +735,13 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
      because only one of the two carries a button, and a button's own line box is taller than
      a line of this text. */
   .warn, .live-state { border:1px solid currentColor; border-radius:6px;
-          padding:.35rem .65rem; margin:.3rem 0; font-size:.8rem; line-height:1.45; min-height:1.5rem; }
+          padding:.35rem .65rem; margin:.3rem 0; font-size:.8rem; line-height:1.45; }
+  /* And the floor on the two that take turns, never on the box: put on the shared rule it grew
+     the offline banner and the noscript warning by 5.5px each — a page redrawn to settle an
+     argument between two other elements. It clears the taller of the pair's own contents, which
+     is the banner's button: 12px of text in a line box its padding and border take past 21px,
+     against 18.56px for a line of the live text. */
+  .replaying-note, .live-state { min-height:1.5rem; }
   .warn { background:var(--warnbg); color:var(--warn); }
   .warn:last-of-type { margin-bottom:.9rem; }
   /* The live half: the same box with none of the alarm. Grey on nothing, its border spent on
@@ -947,11 +953,14 @@ ${HISTORY_CSS}
      changes under a still hand — each position of the handle is another minute, and sessions
      come and go between two of them. A grid whose rows are the size of what is in them redraws
      the page at every step of a scrub, which is what made a drag look like a page breaking.
-     The floor is a square of the column's own minimum, so a card of a dial, a name and a line
-     of numbers sits in it exactly; the auto above it is what keeps a node with three captions
-     from being clipped, at the price of that one row being taller. */
+     The floor has to clear the TALLEST card the record can produce, or it is decoration: a row
+     is minmax(floor,auto), so one node taller than the floor pushes its own row and every row
+     under it — the jump, by the other road. The card that decides it is a waiting session:
+     a dial, a name, a caption clamped to two lines and the two numbers under it, 214px in
+     Chrome. One value at every width: the columns narrow on a phone and the cards do not, so a
+     floor cut to match them would sit under the cards it is supposed to hold up. */
   .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));
-          grid-auto-rows:minmax(10.5rem,auto); }
+          grid-auto-rows:minmax(13.5rem,auto); }
   /* The berth: a frame around the nodes read in one directory, and the label is the whole of
      what it claims. Quiet on purpose — a hairline and a caption in the grey the rest of the
      page uses for a heading, because the loud thing on this view is a session's state, and a
@@ -1010,9 +1019,20 @@ ${HISTORY_CSS}
      working — lost two thirds of itself. The cell has height to spare and no width to give, so
      they wrap DOWN it instead. Scoped to the flat grid: a strip docked in a berth is a band the
      width of its frame, and the prompt on it has no length limit — wrapping that one down its
-     berth is the paragraph the ellipsis is there to prevent. */
-  .map.flat .node .sub { white-space:normal; overflow-wrap:anywhere; }
+     berth is the paragraph the ellipsis is there to prevent.
+
+     Two lines, then an ellipsis. Free to wrap as far as it likes, a caption is a card free to
+     grow — and a card taller than the row floor takes its row and every row under it, which is
+     the jump this grid exists to remove, re-entered through the fix for the clipping. A waiting
+     reason has no length limit anywhere in this codebase: the source publishes what it likes
+     and sessions.ts copies it through. */
+  .map.flat .node .sub { white-space:normal; overflow-wrap:anywhere;
+          display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
   .map.flat .node[data-role="agent"] .who { flex-wrap:wrap; }
+  /* And the label that says an agent is not a terminal stays beside the name it qualifies. The
+     margin that pushes it to the far end of a strip's one line drops it, alone and
+     right-aligned, onto a second line the moment that line is allowed to wrap. */
+  .map.flat .node[data-role="agent"] .kind { margin-left:0; }
   /* A strip's project, which since the berths is the REPLAY's business alone: a live strip
      prints none — the frame around it says the directory — and behind the scrubber there is no
      frame, and the project is the only name the ring kept. The rule stayed when the markup
@@ -1097,11 +1117,10 @@ ${HISTORY_CSS}
   .sub.waiting-for { color:var(--wait); font-weight:600; }
   .asof { font-size:.72rem; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:.15rem; }
   .asof.stale { color:var(--warn); font-weight:600; }
-  /* The columns narrow here, and the row floor narrows with them or the cell stops being the
-     square the rule above says it is: left at 10.5rem it was a 168px box holding 90px of
-     agent on a phone, which is the empty half of the same fault. */
-  @media (max-width: 30rem) { .map.flat { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr));
-            grid-auto-rows:minmax(8.5rem,auto); } .map { gap:.6rem; } }
+  /* The columns narrow here; the row floor does not follow them. A card at 320px is taller than
+     one at 1280, not shorter — its captions have less width and more lines — so a floor cut to
+     the narrow column would sit under every card on the page and hold nothing up. */
+  @media (max-width: 30rem) { .map.flat { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); } .map { gap:.6rem; } }
 
   /* Below this the table stops being a table. What replaces it is the strip described down at
      the tr rule: two lines per session rather than one card of eight labelled ones. Nothing is
@@ -1564,7 +1583,6 @@ function pageScript(view: View): string {
   var rmeta = document.getElementById('replay-meta'), note = document.getElementById('replaying');
   var rlimits = document.getElementById('replay-limits');
   var atEl = document.getElementById('replay-at'), toLive = document.getElementById('to-live');
-  var liveState = document.getElementById('live-state');
   var record = null, recordAt = 0, at = -1, replaying = false, playing = null, hgen = 0;
 
   // The vocabulary and the geometry, handed over rather than written twice: three words for
@@ -1665,13 +1683,16 @@ function pageScript(view: View): string {
         + ' and takes a reading every ' + Math.round(record.cadence / 1000) + 's.';
   }
 
+  // Nothing here touches the state line, and that is the rule rather than an omission: it is
+  // served up, and it says the page is showing the fleet as the header dates it — true of a
+  // record with a day in it, of one a serve is too young to have taken, and of one that could
+  // not be read at all. Hidden on the empty answer it removed a line the server had already
+  // painted: a serve samples on an interval with no leading call, so every page opened on a
+  // fresh one is answered with an empty sample list for a minute, and the fleet jumped up
+  // 42px, 33ms in.
   function ready() {
     var n = record.samples.length;
     replay.hidden = false;
-    // The live half of the state line comes DOWN in the one case it has nothing to be the live
-    // half of: a record with no samples in it. It is served up otherwise, and never raised
-    // here — a line that appears when the record lands is a line that moves the fleet.
-    liveState.hidden = n === 0;
     say(n === 0 ? emptyText() : coversRange(), n === 0 ? '' : KEEPS);
     scrub.max = String(n === 0 ? 0 : n - 1);
     scrub.disabled = n === 0;
@@ -1684,9 +1705,6 @@ function pageScript(view: View): string {
     replay.hidden = false;
     scrub.disabled = true;
     playBtn.disabled = true;
-    // Down, for the reason the empty record takes it down: there is no replay for this line to
-    // be telling the present apart from, and the sentence below says why there is none.
-    liveState.hidden = true;
     say(said, '');
   }
 
