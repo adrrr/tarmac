@@ -237,6 +237,30 @@ test('a replayed dial says in its markup that the record cannot date it', async 
   assert.match(page.el('replay-map').innerHTML, /data-reading="undatable"/);
 });
 
+// The word on the button says which of the two it does next; the attribute says which of the
+// two is happening. They are not the same fact, and only the second can be painted — a button
+// that looks pressed while the day walks is the difference between a screenshot of a paused
+// replay and one of a running replay.
+test('the play button publishes whether it is running, not only what it does next', async () => {
+  const page = mount(record(4));
+  await page.advance(0);
+  assert.equal(page.el('play').getAttribute('data-playing'), 'false');
+  page.el('play').fire('click');
+  assert.equal(page.el('play').getAttribute('data-playing'), 'true', 'while the day walks');
+  page.el('play').fire('click');
+  assert.equal(page.el('play').getAttribute('data-playing'), 'false', 'and back when it is paused');
+});
+
+// The walk stops on its own at the end of the record, and the button has to come back with it.
+test('a walk that runs out puts the button back', async () => {
+  const page = mount(record(3));
+  await page.advance(0);
+  page.el('play').fire('click');
+  await page.advance(5000);
+  assert.equal(page.el('play').textContent, 'Play');
+  assert.equal(page.el('play').getAttribute('data-playing'), 'false');
+});
+
 // The whole point of holding the day in the page: a drag is a lookup, not a request. A
 // scrubber that asked per position would spawn `claude agents --json` on every pixel.
 test('scrubbing asks the server nothing', async () => {

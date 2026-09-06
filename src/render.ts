@@ -874,8 +874,37 @@ ${HISTORY_CSS}
             text-transform:uppercase; color:var(--dim); }
   .replay button { font:inherit; font-size:.8rem; color:var(--fg); background:transparent;
             border:1px solid var(--line); border-radius:99px; padding:.15rem .8rem; cursor:pointer; }
-  .replay input[type="range"] { flex:1; min-width:10rem; accent-color:var(--dim); }
-  .replay input[type="range"]:disabled { opacity:.4; }
+  .replay button:hover:not(:disabled) { border-color:var(--dim); }
+  /* Pressed, and it looks it. The WORD on this button says which of the two it does next —
+     "Pause" while the day walks — which is right and is also the one thing a glance cannot
+     catch: a screenshot of a stopped replay reads exactly like a screenshot of a running one.
+     The attribute carries the other fact, the one that can be painted. */
+  #play[data-playing="true"] { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  .replay button:disabled { opacity:.4; cursor:default; }
+  /* The handle. A range input is drawn by the browser until appearance:none hands its two
+     shadow parts over — and what the browser drew was a fat grey groove belonging to no page,
+     on the one control a reader of this view spends the most time touching. Both engines are
+     spelled out because they name the same two parts differently and neither falls back to the
+     other; the values are one pair, so a thumb retuned in one is retuned in both.
+     The rail is the track's own hue, the thumb the page's ink, ringed in the background so it
+     reads as an object ON the rail rather than a lump of it. */
+  .replay input[type="range"] { flex:1; min-width:10rem; -webkit-appearance:none; appearance:none;
+            background:transparent; height:1.15rem; cursor:pointer; accent-color:var(--fg); }
+  .replay input[type="range"]::-webkit-slider-runnable-track { height:.25rem; border-radius:99px; background:var(--line); }
+  .replay input[type="range"]::-moz-range-track { height:.25rem; border-radius:99px; background:var(--line); }
+  /* The margin is what centres a webkit thumb on its track: that engine lays the thumb out from
+     the top of the track box, so half the difference of the two heights is what is owed back. */
+  .replay input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none;
+            width:.85rem; height:.85rem; margin-top:-.3rem; border-radius:99px;
+            background:var(--fg); border:2px solid var(--bg); }
+  .replay input[type="range"]::-moz-range-thumb { width:.85rem; height:.85rem; border-radius:99px;
+            background:var(--fg); border:2px solid var(--bg); }
+  .replay input[type="range"]:disabled { opacity:.4; cursor:default; }
+  /* What appearance:none took away and the page owes back: a control that can be reached by
+     tab and not seen once it is there is a control a keyboard reader loses. The hue is the one
+     this page already spends on "a human is being waited for", which is what a focus ring is. */
+  .replay input[type="range"]:focus-visible, .replay button:focus-visible,
+  .replaying-note button:focus-visible { outline:2px solid var(--wait); outline-offset:2px; }
   /* The two things the reader has to be able to read while dragging: the minute under the
      handle, and what the whole range covers. Tabular, so neither jitters as it counts. */
   #replay-at { font-variant-numeric:tabular-nums; font-weight:600; }
@@ -1294,7 +1323,9 @@ ${HISTORY_PHONE_CSS}  }
   <!-- "Replay", and nothing about how much of the day it holds: the range is the record's to
        state, in the sentence below, which is built around never calling ten minutes a day. -->
   <span class="replay-name">Replay</span>
-  <button type="button" id="play">Play</button>
+  <!-- The word says what the next press does; the attribute says what is happening now, which
+       is the half a stylesheet can paint and a glance can catch. -->
+  <button type="button" id="play" data-playing="false">Play</button>
   <input type="range" id="scrub" min="0" max="0" step="1" value="0" disabled aria-label="Replay position">
   <div class="covers" id="covers"></div>
 </div>
@@ -1808,6 +1839,10 @@ function pageScript(view: View): string {
   function stopPlay() {
     if (playing) { clearInterval(playing); playing = null; }
     playBtn.textContent = 'Play';
+    // Both halves, every time: the word for the press that comes next, the attribute for what
+    // is happening now. Set here rather than only where a reader clicks, because the walk also
+    // ends on its own at the last reading.
+    playBtn.setAttribute('data-playing', 'false');
   }
 
   // Back to now, in one gesture, with nothing of the past left behind a hidden attribute.
@@ -1832,6 +1867,7 @@ function pageScript(view: View): string {
     // has played nothing.
     draw(at < 0 || at >= record.samples.length - 1 ? 0 : at);
     playBtn.textContent = 'Pause';
+    playBtn.setAttribute('data-playing', 'true');
     playing = setInterval(function () {
       // It stops at the end rather than looping back: a day that restarts on its own is a
       // day whose beginning and end are impossible to tell apart.

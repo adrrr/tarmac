@@ -166,6 +166,65 @@ test('the name goes up and down with the controls, and never rides in the fragme
   assert.doesNotMatch(renderLive(fleet()), /replay-name/);
 });
 
+// ── the handle itself ─────────────────────────────────────────────────────────────────────
+//
+// Everything else on this page is drawn by the stylesheet; the one control a reader spends the
+// most time touching was whatever their browser felt like: a fat grey groove on one, a blue
+// pill on another, and on none of them a track that belongs to the rest of the page. A range
+// input is only styleable through its two shadow parts, and it is `appearance:none` that hands
+// them over — without it the declarations below are read and ignored.
+test('the page draws its own handle, in both engines rather than one', () => {
+  const css = replayCss();
+  assert.match(css, /\.replay input\[type="range"\][^{]*\{[^}]*appearance:\s*none/);
+  for (const part of ['-webkit-slider-runnable-track', '-webkit-slider-thumb', '-moz-range-track', '-moz-range-thumb']) {
+    assert.match(css, new RegExp(`::${part}`), part);
+  }
+});
+
+// The pair the drawing is FOR: a thumb a thumb can find, on a track thin enough to read as a
+// rail rather than as a bar with a value in it. Asserted as a comparison — the day one of the
+// two is retuned, the other moves with it or this goes red.
+test('the thumb is the thing you can grab, and the track the thing it runs on', () => {
+  const css = replayCss();
+  const size = (part: string, prop: string): number => {
+    const m = new RegExp(`::${part}[^{]*\\{([^}]*)\\}`).exec(css);
+    assert.ok(m, part);
+    const v = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([\\d.]+)rem`).exec(m![1]);
+    assert.ok(v, `${part} has no ${prop}`);
+    return Number(v![1]);
+  };
+  for (const [thumb, track] of [
+    ['-webkit-slider-thumb', '-webkit-slider-runnable-track'],
+    ['-moz-range-thumb', '-moz-range-track'],
+  ]) {
+    assert.ok(size(thumb, 'height') > size(track, 'height') * 2, `${thumb} stands off its track`);
+  }
+});
+
+// A control that can be reached by tab and not seen once it is there is a control a keyboard
+// reader loses. `appearance:none` takes the browser's own focus ring with it, so the page owes
+// one back — to the handle it just redrew, and to the buttons beside it.
+test('every control in the replay row shows where the keyboard is', () => {
+  const focus = [...replayCss().matchAll(/([^{}]*:focus-visible[^{}]*)\{([^}]*)\}/g)]
+    .filter(([, , declarations]) => /outline\s*:/.test(declarations))
+    .map(([, selector]) => selector)
+    .join(' ');
+  for (const control of ['.replay input[type="range"]:focus-visible', '.replay button:focus-visible', '.replaying-note button:focus-visible']) {
+    assert.ok(focus.includes(control), control);
+  }
+});
+
+// Play and Pause are one button, and the word on it is the whole of what says which. A word is
+// nothing to glance at across a room — and a screenshot of a paused replay reads the same as a
+// running one. The state travels in the markup too, where the stylesheet can paint it.
+test('the play button carries what it is doing where the sheet can see it', () => {
+  assert.match(page(), /id="play"[^>]*data-playing="false"/);
+  assert.match(replayCss(), /#play\[data-playing="true"\]\s*\{[^}]*background/);
+});
+
+/** The page's stylesheet, comments stripped: a selector is otherwise the prose above its rule. */
+const replayCss = (): string => /<style>([\s\S]*?)<\/style>/.exec(page())![1].replace(/\/\*[\s\S]*?\*\//g, '');
+
 // Its own line, above the row: dropped into the flex line beside Play it would read as a label
 // for the button rather than for the pair, and take width from the slider to do it.
 test('the name takes a line of its own rather than width from the slider', () => {
