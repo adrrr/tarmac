@@ -11,7 +11,27 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **The generated statusline wrapper parses under zsh.** With no statusline to chain, the wrapper
+  prints the model name, and it did so with `printf '%s\n' "${rest%%'"'*}"`. That is a quoted
+  pattern inside a quoted expansion, and zsh reads the inner quote as an ordinary character: it
+  reaches the end of the file with a `"` still open, refuses the whole script, and every frame
+  gets a parse error instead of a status line. No POSIX sh does that, and no distribution ships
+  zsh as `/bin/sh`. Linking it there is one command though, and a wrapper that does not parse is a
+  status line that never prints and a snapshot that is never written, so nothing in tarmac reads
+  anything for that session. The cut lands in a variable of its own now, and the variable is
+  quoted where it is printed. Dropping the outer quotes parses too and is the wrong fix: unquoted,
+  the shell splits `Fable 5` into two arguments and prints it on two lines, and a `*` in a display
+  name is expanded against the working directory. zsh is in the portability matrix now, so the
+  real script is run under it the way it is run under dash, ksh, bash and busybox.
+
+- **A snapshot directory that has gone read-only stays silent under zsh too.** A redirection the
+  shell cannot perform is reported by the shell itself, not by `printf`, so the `2>/dev/null` has
+  to be in force before the failing open is attempted. On the simple command that held for every
+  POSIX sh here and not for zsh, which printed `permission denied` on the terminal drawing the
+  status line, once per frame. The redirection sits on a group around the write now, and the group
+  is entered before the write inside it is attempted. Exit code and display are unchanged.
 
 ## [0.9.0] - 2026-09-06
 
