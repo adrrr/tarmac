@@ -11,6 +11,8 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-06
+
 ### Changed
 
 - **The dashboard is a page rather than a document.** There was one surface: white, with
