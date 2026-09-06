@@ -19,7 +19,6 @@ import { health, row } from './fleet-fixtures.ts';
 
 process.env.TZ = 'Europe/Paris';
 
-const DAY = 86_400_000;
 /** The plot a 360px canvas gives, which is what a tick's x is read against. See `plotBox`. */
 const L = 8;
 const R = 352;
@@ -30,6 +29,15 @@ const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct
 const midnight = (date: string): number => {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+};
+
+/**
+ * The midnight that closes a day — 23, 24 or 25 hours along. The axis ends at the close of the
+ * range, which the reader states in calendar days like everything else here.
+ */
+const nextMidnight = (t: number): number => {
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
 };
 
 const word = (t: number): string => {
@@ -50,6 +58,10 @@ async function span(days: string[], range: '7d' | '30d' = '7d'): Promise<Page> {
           : {
               enabled: true,
               range: range,
+              // The window the reader charged the days against, which is what the axis is drawn
+              // over: the days ASKED for, not the ones that turned out to be on disk.
+              from: midnight(days[0]),
+              to: nextMidnight(midnight(days[days.length - 1])),
               hours: [],
               resets: [],
               days: days.map((date) => ({ date, byProject: [{ project: 'alpha', costUsd: 3 }] })),
@@ -79,7 +91,7 @@ const dayTicks = (p: Page): { text: string; x: number }[] =>
  */
 const centres = (days: string[]): { text: string; x: number }[] => {
   const t0 = midnight(days[0]);
-  const t1 = midnight(days[days.length - 1]) + DAY;
+  const t1 = nextMidnight(midnight(days[days.length - 1]));
   const at = (t: number): number => L + ((t - t0) / (t1 - t0)) * (R - L);
   return days.map((date, i) => {
     const start = midnight(date);
@@ -126,7 +138,7 @@ test('a month names each fifth date once, and at the date itself', async () => {
     days.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
   }
   const t0 = midnight(days[0]);
-  const t1 = midnight(days[days.length - 1]) + DAY;
+  const t1 = nextMidnight(midnight(days[days.length - 1]));
   const want = days
     .filter((date) => new Date(midnight(date)).getDate() % 5 === 0)
     .map((date) => ({

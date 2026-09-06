@@ -46,10 +46,19 @@ const ring = (): unknown => ({
   })),
 });
 
+/**
+ * The window a seven-day range answers for, as the reader states it: seven local midnights, the
+ * last of them the one that closes today. The charts are drawn over THIS and not over the days
+ * that happen to be in the answer, so a fixture without it is a fixture nothing can be plotted
+ * against.
+ */
+const WEEK = { from: at(2026, 8, 23, 0), to: at(2026, 8, 30, 0) };
+
 /** The journal, as `/api/history?range=` answers. A different shape entirely. */
 const journal = (range: string): unknown => ({
   enabled: true,
   range,
+  ...WEEK,
   hours: [0, 1, 2].map((i) => ({
     t: T0 + i * HOUR,
     n: 60,
@@ -298,6 +307,7 @@ test('a window the account barely touched is not drawn at the height of the one 
       : {
           enabled: true,
           range: '7d',
+          ...WEEK,
           hours,
           days: [],
           // Dated inside the third hour, whose recorded high is 95 and whose last fifty minutes
@@ -374,6 +384,7 @@ test('the same project floors every column, whatever each day’s own ranking wa
       : {
           enabled: true,
           range: '7d',
+          ...WEEK,
           hours: [],
           // Opposite rankings, same pair and same total: alpha owns Thursday, zulu owns Friday.
           days: [day('2026-08-27', 30, 5), day('2026-08-28', 5, 30)],
@@ -397,6 +408,103 @@ test('the same project floors every column, whatever each day’s own ranking wa
   assert.ok(slabs[0].h > slabs[1].h * 4, `alpha's two days came out ${(slabs[0].h / slabs[1].h).toFixed(1)}x apart, not 6x`);
 });
 
+// ── the domain of a long range (#168) ────────────────────────────────────────────────────
+//
+// A serve whose journal is younger than the range being asked of it drew ONE column, alone in
+// the middle of an empty plot — and the identical picture at 7d and at 30d, one day being one
+// column either way. The axis is the window the reader answered for now: every day of it has a
+// slot, a day nobody wrote in draws nothing in its own place, and the empty stretch in front of
+// the record says once, quietly, where the record begins.
+
+/** Every day name the cost axis printed. */
+const dayNames = (p: Page): string[] =>
+  ctx(p, 'cost')
+    .argsOf('fillText')
+    .map((a) => String(a[0]))
+    .filter((t) => /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d{1,2}$/.test(t));
+
+/** The one day of journal a serve started yesterday has, in a range that asked for more. */
+const thin = (range: string, window: { from: number; to: number }): unknown => ({
+  enabled: true,
+  range,
+  ...window,
+  hours: [{ t: T0, n: 60, sessions: [session()], rateLimits: { five_hour: 30, seven_day: 20 } }],
+  // Seven, so the total printed over the column cannot be confused with the 24h chart's own —
+  // the canvas here records every call made to it, the first range included.
+  days: [{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 7 }] }],
+  resets: [],
+  coverage: { daysRequested: range === '7d' ? 7 : 30, lines: 60, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+});
+
+test('a week with one day of journal in it is drawn a week wide', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : thin('7d', WEEK)));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  assert.deepEqual(dayNames(m.p), ['Sun 23', 'Mon 24', 'Tue 25', 'Wed 26', 'Thu 27', 'Fri 28', 'Sat 29']);
+  // The one day that exists is charged to its own slot and nowhere else: seven columns, one
+  // total printed over them.
+  const money = ctx(m.p, 'cost').argsOf('fillText').map((a) => String(a[0])).filter((t) => t === '$7.0');
+  assert.deepEqual(money, ['$7.0'], `the week printed ${JSON.stringify(money)} over its columns`);
+});
+
+test('a month asked of the same day is a month wide, and not the week again', async () => {
+  const window = { from: at(2026, 7, 31, 0), to: at(2026, 8, 30, 0) };
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : thin('30d', window)));
+  await settle(m);
+  m.p.el('range-30d').fire('click');
+  await settle(m);
+
+  // Every fifth date of the month, which is what the 30d axis names. Drawn over the week's
+  // domain there was one of them, sitting two thirds of the way along an otherwise blank axis.
+  const dates = ctx(m.p, 'cost')
+    .argsOf('fillText')
+    .map((a) => String(a[0]))
+    .filter((t) => /^(Jul|Aug) \d{1,2}$/.test(t));
+  assert.deepEqual(dates, ['Aug 5', 'Aug 10', 'Aug 15', 'Aug 20', 'Aug 25']);
+  assert.deepEqual(dayNames(m.p), [], 'a month names dates, not days of the week');
+  // And no per-column total at a month, where thirty of them are noise over bars a few pixels
+  // wide. The tap already answers that question, one column at a time.
+  assert.equal(
+    ctx(m.p, 'cost').argsOf('fillText').some((a) => String(a[0]) === '$7.0'),
+    false,
+    'a month printed a total over its columns',
+  );
+});
+
+test('the stretch in front of a young journal says where the record begins, once a chart', async () => {
+  const window = { from: at(2026, 7, 31, 0), to: at(2026, 8, 30, 0) };
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : thin('30d', window)));
+  await settle(m);
+  m.p.el('range-30d').fire('click');
+  await settle(m);
+
+  for (const id of ['ctx', 'cost', 'quota']) {
+    const said = ctx(m.p, id).argsOf('fillText').map((a) => String(a[0])).filter((t) => t.startsWith('journal starts'));
+    assert.deepEqual(said, ['journal starts Aug 29'], `the ${id} chart said ${JSON.stringify(said)}`);
+  }
+});
+
+// A range whose journal covers all of it has nothing to explain, and a sentence about a record
+// that starts where the range does would be a caption on a full chart.
+test('a range the journal covers says nothing about where it starts', async () => {
+  const full = (): unknown => ({
+    ...(thin('7d', WEEK) as Record<string, unknown>),
+    days: [
+      { date: '2026-08-23', byProject: [{ project: 'alpha', costUsd: 2 }] },
+      { date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 3 }] },
+    ],
+  });
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : full()));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  const said = ctx(m.p, 'cost').argsOf('fillText').map((a) => String(a[0])).filter((t) => t.startsWith('journal starts'));
+  assert.deepEqual(said, []);
+});
+
 // The marker names itself three pixels to the right of its own line, which is off the plot when
 // the line is against the right edge — and a window that turned over in the last hour of a range
 // is exactly where a reader looks first. Clipped, `7d reset` renders as `7`.
@@ -407,10 +515,11 @@ test('a turnover against the right edge keeps its whole name on the chart', asyn
       : {
           enabled: true,
           range: '7d',
+          ...WEEK,
           hours: [0, 1, 2].map((i) => ({ t: T0 + i * HOUR, n: 60, sessions: [session()], rateLimits: { five_hour: 10, seven_day: 20 } })),
           days: [],
-          // Dated at the last hour the range holds, which is the right-hand end of the axis.
-          resets: [{ limit: 'seven_day', t: T0 + 2 * HOUR, from: 90, to: 2, sinceMs: MIN }],
+          // Dated at the last minute the range holds, which is the right-hand end of the axis.
+          resets: [{ limit: 'seven_day', t: WEEK.to - MIN, from: 90, to: 2, sinceMs: MIN }],
           coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
         },
   );
@@ -451,6 +560,8 @@ test('a turnover nobody watched keeps its qualifier even where the label is drop
       : {
           enabled: true,
           range: '30d',
+          from: at(2026, 7, 31, 0),
+          to: at(2026, 8, 30, 0),
           hours: [0, 1, 2].map((i) => ({ t: T0 + i * HOUR, n: 60, sessions: [session()], rateLimits: { five_hour: 10, seven_day: 20 } })),
           days: [],
           resets: [{ limit: 'seven_day', t: T0 + HOUR, from: 90, to: 2, sinceMs: 9 * HOUR }],
@@ -586,6 +697,8 @@ test('an empty journal range is not a first run, and is not offered a minute of 
       : {
           enabled: true,
           range: '30d',
+          from: at(2026, 7, 31, 0),
+          to: at(2026, 8, 30, 0),
           hours: [],
           days: [],
           resets: [],

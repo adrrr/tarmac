@@ -18,6 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   costDaily,
+  daySlots,
   costHourly,
   ctxKeys,
   ctxLines,
@@ -162,6 +163,8 @@ test('a day whose name is not a date is dropped, never drawn at NaN', () => {
       { date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 3 }] },
     ],
     rosterOf(['alpha']),
+    at(2026, 8, 29, 0, 0),
+    at(2026, 8, 30, 0, 0),
   );
   assert.equal(c.buckets.length, 1);
   assert.equal(c.buckets[0].t, at(2026, 8, 29, 0, 0));
@@ -356,13 +359,15 @@ test('an hour keeps the highest a project reached in it, not the last it was see
   const rows = ctxRows(
     [hour(t0, [{ sid: 'a', ctxPct: 91 }, { sid: 'b', ctxPct: 20 }])],
     rosterOf(['alpha']),
+    t0,
+    t0 + HOUR,
   );
   assert.deepEqual(rows[0].v, [91]);
 });
 
 test('an hour nobody wrote is a gap in the row, and the hours around it stay where they are', () => {
   const t0 = at(2026, 8, 29, 9, 0);
-  const rows = ctxRows([hour(t0, [{ ctxPct: 30 }]), hour(t0 + 2 * HOUR, [{ ctxPct: 50 }])], rosterOf(['alpha']));
+  const rows = ctxRows([hour(t0, [{ ctxPct: 30 }]), hour(t0 + 2 * HOUR, [{ ctxPct: 50 }])], rosterOf(['alpha']), t0, t0 + 3 * HOUR);
   assert.deepEqual(rows[0].v, [30, null, 50]);
 });
 
@@ -371,6 +376,8 @@ test('a project the range has no context for at all gets no band of its own', ()
   const rows = ctxRows(
     [hour(t0, [{ sid: 'a', project: 'alpha', ctxPct: 30 }, { sid: 'b', project: 'beta', ctxPct: null }])],
     rosterOf(['alpha', 'beta']),
+    t0,
+    t0 + HOUR,
   );
   assert.deepEqual(
     rows.map((r) => r.name),
@@ -383,6 +390,8 @@ test('a background agent is left off the bands too, not only off the 24h lines',
   const rows = ctxRows(
     [hour(t0, [{ sid: 'a', ctxPct: 30 }, { sid: 'b', kind: 'background', project: 'beta', ctxPct: 90 }])],
     rosterOf(['alpha', 'beta']),
+    t0,
+    t0 + HOUR,
   );
   assert.deepEqual(
     rows.map((r) => r.name),
@@ -471,7 +480,7 @@ test('a background agent is counted in the cost even though it is off the contex
 });
 
 test('a day is read as the local day it names, not as the UTC instant that spelling is', () => {
-  const c = costDaily([{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 3 }] }], rosterOf(['alpha']));
+  const c = costDaily([{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 3 }] }], rosterOf(['alpha']), at(2026, 8, 29, 0, 0), at(2026, 8, 30, 0, 0));
   assert.equal(c.buckets[0].t, at(2026, 8, 29, 0, 0));
 });
 
@@ -486,6 +495,8 @@ test('the stack is built in the palette order and never in the day’s own ranki
       { date: '2026-08-30', byProject: [{ project: 'alpha', costUsd: 7 }, { project: 'beta', costUsd: 2 }] },
     ],
     roster,
+    at(2026, 8, 29, 0, 0),
+    at(2026, 8, 31, 0, 0),
   );
   assert.deepEqual(
     c.projects.map((p) => p.name),
@@ -508,6 +519,8 @@ test('the legend is the ranking the stack refuses: most expensive first, colours
       { date: '2026-08-30', byProject: [{ project: 'alpha', costUsd: 7 }, { project: 'beta', costUsd: 2 }] },
     ],
     roster,
+    at(2026, 8, 29, 0, 0),
+    at(2026, 8, 31, 0, 0),
   );
   const keys = legendByCost(c);
   assert.deepEqual(
@@ -540,7 +553,7 @@ test('an hour nobody read is not an hour that cost nothing', () => {
 });
 
 test('a project whose cost was never measured is not a project that spent nothing', () => {
-  const c = costDaily([{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 3 }] }], rosterOf(['alpha', 'ghost']));
+  const c = costDaily([{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 3 }] }], rosterOf(['alpha', 'ghost']), at(2026, 8, 29, 0, 0), at(2026, 8, 30, 0, 0));
   const keys = legendByCost(c);
   assert.deepEqual(
     keys.map((k) => [k.name, k.total]),
@@ -592,6 +605,8 @@ test('a turnover the serve watched happen is drawn as one, and one it slept thro
       { limit: 'five_hour', t: t0 + HOUR, from: 80, to: 4, sinceMs: 60_000 },
       { limit: 'seven_day', t: t0 + HOUR, from: 90, to: 2, sinceMs: 9 * HOUR },
     ],
+    t0,
+    t0 + 2 * HOUR,
   );
   assert.deepEqual(
     q.resets.map((r) => [r.limit, r.watched]),
@@ -774,4 +789,110 @@ test('every class the history view names is one no other rule in the sheet claim
       assert.ok(own.has(selector), `.${bare[1]} is styled by a rule outside the history view`);
     }
   }
+});
+
+// ── the domain of a long range: the days asked for, not the days written ─────────────────
+//
+// A journal a day old drew ONE column, alone in the middle of an empty plot, and drew the
+// identical picture at 7d and at 30d — because the three long-range transforms took their grid
+// from the records they were handed. They take the reader's own window now: every day of it gets
+// a slot whether or not anything was written in it, and a slot with nothing in it draws nothing.
+
+test('a week of slots is a slot a calendar day, on the week a clock falls back too', () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    // Sunday 25 October 2026 is twenty-five hours long in Paris. Stepped by 86400000, the walk
+    // lands at 23:00 that evening and the week comes out eight slots long.
+    const from = new Date(2026, 9, 22).getTime();
+    const to = new Date(2026, 9, 29).getTime();
+    const slots = daySlots(from, to);
+    assert.equal(slots.length, 7, `the week is ${slots.length} slots long`);
+    assert.deepEqual(
+      slots.map((t) => new Date(t).getDate()),
+      [22, 23, 24, 25, 26, 27, 28],
+    );
+    assert.deepEqual(slots.map((t) => new Date(t).getHours()), [0, 0, 0, 0, 0, 0, 0]);
+  } finally {
+    process.env.TZ = tz;
+  }
+});
+
+test('a window nothing can be walked over is no slots at all, rather than a loop', () => {
+  assert.deepEqual(daySlots(NaN, at(2026, 8, 29, 0, 0)), []);
+  assert.deepEqual(daySlots(at(2026, 8, 29, 0, 0), at(2026, 8, 29, 0, 0)), []);
+  assert.deepEqual(daySlots(at(2026, 8, 29, 0, 0), Infinity).length, 0);
+});
+
+test('one day of journal in a week of range is one bar and six empty slots', () => {
+  const c = costDaily(
+    [{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 3 }] }],
+    rosterOf(['alpha']),
+    at(2026, 8, 24, 0, 0),
+    at(2026, 8, 31, 0, 0),
+  );
+
+  assert.equal(c.buckets.length, 7, `a seven-day range drew ${c.buckets.length} columns`);
+  assert.deepEqual(
+    c.buckets.map((b) => new Date(b.t).getDate()),
+    [24, 25, 26, 27, 28, 29, 30],
+  );
+  // The day that was written is in its own place, and the six nobody wrote in are empty rather
+  // than absent: no bar, no reading, and the slot still there to be seen as a slot.
+  assert.deepEqual(
+    c.buckets.map((b) => b.by[0]),
+    [0, 0, 0, 0, 0, 3, 0],
+  );
+  assert.deepEqual(
+    c.buckets.map((b) => b.n),
+    [0, 0, 0, 0, 0, 1, 0],
+  );
+});
+
+test('a day outside the range asked for is dropped, and never drawn at the edge', () => {
+  const c = costDaily(
+    [
+      { date: '2026-08-01', byProject: [{ project: 'alpha', costUsd: 9 }] },
+      { date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 3 }] },
+    ],
+    rosterOf(['alpha']),
+    at(2026, 8, 28, 0, 0),
+    at(2026, 8, 31, 0, 0),
+  );
+
+  assert.deepEqual(
+    c.buckets.map((b) => b.by[0]),
+    [0, 3, 0],
+  );
+});
+
+// A range nothing was written in keeps the verdict it has always had: "no readings in this
+// range", drawn by the caller when there are no columns. A month of empty slots would be a chart
+// claiming to have read a month.
+test('a range with nothing written in it draws no columns at all', () => {
+  const c = costDaily([], rosterOf(['alpha']), at(2026, 8, 24, 0, 0), at(2026, 8, 31, 0, 0));
+  assert.deepEqual(c.buckets, []);
+});
+
+test('a band spans the whole range, so a journal that starts on Friday starts on Friday', () => {
+  const from = at(2026, 8, 29, 0, 0);
+  const to = at(2026, 8, 31, 0, 0);
+  const rows = ctxRows([hour(at(2026, 8, 30, 9), [{ ctxPct: 30 }])], rosterOf(['alpha']), from, to);
+
+  assert.equal(rows[0].t0, from, 'the band opens where the record does, not where the range does');
+  assert.equal(rows[0].v.length, 48, `a two-day range is ${rows[0].v.length} hours wide`);
+  assert.equal(rows[0].v[33], 30, 'the reading is not on its own hour of the range');
+  assert.equal(rows[0].v.filter((v) => v !== null).length, 1);
+});
+
+test('the quota curve spans the whole range too, and its readings keep their own hours', () => {
+  const from = at(2026, 8, 29, 0, 0);
+  const to = at(2026, 8, 31, 0, 0);
+  const q = quotaOfHours([hour(at(2026, 8, 30, 9), [{}], 40, 20)], [], from, to);
+
+  assert.equal(q.t0, from);
+  assert.equal(q.five.length, 48);
+  assert.equal(q.five[33], 40);
+  assert.equal(q.seven[33], 20);
+  assert.equal(q.five.filter((v) => v !== null).length, 1);
 });
