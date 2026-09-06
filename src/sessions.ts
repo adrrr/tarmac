@@ -78,6 +78,40 @@ const WAITING = 'waiting';
 /** Whether this reading is halted on a human. The one status the renderers treat as a state. */
 export const isWaiting = (s: { status: string | null }): boolean => s.status === WAITING;
 
+/**
+ * The kind a terminal calls itself, and the anchor the two rules below reason from. A
+ * background entry has since been seen beside them — `kind: 'background'`, no `pid`, its word
+ * under `state` rather than `status` — so the two are no longer a reading of that CLI's help.
+ * It is still the anchor and never the list: one observed alternative is not the vocabulary,
+ * and the question asked is only whether anything on this machine still calls itself
+ * `interactive`.
+ */
+export const INTERACTIVE = 'interactive';
+
+/**
+ * Whether this fleet still speaks the kind we know. If NOTHING calls itself `interactive`, the
+ * word moved rather than every terminal on the machine going background at once — and the
+ * readers say so by treating them all as what they almost certainly still are. Same tolerance
+ * `buildFleet` already applies to telemetry: a signal true of every row is a change in the
+ * source.
+ */
+export const anchoredOnKind = (rows: readonly Kinded[]): boolean => rows.some((r) => r.kind === INTERACTIVE);
+
+/**
+ * A background entry, under the anchor above. An ABSENT kind is not evidence of one: the same
+ * rule the status follows, where unrecognised means unknown, never "the quiet one". The two
+ * mistakes are not the same size — an agent read as a terminal is a row expecting a frame that
+ * will not come, while a terminal read as an agent is someone's open session dropped out of
+ * every count that is about them.
+ */
+export const isBackgroundAgent = (r: Kinded, anchored: boolean): boolean =>
+  anchored && r.kind !== null && r.kind !== INTERACTIVE;
+
+/** The one field both rules above read. */
+interface Kinded {
+  kind: string | null;
+}
+
 /** @param text raw stdout of `claude agents --json` */
 export function parseAgents(text: string): ParsedAgents {
   let raw: unknown;

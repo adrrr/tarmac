@@ -211,6 +211,24 @@ test('tells the two uncovered kinds apart when the fleet has both', () => {
   assert.match(live, /For the others, run `tarmac install`/, 'and the fixable one still gets its advice');
 });
 
+// The dashboard half of #29. These two are the only pins on the live banner's population:
+// reverting its denominator to `health.sessions` must turn at least one of them red.
+test('the live banner counts only chainable sessions, and says who it left out', () => {
+  const live = renderLive({
+    rows: [row({ ctxState: 'absent', ctxPct: null })],
+    health: health({ sessions: 3, chainable: 2, covered: 1, unfilable: 0 }),
+  });
+  assert.match(live, /Statusline chained on 1\/2 sessions \(1 agent\(s\) draw no frame\)/, 'the population is named where the numbers changed');
+});
+
+test('the live banner stays away when only agents are uncovered', () => {
+  const live = renderLive({
+    rows: [row()],
+    health: health({ sessions: 2, chainable: 1, covered: 1 }),
+  });
+  assert.equal(/Statusline chained/.test(live), false, 'nothing to install for a session that draws no frame');
+});
+
 // The whole pipeline, on a payload captured off a real machine: a terminal and the background
 // agent it dispatched, which reports its state under `state` rather than `status`. Every layer
 // in between is real, because the bug this pins was invisible at each of them on its own —

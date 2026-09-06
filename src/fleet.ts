@@ -15,7 +15,7 @@ import path from 'node:path';
 import { DEFAULT_STALE_AFTER_MS } from './config.ts';
 import { measured, windowsApart } from './limits.ts';
 import { guardVersions } from './schema.ts';
-import { isWaiting } from './sessions.ts';
+import { anchoredOnKind, isBackgroundAgent, isWaiting } from './sessions.ts';
 import { SID_NAME } from './wrapper.ts';
 import type { SchemaGuard } from './schema.ts';
 import type { DiscoveryHealth, Session } from './sessions.ts';
@@ -54,14 +54,23 @@ export interface FleetRow {
 }
 
 export interface FleetHealth {
+  /** Every row on the fleet, agents included. What the summary line counts. */
   sessions: number;
+  /**
+   * The rows a status line could ever write for: everything but the background agents, which
+   * have no TUI and never draw a frame. The three numbers below are counted over this
+   * population and not over `sessions`, because they exist to answer one question — how much
+   * of what CAN be chained is — and an agent's answer to it is neither yes nor no.
+   */
+  chainable: number;
   covered: number;
   /**
-   * Live sessions whose id is not a shape the wrapper files a snapshot under, so their
+   * Chainable sessions whose id is not a shape the wrapper files a snapshot under, so their
    * telemetry is not late — it is never coming. Counted apart from `covered` because the
    * two states differ only in what the user should do about them.
    */
   unfilable: number;
+  /** Chainable sessions whose snapshot is there and no longer readable as a context reading. */
   drift: number;
   stale: number;
   discovered: number;
@@ -138,7 +147,15 @@ export function buildFleet({
 
   rows.sort((a, b) => rank(a) - rank(b) || (b.ctxPct ?? -1) - (a.ctxPct ?? -1));
 
-  const covered = rows.filter((r) => r.ctxState !== 'absent').length;
+  // The population the coverage numbers are about. An agent has no TUI, so it never draws a
+  // frame and no statusline can ever file a snapshot for it: counted among the blind, one
+  // agent beside one chained terminal read as "chained on 1/2 sessions — run tarmac install",
+  // remediation that is already done and cannot work for the entry that raised it (#29). The
+  // map made the same call for the agent strip; this is the fleet-wide line catching up.
+  const anchored = anchoredOnKind(rows);
+  const chainable = rows.filter((r) => !isBackgroundAgent(r, anchored));
+
+  const covered = chainable.filter((r) => r.ctxState !== 'absent').length;
   // Blind AND unfilable, in that order — this number exists to say how many of the blind will
   // stay blind, and both renderers subtract it from them. A session can be unfilable and
   // covered at the same time: a snapshot written by a pre-upgrade wrapper under a non-UUID
@@ -146,10 +163,12 @@ export function buildFleet({
   // than on the filename. Counting that one would push this past the blind count and make the
   // renderers explain away someone else's missing telemetry.
   // A null id is `noSessionId`'s business — a discovery failure, not a naming one.
-  const unfilable = rows.filter(
+  const unfilable = chainable.filter(
     (r) => r.ctxState === 'absent' && r.sessionId !== null && !SID_NAME.test(r.sessionId),
   ).length;
-  const drift = rows.filter((r) => r.ctxState === 'drift').length;
+  // Over the same population as `covered`, because `schemaBroken` below compares the two and a
+  // comparison between two different populations answers a question nobody asked.
+  const drift = chainable.filter((r) => r.ctxState === 'drift').length;
   // Having a snapshot and having a cost are different facts, and only the second one is
   // allowed to feed the total.
   const costs = rows.map((r) => r.costUsd).filter((c): c is number => typeof c === 'number');
@@ -165,6 +184,7 @@ export function buildFleet({
     rows,
     health: {
       sessions: rows.length,
+      chainable: chainable.length,
       covered,
       unfilable,
       drift,

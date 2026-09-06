@@ -18,7 +18,7 @@
 // page runs the function the suite ran. Everything below `historyScript` is pixels: geometry,
 // labels and hit-testing, which no assertion can read and none pretends to.
 
-import { INTERACTIVE } from './map.ts';
+import { INTERACTIVE } from './sessions.ts';
 
 /** How many hues the palette has before it starts again. Eight is what a legend can be read at. */
 const SLOTS = 8;

@@ -113,7 +113,10 @@ test('no reading in the captured minute is stale, so nothing in the screenshots 
 test('the captured fleet earns one banner and no other', () => {
   const { rows, health } = fleetAt(DEMO_MINUTES - 1);
   assert.equal(health.unknownStatus, 1, 'the unknown node the README names, and only one');
-  assert.equal(health.covered, health.sessions, 'every session chained: no coverage banner');
+  // Against `chainable`: the invented agents draw no TUI frame, so no status line could ever
+  // file a snapshot for them and they are not part of the coverage population (#29).
+  assert.ok(health.chainable < health.sessions, 'the capture has agents in it');
+  assert.equal(health.covered, health.chainable, 'every session chained: no coverage banner');
   assert.equal(health.schemaGuard.state, 'ok', 'a Claude Code build the fixtures cover: no shape-check footnote');
   assert.equal(health.noSessionId, 0);
   assert.equal(health.drift, 0);

@@ -3,7 +3,7 @@
 // A view over the fleet `buildFleet` already produced. It opens no second source: every
 // field below is derived from a row that is already on the page as a table line.
 
-import { isWaiting } from './sessions.ts';
+import { anchoredOnKind, isBackgroundAgent, isWaiting } from './sessions.ts';
 import type { Fleet, FleetRow } from './fleet.ts';
 
 export type NodeState = 'busy' | 'waiting' | 'idle' | 'unknown';
@@ -109,14 +109,11 @@ export const PULSE_WITHIN_MS = 10_000;
  * grid's arrangement of it, never the data's.
  */
 export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = {}): FleetMap {
-  // Whether this fleet still speaks the kind we know. If NOTHING calls itself `interactive`,
-  // the word moved rather than every terminal on the machine going background at once — and
-  // the map says so by drawing them all as what they almost certainly still are. It is the
-  // tolerance `buildFleet` already applies to telemetry: a signal true of every row is a
-  // change in the source.
-  const anchored = rows.some((r) => r.kind === INTERACTIVE);
-  const roleOf = (r: FleetRow): NodeRole =>
-    !anchored || r.kind === null || r.kind === INTERACTIVE ? 'session' : 'agent';
+  // Which entries are agents, by the rule `sessions.ts` states and `buildFleet` reads too: the
+  // map draws them differently, and the coverage line counts them out of a population no
+  // install can ever cover.
+  const anchored = anchoredOnKind(rows);
+  const roleOf = (r: FleetRow): NodeRole => (isBackgroundAgent(r, anchored) ? 'agent' : 'session');
 
   const node = (row: FleetRow): MapNode => {
     const reading = readingOf(row);
@@ -163,21 +160,6 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
   }
   return { berths };
 }
-
-/**
- * The kind a terminal calls itself, and the anchor this module reasons from. A background
- * entry has since been seen beside them — `kind: 'background'`, no `pid`, its word under
- * `state` rather than `status` — so the two are no longer a reading of that CLI's help. It is
- * still the anchor and never the list: one observed alternative is not the vocabulary, and the
- * heuristic above asks only whether anything on this machine still calls itself `interactive`.
- *
- * An ABSENT kind is not evidence of an agent either: the same rule the session status follows
- * one module down, where unrecognised means unknown, never "the quiet one". The two mistakes
- * are not the same size — an agent drawn as a session is a node in the wrong shape, while a
- * session drawn as an agent is a terminal someone is working in, reduced to a footnote of a
- * directory it merely shares.
- */
-export const INTERACTIVE = 'interactive';
 
 /**
  * `stale` is not recomputed here — it is the collector's verdict, reached against the

@@ -11,8 +11,29 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **`health.covered`, `health.unfilable` and `health.drift` are counted over the sessions a
+  status line could write for.** `tarmac list --json` and `/api/fleet` carry a new
+  `health.chainable` beside them, the size of that population, and it is the denominator the
+  coverage line prints. `health.sessions` is unchanged and still counts every entry on the fleet,
+  agents included, which is what the summary line reports. On a fleet of terminals the two are
+  equal and nothing moves. And when the printed denominator is smaller than the fleet, both
+  coverage lines say who they left out — `(2 agent(s) draw no frame)` — so the banner and the
+  rows under it cannot disagree on how many are missing.
+
 ### Fixed
 
+- **A background agent no longer sends you to run `tarmac install`.** An agent session has no TUI
+  and never draws a frame, so no status line can ever file a snapshot for it. Counted among the
+  blind, one agent beside one chained terminal was enough to raise `statusline chained on 1/2
+  sessions, run tarmac install and give them one TUI frame`: remediation that is already done and
+  cannot succeed for the entry that raised it. The map made this call a while ago and refuses to
+  print those words on an agent strip. The fleet-wide line in `tarmac list` and on the dashboard
+  now counts the same way. Which entries are agents is read off `kind`, and if nothing on the
+  fleet calls itself `interactive` the word moved rather than every terminal going background, so
+  every entry counts again. The rows are untouched: an agent is still on the table, still on the
+  map, and still shows whatever its snapshot published if one exists.
 - **The generated statusline wrapper parses under zsh.** With no statusline to chain, the wrapper
   prints the model name, and it did so with `printf '%s\n' "${rest%%'"'*}"`. That is a quoted
   pattern inside a quoted expansion, and zsh reads the inner quote as an ordinary character: it
