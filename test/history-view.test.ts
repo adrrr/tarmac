@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import {
   costDaily,
   daySlots,
+  hourSlots,
   costHourly,
   ctxKeys,
   ctxLines,
@@ -915,4 +916,22 @@ test('a window a century wide is drawn to a ceiling, and never allocated in full
   // whole.
   const month = ctxRows([hour(t0, [{ ctxPct: 40 }])], rosterOf(['alpha']), t0, t0 + 30 * 86_400_000);
   assert.equal(month[0].v.length, 720);
+});
+
+// `isFinite(null)` is true, and `JSON.stringify(NaN)` is `"null"` — so `null` is the one
+// non-number a JSON wire can put where a clock belongs, and it is the one the guard let through.
+// `startOfDay(null)` is the first of January 1970: the cost chart drew an empty column called
+// `Thu 1` and the quota an axis one hour long, with the year the reader asked about dropped in
+// silence. A window nobody can read is no window, and the charts say so.
+test('a clock the wire spelled as null is no window at all, not the first of January 1970', () => {
+  const day = at(2026, 8, 29, 0, 0);
+
+  assert.deepEqual(daySlots(null as never, null as never), []);
+  assert.deepEqual(daySlots(day, null as never), []);
+  assert.deepEqual(daySlots(null as never, day), []);
+  assert.equal(hourSlots(null as never, null as never), 0);
+  assert.equal(hourSlots(day, null as never), 0);
+  // And a real window still answers, which is what makes the three above mean anything.
+  assert.equal(daySlots(day, day + 2 * 86_400_000).length, 2);
+  assert.equal(hourSlots(day, day + 2 * 86_400_000), 48);
 });

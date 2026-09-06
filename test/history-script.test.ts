@@ -481,8 +481,8 @@ test('the stretch in front of a young journal says where the record begins, once
   await settle(m);
 
   for (const id of ['ctx', 'cost', 'quota']) {
-    const said = ctx(m.p, id).argsOf('fillText').map((a) => String(a[0])).filter((t) => t.startsWith('journal starts'));
-    assert.deepEqual(said, ['journal starts Aug 29'], `the ${id} chart said ${JSON.stringify(said)}`);
+    const said = ctx(m.p, id).argsOf('fillText').map((a) => String(a[0])).filter((t) => t.startsWith('no readings before'));
+    assert.deepEqual(said, ['no readings before Aug 29'], `the ${id} chart said ${JSON.stringify(said)}`);
   }
 });
 
@@ -501,8 +501,142 @@ test('a range the journal covers says nothing about where it starts', async () =
   m.p.el('range-7d').fire('click');
   await settle(m);
 
-  const said = ctx(m.p, 'cost').argsOf('fillText').map((a) => String(a[0])).filter((t) => t.startsWith('journal starts'));
+  const said = ctx(m.p, 'cost').argsOf('fillText').map((a) => String(a[0])).filter((t) => t.startsWith('no readings before'));
   assert.deepEqual(said, []);
+});
+
+// ── the far end of a range nobody read to (#169 review) ─────────────────────────────────
+//
+// The grid runs to the close of the window now, and the record inside it stops where the serve
+// stopped. Everything drawn between those two is a claim about hours nobody measured — which is
+// the one thing this view says, in its own comments, that it must never draw.
+
+/** The plot a 360px canvas gives. See `plotBox`. */
+const PL = 8;
+const PR = 352;
+
+/**
+ * The calls of the LAST frame drawn on a canvas, which is the range under test: the stub records
+ * every call it was ever given, and the first frame is always the 24h one the view loads with.
+ * `setup` re-bases the context at the top of each frame, so that call is the frame boundary.
+ */
+const frame = (p: Page, id: string): Array<{ name: string; args: unknown[] }> => {
+  const calls = (ctx(p, id) as never as { calls: Array<{ name: string; args: unknown[] }> }).calls;
+  return calls.slice(calls.map((c) => c.name).lastIndexOf('setTransform'));
+};
+
+const drew = (p: Page, id: string, name: string): unknown[][] =>
+  frame(p, id).filter((c) => c.name === name).map((c) => c.args);
+
+/** Where the hour at `idx` of a window `hours` long starts, in plot pixels. */
+const xOfHour = (idx: number, hours: number): number => PL + (idx / hours) * (PR - PL);
+
+/** A week of range with three hours of journal in the middle of its last day. */
+const stub = (): unknown => ({
+  enabled: true,
+  range: '7d',
+  ...WEEK,
+  hours: [0, 1, 2].map((i) => ({ t: T0 + i * HOUR, n: 60, sessions: [session()], rateLimits: { five_hour: 40 + i, seven_day: 20 + i } })),
+  days: [{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 7 }] }],
+  resets: [],
+  coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+});
+
+/** T0 is 09:00 on the last day of a week that opened seven midnights earlier. */
+const LAST_READ = 6 * 24 + 11;
+const WEEK_HOURS = 7 * 24;
+
+test('the quota line ends on its last reading, not against the right edge of the range', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : stub()));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  // Every dot the chart drops is a reading. Thirteen hours past the last one, against the edge
+  // of a window the serve was not up for, it is a reading nobody took.
+  const want = xOfHour(LAST_READ, WEEK_HOURS);
+  const dots = drew(m.p, 'quota', 'arc').map((a) => Number(a[0]));
+  assert.ok(dots.length > 0, 'the chart dropped no end dot at all');
+  assert.ok(
+    Math.max(...dots) <= want + 0.5,
+    `a dot at x=${Math.max(...dots).toFixed(1)} on a curve that ends at x=${want.toFixed(1)}`,
+  );
+});
+
+test('the five-hour skyline stops at the last hour measured, not at the close of the range', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : stub()));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  // One window, so one bar: it opens with the range and closes with the record. Run to `t1` it
+  // paints thirteen unmeasured hours at the height of a peak reached at eleven in the morning.
+  const bars = drew(m.p, 'quota', 'fillRect').map((a) => ({ x: Number(a[0]), w: Number(a[2]) }));
+  assert.equal(bars.length, 1, `one window, ${bars.length} bars`);
+  const want = xOfHour(LAST_READ + 1, WEEK_HOURS);
+  assert.ok(
+    bars[0].x + bars[0].w <= want + 1,
+    `the bar runs to x=${(bars[0].x + bars[0].w).toFixed(1)} on a record that ends at x=${want.toFixed(1)}`,
+  );
+});
+
+// An axis may not promise a span the chart does not draw. The grid is capped, `d.to` is not, and
+// the two long charts handed the raw one straight to the tick walk: a window off the wire came
+// back as tens of thousands of labels and hundreds of thousands of canvas calls a frame, which
+// is the tab that stops answering rather than the error somebody can read.
+test('a window the grid could not honour is not drawn on the axis either', async () => {
+  const far = { from: at(2026, 8, 1, 0), to: at(2026, 8, 1, 0) + 3650 * 86_400_000 };
+  const m = mount(true, (url) =>
+    url === '/api/history'
+      ? ring()
+      : { ...(stub() as Record<string, unknown>), range: '30d', ...far, coverage: { daysRequested: 30, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false } },
+  );
+  await settle(m);
+  m.p.el('range-30d').fire('click');
+  await settle(m);
+
+  // The cost axis is built from its own buckets, which are capped in days, so it is the one that
+  // was already honest. The other two are drawn over the same window and must name the same
+  // dates: handed the raw far end they named ten years of them over a grid of five.
+  const named = (id: string): string[] =>
+    drew(m.p, id, 'fillText').map((a) => String(a[0])).filter((w) => /^[A-Z][a-z]{2} \d{1,2}$/.test(w));
+  assert.ok(named('cost').length > 0, 'the cost axis named nothing at all');
+  assert.deepEqual(named('ctx'), named('cost'), 'the bands and the bars disagree about the axis under them');
+  assert.deepEqual(named('quota'), named('cost'), 'the quota curve and the bars disagree about the axis under them');
+});
+
+// And the walk itself has a ceiling, wherever its ends come from: the cost chart's axis is built
+// from its own buckets, which are capped in days, and 1800 day names is still an axis nobody can
+// read drawn at three hundred thousand canvas calls a frame.
+test('the tick walk has a ceiling of its own', async () => {
+  const far = { from: at(2026, 8, 1, 0), to: at(2026, 8, 1, 0) + 3650 * 86_400_000 };
+  const m = mount(true, (url) =>
+    url === '/api/history'
+      ? ring()
+      : { ...(stub() as Record<string, unknown>), ...far },
+  );
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  const named = drew(m.p, 'cost', 'fillText').map((a) => String(a[0])).filter((w) => /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d{1,2}$/.test(w));
+  assert.ok(named.length > 0 && named.length <= 400, `the cost axis named ${named.length} days`);
+});
+
+// The note explains the space in front of the record, so it is drawn over that space and not
+// under the bands that cross it: called before them, every row's own baseline is ruled straight
+// through the sentence.
+test('the note about the record is drawn over the bands, not under them', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : stub()));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  const calls = (ctx(m.p, 'ctx') as never as { calls: Array<{ name: string; args: unknown[] }> }).calls;
+  const note = calls.findIndex((c) => c.name === 'fillText' && String(c.args[0]).startsWith('no readings before'));
+  const lastStroke = calls.map((c) => c.name).lastIndexOf('stroke');
+  assert.ok(note > -1, 'the note was not drawn at all');
+  assert.ok(note > lastStroke, `the note is call ${note}, the last band was stroked at ${lastStroke}`);
 });
 
 // The marker names itself three pixels to the right of its own line, which is off the plot when

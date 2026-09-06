@@ -330,6 +330,18 @@ export function hourOf(t: number): number {
   return d.getTime();
 }
 
+/**
+ * A moment the page may compute with.
+ *
+ * `typeof` and not `isFinite` alone, because `isFinite(null)` is true and `JSON.stringify(NaN)`
+ * is the string `null`: on a JSON wire, `null` is the one non-number that can arrive where a
+ * clock belongs, and it is exactly the one a bare `isFinite` waves through — as the zero it
+ * coerces to, which is the first of January 1970.
+ */
+export function moment(v: any): boolean {
+  return typeof v === 'number' && isFinite(v);
+}
+
 /** The local midnight that opens the day a moment falls in. */
 export function startOfDay(t: number): number {
   var d = new Date(t);
@@ -364,7 +376,7 @@ export function nextDay(t: number): number {
  */
 export function daySlots(from: number, to: number): number[] {
   var out: number[] = [];
-  if (!isFinite(from) || !isFinite(to)) return out;
+  if (!moment(from) || !moment(to)) return out;
   for (var d = startOfDay(from); d < to && out.length < MAX_DAYS; d = nextDay(d)) out.push(d);
   return out;
 }
@@ -376,6 +388,7 @@ export function daySlots(from: number, to: number): number[] {
  * one window and a grid either of them read differently would be two charts about two ranges.
  */
 export function hourSlots(from: number, to: number): number {
+  if (!moment(from) || !moment(to)) return 0;
   return Math.min(gridLen(hourOf(from), to - HOUR, HOUR), MAX_DAYS * 24);
 }
 
@@ -690,6 +703,7 @@ const PURE = [
   ctxLines,
   ctxRows,
   hourOf,
+  moment,
   startOfDay,
   nextDay,
   daySlots,
@@ -1004,16 +1018,21 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   function timeTicks(g, b, t0, t1, range) {
     var ticks = [], x, d;
     if (t1 <= t0) t1 = t0 + 1;
+    // The walk's own ceiling, whatever ends it is handed. The grids above are capped in days and
+    // in hours; this is the one loop whose length is the SPAN rather than a grid, and an axis
+    // carrying more names than a reader can count is not an axis — it is three hundred thousand
+    // canvas calls a frame, drawn again on every resize, every tap and every change of scheme.
+    var MAX_TICKS = 400;
     if (range === '24h') {
       var t = new Date(t0); t.setMinutes(0, 0, 0);
-      for (x = t.getTime(); x <= t1; x += HOUR) if (new Date(x).getHours() % 6 === 0 && x >= t0) ticks.push({ t: x, text: hhmm(x) });
+      for (x = t.getTime(); x <= t1 && ticks.length < MAX_TICKS; x += HOUR) if (new Date(x).getHours() % 6 === 0 && x >= t0) ticks.push({ t: x, text: hhmm(x) });
     } else if (range === '7d') {
       // The name is centred over the day, so it is given the day's own width rather than a flat
       // twenty-four hours: the column a clock changed in is an hour wider or narrower than the
       // six beside it, and a centre measured off the wrong width sits in its neighbour.
-      for (d = startOfDay(t0); d < t1; d = nextDay(d)) if (d >= t0) ticks.push({ t: d, text: dayWord(d), center: nextDay(d) - d });
+      for (d = startOfDay(t0); d < t1 && ticks.length < MAX_TICKS; d = nextDay(d)) if (d >= t0) ticks.push({ t: d, text: dayWord(d), center: nextDay(d) - d });
     } else {
-      for (d = startOfDay(t0); d < t1; d = nextDay(d)) if (d >= t0 && new Date(d).getDate() % 5 === 0) ticks.push({ t: d, text: monWord(d) });
+      for (d = startOfDay(t0); d < t1 && ticks.length < MAX_TICKS; d = nextDay(d)) if (d >= t0 && new Date(d).getDate() % 5 === 0) ticks.push({ t: d, text: monWord(d) });
     }
     ticks.forEach(function (tk) {
       var xx = b.l + ((tk.t - t0) / (t1 - t0)) * (b.r - b.l);
@@ -1067,7 +1086,12 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     return t === null ? null : startOfDay(t);
   }
   /**
-   * The one line that explains an empty left half: the record starts later than the range does.
+   * The one line that explains an empty left half.
+   *
+   * "No readings before", and never "the journal starts here": what this can see is the oldest
+   * trace INSIDE the window, and a journal older than the range with a hole at the front — a
+   * serve that was off all week — hands back the same answer. The sentence says the thing that
+   * is true of both.
    *
    * Once a chart and in the page's grey. A serve younger than the range it is being asked for is
    * not a fault — it is a serve that was started on Tuesday — and a warning would say otherwise
@@ -1078,7 +1102,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     if (typeof first !== 'number' || !isFinite(first) || !(first > t0)) return;
     var x = Math.min(b.r, b.l + ((first - t0) / (t1 - t0 || 1)) * (b.r - b.l));
     if (x - b.l < 96) return;
-    label(g, 'journal starts ' + monWord(first), (b.l + x) / 2, (b.t + b.b) / 2, { align: 'center', size: 10 });
+    label(g, 'no readings before ' + monWord(first), (b.l + x) / 2, (b.t + b.b) / 2, { align: 'center', size: 10 });
   }
 
   // ── the head and the legend ─────────────────────────────────────────────────────────
@@ -1124,7 +1148,11 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     var g = setup(el('ctx-canvas'), height(live ? 'ctx24' : 'ctxRows')), b = plotBox(g);
     // The long ranges close at the end of the WINDOW, not at the last hour that has a slot: the
     // grid is the range's, so the last slot is an hour wide like the ones before it.
-    var t0 = series[0].t0, t1 = live ? t0 + (series[0].v.length - 1) * series[0].step : d.to;
+    // The grid is capped and the window's far end is not, so the axis is drawn over what the
+    // grid actually covers. Handed the raw end, the tick walk turned a window off the wire
+    // into tens of thousands of labels a frame — a tab that stops answering, with no error.
+    var t0 = series[0].t0, t1 = live ? t0 + (series[0].v.length - 1) * series[0].step
+                                     : Math.min(d.to, t0 + series[0].v.length * series[0].step);
     var cur = state.cursor.ctx, idx = slotAt(cur, series[0].v.length, live);
     var iso = isoOf('ctx'), climbing = 0, i;
     for (i = 0; i < series.length; i++) if (rising(series[i])) climbing++;
@@ -1170,7 +1198,6 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       // its own 0–100 scale with its name and its last reading on it, so no legend is needed.
       var n = series.length, rowH = (b.b - b.t) / n;
       timeTicks(g, b, t0, t1, state.range);
-      startNote(g, b, t0, t1, recordFrom());
       series.forEach(function (s, i2) {
         var top = b.t + i2 * rowH, base = top + rowH - 2, up = rising(s), color = slotColor(s.slot);
         var rowY = function (v) { return base - (v / 100) * (rowH - 12); };
@@ -1183,6 +1210,9 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
         label(g, (v === null ? '—' : Math.round(v) + '%') + (idx === null && up ? ' ↑' : ''), b.r - 2, top + 9, { align: 'right', size: 10, weight: 600, color: g.fg });
         if (idx !== null && s.v[idx] !== null) dot(g, xOf(b, cur), rowY(s.v[idx]), color, 3);
       });
+      // After the bands, never before: each row rules its own baseline straight through the
+      // sentence, and the sentence is what explains the space those baselines cross.
+      startNote(g, b, t0, t1, recordFrom());
       if (idx !== null) { var x2 = xOf(b, cur); hair(g, x2, b.t, x2, b.b, g.fg, .5); }
       head('ctx', idx === null ? 'per session · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + hhmm(t0 + idx * HOUR),
            climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
@@ -1256,10 +1286,11 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     var n = q.five.length;
     if (n === 0) return blank('quota', 'account · ' + state.range);
     var g = setup(el('quota-canvas'), height('quota')), b = plotBox(g);
-    var t0 = q.t0, t1 = live ? t0 + (n - 1) * q.step : d.to;
+    var t0 = q.t0, t1 = live ? t0 + (n - 1) * q.step : Math.min(d.to, t0 + n * q.step);
     var yOf = function (v) { return b.b - (v / 100) * (b.b - b.t); };
     var xAt = function (t) { return b.l + ((t - t0) / (t1 - t0 || 1)) * (b.r - b.l); };
     var iso = isoOf('quota'), a5 = iso !== null && iso !== '5h' ? .25 : 1, a7 = iso !== null && iso !== '7d' ? .25 : 1;
+    var end5 = null, end7 = null;
     pctGrid(g, b); timeTicks(g, b, t0, t1, state.range);
     if (!live) startNote(g, b, t0, t1, recordFrom());
     // The seven-day turnover is the event of the week and gets a full line with its name. The
@@ -1299,13 +1330,19 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       }
       g.c.restore();
       g.c.save(); g.c.globalAlpha = a5; g.c.strokeStyle = g.dim; g.c.lineWidth = 2; g.c.lineJoin = 'round';
-      polyline(g, { v: q.five, step: q.step }, b, t0, t1, yOf); g.c.restore();
+      end5 = polyline(g, { v: q.five, step: q.step }, b, t0, t1, yOf); g.c.restore();
     } else {
       // A hundred and fifty sawtooth windows in a month is a wall: each window is drawn as
       // its own high instead, a bar as wide as the window, its right edge the reset.
       var bounds = [t0], w;
       for (w = 0; w < q.resets.length; w++) if (q.resets[w].limit === 'five_hour') bounds.push(q.resets[w].t);
-      bounds.push(t1);
+      // The record's end closes the last window, not the range's. Run to the far end instead,
+      // the bar paints every hour between the last reading and the close of the range at the
+      // height of a peak reached before any of them — the firm line through a moment nobody
+      // measured that this chart exists not to draw.
+      var lastFive = -1;
+      for (w = n - 1; w >= 0 && lastFive < 0; w--) if (q.five[w] !== null) lastFive = w;
+      bounds.push(lastFive < 0 ? t1 : Math.min(t1, t0 + (lastFive + 1) * q.step));
       for (w = 0; w < bounds.length - 1; w++) {
         var i0 = Math.round((bounds[w] - t0) / q.step), i1 = Math.round((bounds[w + 1] - t0) / q.step), peak = null;
         // The hour a window turns over in belongs to BOTH windows, ten minutes to the one that
@@ -1323,10 +1360,13 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       }
     }
     g.c.save(); g.c.globalAlpha = a7; g.c.strokeStyle = g.fg; g.c.lineWidth = 2; g.c.lineJoin = 'round';
-    polyline(g, { v: q.seven, step: q.step }, b, t0, t1, yOf); g.c.restore();
+    end7 = polyline(g, { v: q.seven, step: q.step }, b, t0, t1, yOf); g.c.restore();
     var e5 = lastOf(q.five), e7 = lastOf(q.seven);
-    if (e5 !== null && live) dot(g, b.r, yOf(e5), g.dim);
-    if (e7 !== null) dot(g, b.r, yOf(e7), g.fg);
+    // On the curve's own last point, which is the right edge only where the range ends at a
+    // reading. A dot at the edge, over a week the serve was up for one day of, is a reading
+    // nobody took, dated thirteen hours after the last one anybody did.
+    if (live && end5 !== null) dot(g, end5.x, end5.y, g.dim);
+    if (end7 !== null) dot(g, end7.x, end7.y, g.fg);
     var cur = state.cursor.quota, idx = slotAt(cur, n, live);
     if (idx !== null) {
       var x3 = xOf(b, cur); hair(g, x3, b.t, x3, b.b, g.fg, .5);

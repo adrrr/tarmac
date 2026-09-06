@@ -128,6 +128,15 @@ test('the week a clock springs forward keeps its ticks on their own columns', as
   await assertAxis(['2026-03-26', '2026-03-27', '2026-03-28', '2026-03-29', '2026-03-30', '2026-03-31', '2026-04-01']);
 });
 
+// The three weeks above all put the shift in the MIDDLE of the fixture, where the width of the
+// last column decides nothing: the axis ends at the range's close either way. A week that ENDS
+// on the twenty-five-hour day is the one that reads the last column's own width — the span the
+// buckets carry — and a flat 86400000 there closes the axis an hour early, sliding every name
+// on it a little to the right of its column.
+test('the week that ends on the day a clock falls back keeps its last column whole', async () => {
+  await assertAxis(['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25']);
+});
+
 // A month labels every fifth date rather than every day, and it walks the same loop. The
 // evening the walk slipped into is still the 25th, so the month drew `Oct 25` twice, eleven
 // pixels apart, which is the two of them overprinting each other.
