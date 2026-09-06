@@ -891,7 +891,15 @@ ${HISTORY_CSS}
      flat grid this view was before, which is the honest drawing of what it holds. */
   .map { gap:.9rem; }
   .map.berths { display:flex; flex-wrap:wrap; align-items:flex-start; }
-  .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr)); }
+  /* One cell per node, and every cell the same: the replay is the one surface where the fleet
+     changes under a still hand — each position of the handle is another minute, and sessions
+     come and go between two of them. A grid whose rows are the size of what is in them redraws
+     the page at every step of a scrub, which is what made a drag look like a page breaking.
+     The floor is a square of the column's own minimum, so a card of a dial, a name and a line
+     of numbers sits in it exactly; the auto above it is what keeps a node with three captions
+     from being clipped, at the price of that one row being taller. */
+  .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));
+          grid-auto-rows:minmax(10.5rem,auto); }
   /* The berth: a frame around the nodes read in one directory, and the label is the whole of
      what it claims. Quiet on purpose — a hairline and a caption in the grey the rest of the
      page uses for a heading, because the loud thing on this view is a session's state, and a
@@ -925,13 +933,11 @@ ${HISTORY_CSS}
      that can never fill, captioned with the words of a fault someone could go and repair. The
      honest form is the one the table already speaks in — text on a line, left-aligned, its
      state in the same glyph and in a three-pixel accent down the left edge. */
-  /* align-self, never the grid's own align-items: a strip is half the height of the card
-     beside it and must not be stretched to match, but the CARDS in a row still share one
-     height — telling the grid to stop stretching would have changed every session on the page
-     to make room for this one. Scoped to the flat grid, which is the only place a strip has a
-     card beside it: docked in a berth it is a full-width band, and "start" in that column
-     would shrink it to the width of its own prompt. */
-  .map.flat .node[data-role="agent"] { align-self:start; }
+  /* Behind the scrubber an agent fills its cell like every other node. It kept its own height
+     for as long as the grid's rows did — a strip at half a card, sitting at the top of its
+     row — and that is exactly what made the map dance: an agent appearing between two minutes
+     of a scrub moved every dial under it. The SHAPE stays different, which is the honest part
+     (no dial, no arc that could never fill, its text left-aligned); the CELL is the same. */
   .node[data-role="agent"] { align-items:stretch; text-align:left;
           padding:.5rem .7rem .55rem; border-radius:8px;
           background:color-mix(in srgb, var(--line) 18%, transparent);
@@ -1114,11 +1120,6 @@ ${HISTORY_CSS}
        background session named after its prompt, a name with no length limit. Not the exotic
        case: when nothing in the fleet calls itself interactive, every row is drawn as a card. */
     .berth-cards .node { flex:1 1 8.5rem; width:auto; min-width:0; }
-    /* A strip sharing a phone's width with a card is an ellipsis where the prompt was — the
-       one line saying what this agent was told to do is the first thing a narrow column takes
-       away. It spans the row instead, like the cells below it. The berth docks its own strips
-       full width at every size, so what this rule is left covering is the REPLAY's flat grid. */
-    .node[data-role="agent"] { grid-column:1 / -1; }
     /* Line one: who, and in what state. The project leads and carries the weight; the session
        name travels beside it in the page's grey. That order is deliberate and it is a red line
        — a background session is NAMED AFTER ITS PROMPT, and a prompt set as the heading of a

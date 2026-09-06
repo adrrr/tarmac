@@ -739,13 +739,23 @@ test("a strip's left accent is the node's own hue, the one its glyph already car
   }
 });
 
-// A strip is half the height of the card beside it and may not be stretched to match — but
-// that is the strip's business alone, and only where it HAS a card beside it, which since the
-// berths is the replay's flat grid. The cards of a berth still share one height, which is what
-// keeps a row of dials from stepping up and down; telling their row to stop stretching would
-// have changed every session on the page to make room for one strip.
-test('a strip in the flat grid sits at its top, and cards in a berth keep their shared height', () => {
-  assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), 'start');
+// The replay is the one surface where the fleet CHANGES under a still hand: every position of
+// the handle is another minute, sessions come and go between two of them, and a grid whose
+// cells are the size of what is in them redraws the whole page at each step. Half-height
+// strips among full-height cards were the worst of it — a dial row that moved down 75px the
+// minute an agent appeared above it. So behind the scrubber every node gets ONE cell: same
+// column, same row, whatever is drawn inside it. The live berths keep their own shape; there
+// nothing moves without a poll.
+test('every node in the replay grid gets a cell of one size, so a scrub does not move the map', () => {
+  assert.match(declared('.map.flat', 'grid-auto-rows'), /minmax\(/, 'the rows have a floor of their own');
+  assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), '', 'and nothing opts out of it');
+  assert.deepEqual(declaredEverywhere('.map.flat .node[data-role="agent"]', 'align-self'), [], 'at no width');
+});
+
+// The cards of a berth still share one height, which is what keeps a row of dials from stepping
+// up and down; telling their row to stop stretching would have changed every session on the
+// page to make room for one strip.
+test('cards in a berth keep their shared height', () => {
   assert.equal(declared('.berth-cards', 'align-items'), 'stretch');
   assert.equal(declared('.berth-cards', 'align-self'), '', 'and nothing tells a card to opt out of it');
 });
@@ -776,13 +786,15 @@ function atMedia(query: string): string {
   throw new Error(`@media ${query} is never closed`);
 }
 
-// A strip in half a phone's width is an ellipsis where the prompt was: the one line that says
-// what this agent was told to do is the first thing a narrow column takes away. It spans the
-// row instead, which is what the table's own cells do at the same breakpoint. The rule is the
-// REPLAY grid's now — a live strip is docked full width by the berth around it at every size —
-// and the replay is the surface that still lays nodes out as one flat grid.
-test('a strip spans the width of a phone rather than sharing it with a card', () => {
-  assert.match(atMedia('(max-width: 46rem)'), /\.node\[data-role="agent"\][^{]*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
+// The rule that made a strip span the whole width of a phone was written for a line of prompt
+// with no length limit — and the replay grid, the only place it ever applied, is the one
+// surface that holds no prompt at all: the ring keeps a project name and no names of sessions.
+// What it bought was a full-width band appearing and disappearing between two minutes of a
+// scrub, which is the jump this lot exists to remove. A replayed agent is a cell like any
+// other, at every width.
+test('a replayed agent never spans the row, at any width', () => {
+  assert.doesNotMatch(atMedia('(max-width: 46rem)'), /\.node\[data-role="agent"\][^{]*\{[^}]*grid-column/);
+  assert.deepEqual(declaredEverywhere('.node[data-role="agent"]', 'grid-column'), []);
 });
 
 // ── the berth, as layout ─────────────────────────────────────────────────────────────────
