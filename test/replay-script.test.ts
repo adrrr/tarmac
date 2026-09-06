@@ -135,6 +135,28 @@ test('the line under the handle says the past is drawn ungrouped, and why', asyn
   assert.match(page.el('covers').textContent, /drawn ungrouped/);
 });
 
+// The state line goes up with the handle and never before it: it is the live half of the
+// banner, and a page with no record has no replay to be the live half OF. Once it is up it
+// stays up — the body class is what swaps the two, so nothing about entering a replay adds or
+// removes a line of the page.
+test('the live state line arrives with the record, and the banner takes its place rather than its space', async () => {
+  const page = mount(record(10));
+  assert.equal(page.el('live-state').hidden, true, 'nothing before the record is in hand');
+  await page.advance(0);
+  assert.equal(page.el('live-state').hidden, false, 'up with the handle it belongs to');
+  page.el('scrub').drag(3);
+  assert.equal(page.el('live-state').hidden, false, 'and still in the flow while the past is on screen');
+  assert.equal(page.body.classes.has('replaying'), true, 'which is what hides it, in the stylesheet');
+});
+
+// A record nothing can be replayed out of leaves the pair down: there is no second state for
+// the line to be telling this one apart from.
+test('a record with nothing to replay raises no state line', async () => {
+  const page = mount({ since: CLOCK, cadence: MIN, samples: [], missed: 0 });
+  await page.advance(0);
+  assert.equal(page.el('live-state').hidden, true);
+});
+
 // A gap that says it is a gap is not a gap — but a scrubber whose positions are readings and
 // not minutes owes the reader that difference, or the walk it offers is not the walk it makes.
 test('minutes the record missed are named, not smoothed over', async () => {

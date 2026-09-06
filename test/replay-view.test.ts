@@ -35,9 +35,53 @@ test('the fragment carries none of it, so a poll cannot reset the reader', () =>
 // the page's own noscript banner promises what is left is still readable, not still usable.
 test('the controls ship hidden, so a page with no script shows no dead handle', () => {
   const html = page();
-  for (const id of ['replay', 'replay-view', 'replaying']) {
+  for (const id of ['replay', 'replay-view', 'replaying', 'live-state']) {
     assert.match(html, new RegExp(`id="${id}"[^>]*hidden`), id);
   }
+});
+
+// ── the line that says which fleet is on screen ───────────────────────────────────────────
+//
+// The banner used to be inserted into the flow the moment a reader touched the handle, and
+// taken back out when they let go: the whole page jumped down a line on the way in and back up
+// on the way out, at the exact moment the reader is comparing two minutes of it. So the two
+// states take turns in ONE place instead. What is live says so, quietly, where the warning
+// about the past will stand — the space is spent either way, and a page that never says which
+// of the two it is showing is a page that only speaks up when it is lying.
+test('the state line stands where the banner will, so entering a replay moves nothing', () => {
+  const html = page();
+  const live = html.indexOf('id="live-state"');
+  const note = html.indexOf('id="replaying"');
+  assert.notEqual(live, -1, 'the page carries a live state line');
+  assert.ok(live < note, 'in the banner\'s own place in the flow');
+  assert.ok(html.indexOf('id="live"') > note, 'both above the fleet');
+});
+
+// One box, declared once, worn by whichever of the two is up. Two rules could not disagree by
+// much and would only have to disagree by a pixel of padding: the point of the pair is that the
+// swap is invisible, and a height that comes from two places is a height that drifts.
+test('the state line and the banner are one box, so the swap costs no vertical pixel', () => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(page())![1].replace(/\/\*[\s\S]*?\*\//g, '');
+  const shared = /\.warn,\s*\.live-state\s*\{([^}]*)\}/.exec(css);
+  assert.ok(shared, 'the box is declared for the pair, not once each');
+  for (const prop of ['padding', 'font-size', 'line-height', 'min-height', 'margin']) {
+    assert.match(shared![1], new RegExp(`${prop}\\s*:`), prop);
+  }
+  // A minimum, because the banner carries a button and the live line carries none: left to
+  // their own line boxes the two differ by the button's border and padding.
+  assert.match(shared![1], /min-height:/);
+  const own = /(?:^|\})\s*\.live-state(?::not\(\[hidden\]\))?\s*\{([^}]*)\}/.exec(css);
+  assert.ok(own, 'and the live line has a rule of its own for what it does not share');
+  for (const prop of ['padding', 'font-size', 'min-height']) {
+    assert.doesNotMatch(own![1], new RegExp(`${prop}\\s*:`), `${prop} is the pair's, not the live line's`);
+  }
+});
+
+// The live line is the one that goes down: the banner is a claim about the past, and a page
+// showing both would be saying two things at once about the same fleet.
+test('one of the two is up at a time', () => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(page())![1];
+  assert.match(css, /body\.replaying \.live-state \{ display:none/);
 });
 
 // Found by opening the page: `hidden` is a UA rule of `display:none`, and any `display` a
@@ -54,7 +98,7 @@ test('a container the script hides is never given a display that outranks hidden
     if (!/display\s*:\s*(?!none)/.test(declarations)) continue;
     // Every element the script ships hidden, by class or by id — `#replay-view` is the one
     // whose accidental reveal would put a past map on screen with nothing saying so.
-    if (!/\.replay\b|\.replaying-note\b|#replay\b|#replay-view\b/.test(selector)) continue;
+    if (!/\.replay\b|\.replaying-note\b|\.live-state\b|#replay\b|#replay-view\b/.test(selector)) continue;
     checked++;
     assert.match(selector, /:not\(\[hidden\]\)/, `${selector.trim()} would show while hidden`);
   }

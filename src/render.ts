@@ -728,9 +728,23 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
   }
   /* Honest, and out of the way of the fleet: three of these stacked at full padding pushed
      the table below the fold on a laptop, which is its own kind of hidden. */
-  .warn { background:var(--warnbg); color:var(--warn); border:1px solid currentColor; border-radius:6px;
-          padding:.35rem .65rem; margin:.3rem 0; font-size:.8rem; line-height:1.45; }
+  /* One box, worn by whichever line is up. The replay banner and the line saying the page is
+     live take turns in the same place in the flow, so their box is declared once: two rules
+     would only ever have to disagree by a pixel of padding for entering a replay to move the
+     whole page down, which is the jump this pair exists to remove. The minimum is there
+     because only one of the two carries a button, and a button's own line box is taller than
+     a line of this text. */
+  .warn, .live-state { border:1px solid currentColor; border-radius:6px;
+          padding:.35rem .65rem; margin:.3rem 0; font-size:.8rem; line-height:1.45; min-height:1.5rem; }
+  .warn { background:var(--warnbg); color:var(--warn); }
   .warn:last-of-type { margin-bottom:.9rem; }
+  /* The live half: the same box with none of the alarm. Grey on nothing, its border spent on
+     holding the size rather than on drawing one — what is normal reads as chrome, and the page
+     raises its voice only for the minute that is not now. */
+  .live-state:not([hidden]) { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap; }
+  .live-state { color:var(--dim); border-color:transparent; }
+  .live-state strong { font-weight:600; }
+  body.replaying .live-state { display:none; }
   /* The footnote: same words, none of the weight. Dim, small, below the fleet and with no box
      around it, because what it carries is true rather than urgent — the threshold that dated a
      reading, the payload shapes nobody has captured yet. It reads as chrome to someone
@@ -1238,6 +1252,17 @@ ${HISTORY_PHONE_CSS}  }
   <strong>&#9888; refresh failing</strong> — nothing on this page has moved since the time in the header.
   <span id="why"></span>
 </div>
+<!-- Which of the two fleets is on screen, said in the place the banner below will stand. The
+     banner used to be inserted into the flow the moment a reader took hold of the handle and
+     removed again when they let go, so the page dropped a line on the way in and rose one on
+     the way out — at the exact moment a reader is comparing two minutes of it. The space is
+     spent either way now, and a page that only speaks up when it is showing the past is a page
+     that says nothing on the way back. Up with the scrubber and for the same reason: with no
+     record there is no second state to be telling this one apart from. -->
+<div class="live-state" id="live-state" hidden>
+  <strong>&#9679; live</strong>
+  <span>&mdash; the fleet as the header dates it.</span>
+</div>
 <!-- The one claim on this page that could be a lie, so it is the loudest element on it and it
      carries the minute it is showing. Hidden until a script raises it: with no script there
      is no replay, and a banner about one would be a warning about nothing. -->
@@ -1472,6 +1497,7 @@ function pageScript(view: View): string {
   var rmeta = document.getElementById('replay-meta'), note = document.getElementById('replaying');
   var rlimits = document.getElementById('replay-limits');
   var atEl = document.getElementById('replay-at'), toLive = document.getElementById('to-live');
+  var liveState = document.getElementById('live-state');
   var record = null, recordAt = 0, at = -1, replaying = false, playing = null, hgen = 0;
 
   // The vocabulary and the geometry, handed over rather than written twice: three words for
@@ -1550,6 +1576,10 @@ function pageScript(view: View): string {
   function ready() {
     var n = record.samples.length;
     replay.hidden = false;
+    // The live half of the state line, which the banner takes the place of rather than the
+    // space. Up only where there is something to replay: a record with no samples in it has no
+    // second state for this line to be telling the present apart from.
+    liveState.hidden = n === 0;
     covers.textContent = coversText();
     scrub.max = String(n === 0 ? 0 : n - 1);
     scrub.disabled = n === 0;
