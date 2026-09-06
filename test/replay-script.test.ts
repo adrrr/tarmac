@@ -145,11 +145,24 @@ test('the visible line is the range, and the prose it used to carry is not lost'
   const page = mount(record(10));
   await page.advance(0);
   const line = page.el('covers').textContent;
-  assert.ok(line.length <= 72, `one line, not three: ${line.length} chars — ${line}`);
+  assert.ok(line.length <= 80, `one line, not three: ${line.length} chars — ${line}`);
   assert.match(line, /10 readings/, 'what is in the record');
-  assert.doesNotMatch(line, /ungrouped|dated/, 'and none of the standing prose about it');
+  // The two words stay ON the line, at every viewport, and only their explanation moves. A
+  // title has no hover on a touchscreen and no keyboard, and a visually hidden span is for a
+  // screen reader — so a sighted phone reader, who is exactly the reader this page argues
+  // about, would have been left with neither half. Two words are what the argument needs: an
+  // ungrouped map reads as a rendering that broke unless something on screen says it is not.
+  assert.match(line, /undated/, 'the record dates nothing it replays');
+  assert.match(line, /ungrouped/, 'and groups nothing either');
+  assert.doesNotMatch(line, /never the directory|not how old/, 'the paragraph itself is off the line');
   assert.equal(page.el('covers').getAttribute('title'), page.el('covers-note').textContent, 'the same words, for a pointer and for a reader who has none');
-  assert.match(page.el('covers-note').textContent, /nothing replayed here is dated/);
+  const more = page.el('covers-note').textContent;
+  assert.match(more, /nothing replayed here is dated/);
+  assert.match(more, /never the directory a node was read in/);
+  // The clause that used to qualify the upper edge of the range, and the reason it may not be
+  // dropped: the record is asked for again only when a tab comes back, so a map left open all
+  // afternoon shows a range that ends where this page last asked — not at this minute.
+  assert.match(more, /last asked for the record/);
 });
 
 // The branches that have nothing but a sentence to give: a record with no readings in it, and
@@ -165,26 +178,29 @@ test('a line that is the whole message carries no second copy of itself', async 
   assert.equal(gone.el('covers').getAttribute('title'), null);
 });
 
-// The state line goes up with the handle and never before it: it is the live half of the
-// banner, and a page with no record has no replay to be the live half OF. Once it is up it
-// stays up — the body class is what swaps the two, so nothing about entering a replay adds or
-// removes a line of the page.
-test('the live state line arrives with the record, and the banner takes its place rather than its space', async () => {
+// The state line is served up and stays up: it is the live half of the banner, and the two
+// take turns in one place. The body class is what swaps them, so entering a replay adds no
+// line and leaving it removes none — which is the whole of what this pair is for.
+test('the state line is up before the record lands and stays up through a replay', async () => {
   const page = mount(record(10));
-  assert.equal(page.el('live-state').hidden, true, 'nothing before the record is in hand');
+  assert.equal(page.el('live-state').hidden, false, 'served up, so the record landing shifts nothing');
   await page.advance(0);
-  assert.equal(page.el('live-state').hidden, false, 'up with the handle it belongs to');
+  assert.equal(page.el('live-state').hidden, false);
   page.el('scrub').drag(3);
-  assert.equal(page.el('live-state').hidden, false, 'and still in the flow while the past is on screen');
+  assert.equal(page.el('live-state').hidden, false, 'still in the flow while the past is on screen');
   assert.equal(page.body.classes.has('replaying'), true, 'which is what hides it, in the stylesheet');
 });
 
-// A record nothing can be replayed out of leaves the pair down: there is no second state for
-// the line to be telling this one apart from.
-test('a record with nothing to replay raises no state line', async () => {
-  const page = mount({ since: CLOCK, cadence: MIN, samples: [], missed: 0 });
-  await page.advance(0);
-  assert.equal(page.el('live-state').hidden, true);
+// The one case where it comes down: a record nothing can be replayed out of. There is no second
+// state for the line to be telling this one apart from, and the sentence under the handle is
+// already saying why there is nothing to drag.
+test('a record with nothing to replay takes the state line down', async () => {
+  const empty = mount({ since: CLOCK, cadence: MIN, samples: [], missed: 0 });
+  await empty.advance(0);
+  assert.equal(empty.el('live-state').hidden, true, 'nothing recorded yet');
+  const gone = mount(() => Promise.resolve({ ok: false, body: 'the record is gone' }));
+  await gone.advance(0);
+  assert.equal(gone.el('live-state').hidden, true, 'and none that could be read');
 });
 
 // A gap that says it is a gap is not a gap — but a scrubber whose positions are readings and

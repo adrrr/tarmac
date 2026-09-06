@@ -633,7 +633,9 @@ A replay is never allowed to pass for the present:
   a place the page keeps for it: live, the same box says `● live` in the page's grey, so
   entering and leaving a replay swaps a line rather than inserting and removing one. The page
   used to drop a line on the way in and rise one on the way out, at the moment a reader is
-  comparing two minutes of it
+  comparing two minutes of it. The account's gauges are the one thing that still moves: they
+  leave the header and are drawn again above the replayed fleet, which costs their row — the
+  price of the rule below, that a past reading may not stand above the banner dating it
 - the live fragment, with its map, its totals, its timestamp and its warnings, all of them
   about now, is hidden while the past is up, so two fleets of two moments are never stacked
 - **no halos.** The halo means a reading landed moments ago, which is never true of a sample
@@ -668,10 +670,15 @@ readings are in it, and how many minutes have none — the handle steps through 
 minutes. A serve ten minutes old offers ten minutes, and a record whose every reading failed
 says *that* rather than reading like a serve which has just started.
 
-Two standing properties of the record used to print on that line as well, and now hang off it:
-nothing replayed is dated, and the past is drawn ungrouped. They are the title of that line for
-a pointer, and a visually hidden span for a reader who has none. Moved rather than dropped —
-shown less and told nothing, a reader reads an ungrouped map as a rendering that broke.
+Two standing properties of the record used to print in full on that line, and are now named on
+it in two words — `undated, ungrouped` — with the paragraph behind them: nothing replayed is
+dated, because the ring keeps each reading and never how old it was; and the past is drawn
+ungrouped, because it keeps a project name and never the directory a node was read in. A third
+clause hangs off the same place: the range ends where this page last asked for the record, not
+at this minute. All three are the `title` of that line and a visually hidden span beside it,
+which is a pointer and a screen reader — a phone is neither, and that is why the two words
+themselves stay on the line. Moved rather than dropped: shown less and told nothing, a reader
+reads an ungrouped map as a rendering that broke.
 
 One thing it deliberately does not do is date the readings it draws. The ring keeps each
 reading, never how old that reading was, so a replayed arc can be neither the solid one of a

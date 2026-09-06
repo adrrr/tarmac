@@ -35,9 +35,25 @@ test('the fragment carries none of it, so a poll cannot reset the reader', () =>
 // the page's own noscript banner promises what is left is still readable, not still usable.
 test('the controls ship hidden, so a page with no script shows no dead handle', () => {
   const html = page();
-  for (const id of ['replay', 'replay-view', 'replaying', 'live-state']) {
+  for (const id of ['replay', 'replay-view', 'replaying']) {
     assert.match(html, new RegExp(`id="${id}"[^>]*hidden`), id);
   }
+});
+
+// The state line is not one of them, and shipping it hidden made it the very fault this lot is
+// about: the server-rendered map paints, the record lands a moment later, and 42px of line
+// appears and pushes the fleet down — a layout shift on every load of the view, to remove a
+// layout shift on entering a replay. It is not a control either. It says the page is showing
+// the fleet now, which is true of a served page before any script runs and true of one where
+// none ever will; the way BACK from a replay is a button, and that button is in the banner.
+test('the state line ships up, so the record landing does not push the fleet down', () => {
+  assert.doesNotMatch(page(), /id="live-state"[^>]*hidden/);
+});
+
+// Up on the map, and nowhere else: the table and the curves have no scrubber, so a line telling
+// them apart from a replay would be an answer to a question their reader cannot ask.
+test('the state line is the map view\'s, like the scrubber it belongs to', () => {
+  assert.match(replayCss(), /body:not\(\[data-view="map"\]\) #live-state \{ display:none/);
 });
 
 // ── the line that says which fleet is on screen ───────────────────────────────────────────
@@ -64,12 +80,17 @@ test('the state line and the banner are one box, so the swap costs no vertical p
   const css = /<style>([\s\S]*?)<\/style>/.exec(page())![1].replace(/\/\*[\s\S]*?\*\//g, '');
   const shared = /\.warn,\s*\.live-state\s*\{([^}]*)\}/.exec(css);
   assert.ok(shared, 'the box is declared for the pair, not once each');
-  for (const prop of ['padding', 'font-size', 'line-height', 'min-height', 'margin']) {
+  for (const prop of ['padding', 'font-size', 'line-height', 'margin']) {
     assert.match(shared![1], new RegExp(`${prop}\\s*:`), prop);
   }
-  // A minimum, because the banner carries a button and the live line carries none: left to
-  // their own line boxes the two differ by the button's border and padding.
-  assert.match(shared![1], /min-height:/);
+  // The minimum, by its VALUE. Asserted as "the property is declared" this passed on
+  // `min-height:0`, which is the property gone and the pair back to their own line boxes —
+  // and those differ: the banner's button is 12px of text plus .05rem of padding and a border
+  // either side, against a line box of .8rem × 1.45. The floor has to clear both, so it is a
+  // length rather than a keyword and it is not a token one.
+  const floor = /min-height:\s*([\d.]+)rem/.exec(shared![1]);
+  assert.ok(floor, `the box declares a min-height in rem: ${shared![1]}`);
+  assert.ok(Number(floor![1]) >= 1.2, `and one that clears both line boxes: ${floor![0]}`);
   const own = /(?:^|\})\s*\.live-state(?::not\(\[hidden\]\))?\s*\{([^}]*)\}/.exec(css);
   assert.ok(own, 'and the live line has a rule of its own for what it does not share');
   for (const prop of ['padding', 'font-size', 'min-height']) {
@@ -145,7 +166,7 @@ test('the scrubber carries its own name', () => {
 });
 
 // "The last 24 hours" is the size of the RING, not of the record: a serve ten minutes old has
-// seen ten minutes, and `coversText` is built around refusing to say otherwise. A title naming
+// seen ten minutes, and `coversRange` is built around refusing to say otherwise. A title naming
 // a duration would be the one line on this surface claiming a day nobody recorded — and the
 // only line still on screen once a phone folds the prose away mid-drag.
 test('the name says what the control is, never how much of the day it holds', () => {

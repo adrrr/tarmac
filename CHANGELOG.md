@@ -19,11 +19,16 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   the flat grid gave each row the height of whatever was in it, with half-height agent strips
   among full-height dials, so a session appearing between two minutes moved every node under it.
   The banner has a place kept for it now: live, the same box says `● live` in the page's grey,
-  and entering a replay swaps a line rather than adding one. Every node behind the scrubber gets
-  a cell of one size, an agent included — it keeps the shape that is honest, its text and no
-  dial it could never fill, and gives up only the height. On a phone, where the banner wraps to
-  three lines and the header's gauges take a row of their own, the swap is smaller than it was
-  and not yet nothing.
+  and entering a replay swaps a line rather than adding one. That line is served up rather than
+  raised when the record lands, so loading the map does not shift either. Every node behind the
+  scrubber gets a cell of one size, an agent included — it keeps the shape that is honest, its
+  text and no dial it could never fill, and gives up only the height; below 480px the cell
+  narrows with its column rather than standing 168px tall over 90px of content.
+  What still moves, measured on the demo: the account's gauges leave the header on replay and
+  are drawn again above the replayed fleet, which inserts their row — 22px on a laptop, and on a
+  phone a wrapped header row as well. Their place is argued where they are rendered (a past
+  reading may not stand above the banner that dates it) and was left alone. On a phone the
+  banner also wraps to three lines where the live line takes one.
 - **The scrubber and its buttons are drawn by the page.** The one control this view is spent
   touching was whatever the browser had: a fat grey groove on one engine, a blue pill on
   another. Both engines now get the same thin rail and the same standing thumb, the focus ring
@@ -31,10 +36,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   what it is doing in an attribute as well as in its word — a stopped replay no longer
   screenshots as a running one.
 - **The line under the handle is one line.** It was three of technical prose under the hand of
-  whoever is dragging. What it says now is what this record covers and how many readings are in
-  it; the two standing properties of the record — nothing replayed is dated, the past is drawn
-  ungrouped — are the title of that line and a span a screen reader reaches. Moved, not dropped:
-  an ungrouped map that says nothing about being ungrouped reads as a rendering that broke.
+  whoever is dragging. What it says now is what this record covers, how many readings are in it,
+  and the two words that qualify them: `undated, ungrouped`. Their paragraph — and the clause
+  saying the range ends where this page last asked for the record rather than at this minute —
+  is the title of that line and a span a screen reader reaches. The words stay on screen because
+  the reader this matters to is on a phone, which has no hover and no keyboard; an ungrouped map
+  that says nothing about being ungrouped reads as a rendering that broke.
 
 - **`health.covered`, `health.unfilable` and `health.drift` are counted over the sessions a
   status line could write for.** `tarmac list --json` and `/api/fleet` carry a new

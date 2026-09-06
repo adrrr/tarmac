@@ -747,7 +747,19 @@ test("a strip's left accent is the node's own hue, the one its glyph already car
 // column, same row, whatever is drawn inside it. The live berths keep their own shape; there
 // nothing moves without a poll.
 test('every node in the replay grid gets a cell of one size, so a scrub does not move the map', () => {
-  assert.match(declared('.map.flat', 'grid-auto-rows'), /minmax\(/, 'the rows have a floor of their own');
+  // The VALUE, not the shape of it. Asserted as `/minmax\(/` this passed on `minmax(0,auto)`,
+  // which is a floor of nothing and the exact bug — a row the size of whatever is in it.
+  // Asserted as a comparison, because the floor is the column's own minimum: the cell is a
+  // square, and the sheet says so twice, once per width at which the columns change.
+  const floor = (v: string): string => /minmax\(\s*([^,]+),/.exec(v)?.[1].trim() ?? '';
+  const columns = declaredEverywhere('.map.flat', 'grid-template-columns');
+  const rows = declaredEverywhere('.map.flat', 'grid-auto-rows');
+  assert.ok(columns.length > 0, 'the grid declares its columns');
+  assert.equal(rows.length, columns.length, 'and a row floor everywhere it declares them');
+  for (let i = 0; i < rows.length; i++) {
+    assert.notEqual(floor(rows[i]), '', rows[i]);
+    assert.equal(floor(rows[i]), floor(columns[i]), `the cell is a square: ${rows[i]} against ${columns[i]}`);
+  }
   assert.equal(declared('.map.flat .node[data-role="agent"]', 'align-self'), '', 'and nothing opts out of it');
   assert.deepEqual(declaredEverywhere('.map.flat .node[data-role="agent"]', 'align-self'), [], 'at no width');
   // And what fills the cell sits in the middle of it, level with the dials beside it. A card
@@ -799,6 +811,21 @@ function atMedia(query: string): string {
 test('a replayed agent never spans the row, at any width', () => {
   assert.doesNotMatch(atMedia('(max-width: 46rem)'), /\.node\[data-role="agent"\][^{]*\{[^}]*grid-column/);
   assert.deepEqual(declaredEverywhere('.node[data-role="agent"]', 'grid-column'), []);
+});
+
+// What that rule was really protecting, kept without the full-width band that came with it. A
+// cell is 10.5rem wide and its captions are one nowrap line each: at 320px the project name of
+// a replayed agent was laid out at 22px of the 73px it needs — "api-gateway" drawn as "a…" —
+// while the word BACKGROUND beside it kept all 78 of its own. And a waiting reason is free
+// text, the one caption this page calls "why this node is not working". A cell has height to
+// spare and no room to give, so both wrap down it rather than being cut across it.
+test('a caption in the replay grid wraps down its cell rather than being cut to it', () => {
+  assert.equal(declared('.map.flat .node .sub', 'white-space'), 'normal');
+  assert.equal(declared('.map.flat .node .sub', 'overflow-wrap'), 'anywhere', 'a path or a long word breaks too');
+  assert.equal(declared('.map.flat .node[data-role="agent"] .who', 'flex-wrap'), 'wrap', 'and the kind gives the name its line back');
+  // Never the live map: a docked strip is a band the width of its berth, and a prompt with no
+  // length limit wrapping down it is the paragraph the ellipsis is there to prevent.
+  assert.equal(declared('.sub', 'white-space'), 'nowrap', 'the strip keeps its one line');
 });
 
 // ── the berth, as layout ─────────────────────────────────────────────────────────────────

@@ -745,6 +745,10 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
   .live-state { color:var(--dim); border-color:transparent; }
   .live-state strong { font-weight:600; }
   body.replaying .live-state { display:none; }
+  /* On the map and nowhere else, like the scrubber it belongs to: the table and the curves have
+     no replay, so a line telling them apart from one answers a question their reader cannot
+     ask. Written on the body rather than shipped conditionally, so one shell serves all three. */
+  body:not([data-view="map"]) #live-state { display:none; }
   /* The footnote: same words, none of the weight. Dim, small, below the fleet and with no box
      around it, because what it carries is true rather than urgent — the threshold that dated a
      reading, the payload shapes nobody has captured yet. It reads as chrome to someone
@@ -1000,6 +1004,15 @@ ${HISTORY_CSS}
   .node[data-role="agent"][data-state="waiting"] { border-left-color:var(--wait); }
   .node[data-role="agent"][data-state="unknown"] { border-left-color:var(--warn); }
   .node[data-role="agent"] .who { margin-top:0; width:100%; }
+  /* A cell is 10.5rem wide, and every caption on it is one nowrap line: cut to that column, a
+     replayed agent at 320px drew its project as "a…" while the word BACKGROUND beside it kept
+     all of its own, and a waiting reason — the one caption this page calls why a node is not
+     working — lost two thirds of itself. The cell has height to spare and no width to give, so
+     they wrap DOWN it instead. Scoped to the flat grid: a strip docked in a berth is a band the
+     width of its frame, and the prompt on it has no length limit — wrapping that one down its
+     berth is the paragraph the ellipsis is there to prevent. */
+  .map.flat .node .sub { white-space:normal; overflow-wrap:anywhere; }
+  .map.flat .node[data-role="agent"] .who { flex-wrap:wrap; }
   /* A strip's project, which since the berths is the REPLAY's business alone: a live strip
      prints none — the frame around it says the directory — and behind the scrubber there is no
      frame, and the project is the only name the ring kept. The rule stayed when the markup
@@ -1084,7 +1097,11 @@ ${HISTORY_CSS}
   .sub.waiting-for { color:var(--wait); font-weight:600; }
   .asof { font-size:.72rem; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:.15rem; }
   .asof.stale { color:var(--warn); font-weight:600; }
-  @media (max-width: 30rem) { .map.flat { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); } .map { gap:.6rem; } }
+  /* The columns narrow here, and the row floor narrows with them or the cell stops being the
+     square the rule above says it is: left at 10.5rem it was a 168px box holding 90px of
+     agent on a phone, which is the empty half of the same fault. */
+  @media (max-width: 30rem) { .map.flat { grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr));
+            grid-auto-rows:minmax(8.5rem,auto); } .map { gap:.6rem; } }
 
   /* Below this the table stops being a table. What replaces it is the strip described down at
      the tr rule: two lines per session rather than one card of eight labelled ones. Nothing is
@@ -1107,13 +1124,14 @@ ${HISTORY_CSS}
        them. The negative margin gives it the page's own gutters back, so the bar reaches the
        edges of the phone and the rule above it reads as an edge rather than a floating line.
 
-       The sentence under the handle stays. Hiding it for the length of a replay was the obvious
-       way to keep the bar short, and it silently undid a fix this file argues for forty lines
-       into coversText: two of its three parts are standing properties of the RECORD, not the
-       range — nothing replayed here is dated, and the past is drawn ungrouped — and they were
-       put in the reader's view precisely because they had lived "nowhere the reader can see it"
-       and an ungrouped map reads as a rendering that broke. A phone replaying is exactly when a
-       reader is staring at one. The bar is taller for it. */
+       The line under the handle stays. Hiding it for the length of a replay was the obvious way
+       to keep the bar short, and it silently undid the fix coversRange and KEEPS argue for
+       below: two of the things that line says are standing properties of the RECORD, not of the
+       range — nothing replayed here is dated, and the past is drawn ungrouped — and they are in
+       the reader's view precisely because they had lived "nowhere the reader can see it", where
+       an ungrouped map reads as a rendering that broke. A phone replaying is exactly when a
+       reader is staring at one, and a phone has no hover to reach a title with: the two words
+       are on the line itself for that reason, and only their paragraph is behind it. */
     body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3;
          background:var(--bg); border-top:1px solid var(--line);
          padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
@@ -1296,7 +1314,12 @@ ${HISTORY_PHONE_CSS}  }
      spent either way now, and a page that only speaks up when it is showing the past is a page
      that says nothing on the way back. Up with the scrubber and for the same reason: with no
      record there is no second state to be telling this one apart from. -->
-<div class="live-state" id="live-state" hidden>
+<!-- Served up, unlike the controls below it. It is not one of them: it says the page is showing
+     the fleet now, which is true of a served page before any script runs and true of one where
+     none ever will, and the way BACK from a replay is a button that lives in the banner. Shipped
+     hidden it was the fault this pair exists to remove — the map paints, the record lands a
+     moment later, and a line appears and pushes the whole fleet down. -->
+<div class="live-state" id="live-state">
   <strong>&#9679; live</strong>
   <span>&mdash; the fleet as the header dates it.</span>
 </div>
@@ -1595,7 +1618,13 @@ function pageScript(view: View): string {
       // A gap that says it is a gap is not a gap. The handle steps through readings, not
       // through minutes, and a record with holes in it is not a smooth walk — which is why this
       // one clause stayed on the visible line while the paragraph below it went.
-      + (record.missed ? ' · ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '');
+      + (record.missed ? ' · ' + record.missed + ' minute' + (record.missed === 1 ? '' : 's') + ' with no reading' : '')
+      // The two words the paragraph below explains, kept where every reader meets them. A title
+      // has no hover on a touchscreen and no keyboard, and a hidden span is for a screen reader:
+      // moving the whole of it would have left the sighted phone reader — the one this page
+      // argues about, staring at an ungrouped map — with neither half, and an ungrouped map that
+      // says nothing about being ungrouped reads as a rendering that broke.
+      + ' · undated, ungrouped';
   }
 
   // The two standing properties of the record, off the line and never out of reach: in the
@@ -1605,7 +1634,12 @@ function pageScript(view: View): string {
   // Shown less and told nothing, a reader reads an ungrouped map as a rendering that broke.
   var KEEPS = 'The record keeps each reading, not how old that reading was, so nothing replayed'
     + ' here is dated. It keeps a project name and never the directory a node was read in, so the'
-    + ' past is drawn ungrouped, in the order the sample carries.';
+    + ' past is drawn ungrouped, in the order the sample carries.'
+    // The third of them, and the one that qualifies the range itself rather than what is drawn
+    // from it: the record is asked for again only when a tab that has been away comes back, so
+    // the minute this range ends on is the last one this page ASKED for. A map left open on a
+    // desk all afternoon would otherwise read as a record that stops where the fleet did.
+    + ' The range ends where this page last asked for the record, not at this minute.';
 
   // The line, and what it could not fit. A message that IS the whole of what there is to say
   // carries no second copy of itself: a tooltip repeating the line it sits on is how a reader
@@ -1634,9 +1668,9 @@ function pageScript(view: View): string {
   function ready() {
     var n = record.samples.length;
     replay.hidden = false;
-    // The live half of the state line, which the banner takes the place of rather than the
-    // space. Up only where there is something to replay: a record with no samples in it has no
-    // second state for this line to be telling the present apart from.
+    // The live half of the state line comes DOWN in the one case it has nothing to be the live
+    // half of: a record with no samples in it. It is served up otherwise, and never raised
+    // here — a line that appears when the record lands is a line that moves the fleet.
     liveState.hidden = n === 0;
     say(n === 0 ? emptyText() : coversRange(), n === 0 ? '' : KEEPS);
     scrub.max = String(n === 0 ? 0 : n - 1);
@@ -1650,6 +1684,9 @@ function pageScript(view: View): string {
     replay.hidden = false;
     scrub.disabled = true;
     playBtn.disabled = true;
+    // Down, for the reason the empty record takes it down: there is no replay for this line to
+    // be telling the present apart from, and the sentence below says why there is none.
+    liveState.hidden = true;
     say(said, '');
   }
 
