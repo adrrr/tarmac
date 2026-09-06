@@ -2,13 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { extractTelemetry, preferred, readSnapshots } from '../src/snapshots.ts';
 import type { Snapshot } from '../src/snapshots.ts';
 import { PRUNE_MARKER } from '../src/wrapper.ts';
+import { NET_DEADLINE_MS } from './bounded.ts';
 import { tempDir } from './sandbox.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+/** The module under test, for the one case that has to be read from another process. */
+const SRC = path.join(here, '..', 'src', 'snapshots.ts');
 const fixture = (n: string): unknown => JSON.parse(fs.readFileSync(path.join(here, '..', 'fixtures', n), 'utf8'));
 
 const snap = (over: Partial<Snapshot> = {}): Snapshot => ({
@@ -202,17 +206,60 @@ test('a snapshot file that cannot be opened is still counted unreadable', (t) =>
   }
 });
 
-// The deliberate half of the skip above, pinned rather than left to be discovered: `statSync`
-// follows symlinks, so a dead link named like a snapshot is ENOENT too and is skipped in the
-// same silence — except that this one is permanent, not a race. `reap.ts:75` reads the very
-// same shape the other way round, and is right to: it deletes the link, this only reads what
-// the link does not point at.
-test('a dangling symlink where a snapshot should be is skipped in silence, not counted', () => {
+// A dead link named like a snapshot used to be ENOENT — `statSync` followed it — and was
+// skipped in the silence the deletion race is skipped in, permanently. It is refused by KIND
+// now, which is where a name that is not a file belongs: the reader never learns what a link
+// points at, and a state that lasts is not a race that passes.
+test('a dangling symlink where a snapshot should be is refused by kind, and counted', () => {
   const dir = snapDir({ 'alive.json': JSON.stringify({ session_id: 'alive', context_window: { used_percentage: 7 } }) });
   fs.symlinkSync(path.join(dir, 'swept-away.json'), path.join(dir, 'dead.json'));
   const res = readSnapshots(dir);
-  assert.equal(res.unreadable, 0, 'nothing to read is not something it failed to read');
-  assert.equal(res.snapshots.size, 1, 'and the live snapshot beside it still reads');
+  assert.equal(res.notFiles, 1, 'a name that is not a file is said, not swallowed');
+  assert.equal(res.unreadable, 0, 'and it is not reported as a payload the schema broke');
+  assert.equal(res.snapshots.size, 1, 'the live snapshot beside it still reads');
+});
+
+// The half no pipe can show, and the whole of the difference between the two calls: `stat`
+// refuses a link to a FIFO exactly as `lstat` does, so what tells them apart is a link to an
+// ordinary file. Refused as well, deliberately, and for `history-range.ts`'s reason — the
+// wrapper writes files and never links, so a link here is a name somebody else put there,
+// aimed at something this reader was never told about. Here, at a snapshot of another session,
+// which `stat` would read and file under whatever id is inside it.
+test('a symlink to a real snapshot is refused too, whatever it points at', () => {
+  const dir = snapDir({ 'alive.json': JSON.stringify({ session_id: 'alive', context_window: { used_percentage: 7 } }) });
+  fs.symlinkSync(path.join(dir, 'alive.json'), path.join(dir, 'link.json'));
+  const res = readSnapshots(dir);
+  assert.equal(res.notFiles, 1);
+  assert.equal(res.duplicates, 0, 'and the session it points at is not claimed twice');
+  assert.equal(res.snapshots.size, 1);
+});
+
+// The freeze itself (#160). `readFileSync` on a FIFO waits for someone to write to the other
+// end, and this loop runs under every surface tarmac has — `/`, `/live`, `/map`, `/history`,
+// `/api/fleet`, the sampler and `tarmac list` — so one pipe wearing a snapshot's name stopped
+// all of them.
+//
+// In a CHILD, because the read is synchronous: nothing inside the process running it can put a
+// deadline on an open that never returns, so a test of it here would hang this file rather than
+// fail it. The child is the bound — killed on the deadline, and a killed child is a red test.
+test('a named pipe wearing a snapshot name is stepped over, never opened', () => {
+  const dir = snapDir({ 'alive.json': JSON.stringify({ session_id: 'alive', context_window: { used_percentage: 7 } }) });
+  const fifo = path.join(dir, 'pipe.json');
+  const made = spawnSync('mkfifo', [fifo]);
+  assert.equal(made.status, 0, `mkfifo ${fifo}: ${made.error?.message ?? made.stderr}`);
+  const probe = path.join(dir, 'probe.ts');
+  fs.writeFileSync(
+    probe,
+    `import { readSnapshots } from ${JSON.stringify(SRC)};\n` +
+      `const r = readSnapshots(process.argv[2]);\n` +
+      `process.stdout.write(JSON.stringify({ notFiles: r.notFiles, read: [...r.snapshots.keys()] }));\n`,
+  );
+
+  const r = spawnSync(process.execPath, [probe, dir], { encoding: 'utf8', timeout: NET_DEADLINE_MS });
+
+  assert.equal(r.signal, null, `the read never came back — it opened the pipe:\n${r.stderr}`);
+  assert.equal(r.status, 0, `the probe itself must run first:\n${r.stderr}`);
+  assert.deepEqual(JSON.parse(r.stdout), { notFiles: 1, read: ['alive'] }, 'counted, and the snapshot beside it read');
 });
 
 test('a missing directory reads as empty rather than throwing', () => {

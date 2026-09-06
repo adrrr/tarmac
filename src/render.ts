@@ -224,6 +224,12 @@ export function renderTable({ rows, health }: Fleet): string {
     warns.push(
       `! ${health.snapshotsDuplicates} snapshot file(s) claim a session id another file already claims — the freshest was kept`,
     );
+  // Not folded into the line above: a name that is not a file is a directory somebody put
+  // something in, and sending them to look for a newer tarmac would be advice for the schema.
+  if ((health.snapshotsNotFiles ?? 0) > 0)
+    warns.push(
+      `! ${health.snapshotsNotFiles} name(s) in the snapshot directory are not regular files — stepped over unread, never opened`,
+    );
   // Covers both "not allowed to look" and "there is nothing there to look at", so the words
   // have to fit an errno as well as a path that points nowhere.
   if (health.snapshotsError) warns.push(`! snapshots unavailable — ${health.snapshotsError}`);
@@ -404,6 +410,11 @@ export function renderLive(fleet: Fleet): string {
   if ((health.snapshotsDuplicates ?? 0) > 0) {
     warnings.push(
       `${health.snapshotsDuplicates} snapshot file(s) claim a session id another file already claims — the freshest reading was kept and the other ignored. Two wrappers may be writing into the same directory.`,
+    );
+  }
+  if ((health.snapshotsNotFiles ?? 0) > 0) {
+    warnings.push(
+      `${health.snapshotsNotFiles} name(s) in the snapshot directory are not regular files — a directory, a link or a named pipe wearing a snapshot's name is stepped over rather than opened, because reading one can wait for ever. Whatever else is there was read as usual.`,
     );
   }
   if (health.snapshotsError) {

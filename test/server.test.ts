@@ -893,6 +893,13 @@ test('the page says when two snapshot files claimed the same session', () => {
   assert.match(html, /freshest/i);
 });
 
+// #160, on the page: same fact as the terminal's line, in the page's words.
+test('the page says when a name in the snapshot directory is not a regular file', () => {
+  const html = renderPage({ rows: [row()], health: health({ snapshotsNotFiles: 1 }) });
+  assert.match(html, /1 name/i);
+  assert.match(html, /not regular files/i);
+});
+
 // ── history ───────────────────────────────────────────────────────────────────────────
 // The serve reads the whole fleet on every request and used to forget it on the next one.
 // A sampler on its own timer keeps a day of those readings in memory, and `/api/history`

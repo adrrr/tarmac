@@ -84,6 +84,8 @@ export interface FleetHealth {
   // Filled in by the collector, which is the layer that knows where it read from.
   snapshotsError?: string | null;
   snapshotsUnreadable?: number;
+  /** Names in the snapshot directory refused by kind, never opened — see `notFiles` there. */
+  snapshotsNotFiles?: number;
   snapshotsDuplicates?: number;
   snapshotsDir?: string;
 }

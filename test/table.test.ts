@@ -345,6 +345,20 @@ test('stays quiet about duplicates when there are none', () => {
   assert.equal(/freshest/.test(renderTable(fleet([row()], { snapshotsDuplicates: 0 }))), false);
 });
 
+// #160: a name the reader refused to open, because what wears it is not a regular file. Its
+// own line, and not the unreadable one: that sentence sends the reader after a newer tarmac,
+// which is no help at all with a pipe somebody left in the directory.
+test('says how many names in the snapshot directory are not regular files', () => {
+  const out = renderTable(fleet([row()], { snapshotsNotFiles: 1 }));
+  assert.match(out, /! 1 name/i);
+  assert.match(out, /not regular files/i);
+  assert.doesNotMatch(out, /newer tarmac/i, 'the schema is not what this one is about');
+});
+
+test('stays quiet about them when every name was a file', () => {
+  assert.equal(/not regular files/.test(renderTable(fleet([row()], { snapshotsNotFiles: 0 }))), false);
+});
+
 // ── the account's two windows ───────────────────────────────────────────────────────────
 //
 // The one pair of numbers in `list` that is not about a session: every session in the table
