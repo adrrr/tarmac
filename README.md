@@ -13,7 +13,7 @@ documented surfaces only, never an internal format.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/replay-dark.gif">
   <img src="docs/media/replay-light.gif" width="1100"
-       alt="The tarmac map, live and then replayed. It opens on the live fleet, whose nodes are grouped into a frame per working directory, each labelled with its project. As the scrubber is dragged the frames give way to the flat record: sessions drawn as dials, each arc a context window, background agents as strips of text, with the account's five-hour and seven-day gauges above them. Sessions appear and disappear, the arcs fill and reset, the five-hour window fills and rolls over, and a banner names the minute being replayed until Back to live is pressed and the frames come back.">
+       alt="The tarmac map, live and then replayed. It opens on the live fleet: nodes grouped into a frame per working directory, each frame labelled with its project, sessions drawn as dials whose arc is the context window, background agents docked under the cards as strips of text, and the account's five-hour and seven-day gauges in the header. As the scrubber under the fleet is dragged the frames give way to the flat record, every node in a cell of one size, sessions still dials and agents still strips, each with its project and what it has cost. Sessions appear as the day walks past and the grid gains a cell for each, the arcs fill, the five-hour gauge fills and rolls over to zero, and a banner names the minute being replayed until Back to live is pressed and the frames come back.">
 </picture>
 
 [Quickstart](#quickstart) · [The map](#the-map) · [The curves](#the-curves) · [Install](#install) ·
@@ -84,7 +84,7 @@ listening rules are [there too](docs/MANUAL.md#what-serve-listens-on).
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/map-dark.png">
   <img src="docs/media/map-light.png" width="1100"
-       alt="The tarmac map, live. Four framed groups, one per working directory and labelled with its project: beacon, holding a session halted on a permission prompt; harbor, holding a session busy with its context arc at 90% and a background agent docked under the cards of that frame as a strip named after its prompt; quay, reporting a status tarmac does not know; and atlas, idle at 36%. A frame says only that its nodes were read in the same directory. Nothing inside one claims that any node dispatched another. The account's five-hour and seven-day gauges sit above them, and one warning above the fleet names the unrecognised status rather than filing it as idle.">
+       alt="The tarmac map, live. Five framed groups, one per working directory and labelled with its project: auth-service, holding a session halted on a permission prompt at 61%; api-gateway, holding a session busy with its context arc at 93% and a background agent docked under the cards of that frame as a strip named after its prompt; data-pipeline, busy at 69% with an agent of its own; docs-site, holding one session reporting a status tarmac does not know and one idle at 39%; and storefront, idle at 23%. A frame says only that its nodes were read in the same directory. Nothing inside one claims that any node dispatched another. The account's five-hour and seven-day gauges sit in the header, one warning above the fleet names the unrecognised status rather than filing it as idle, and the scrubber for the replay sits under the fleet.">
 </picture>
 
 The tabs in the header swap the table for the same fleet drawn as nodes: one per session, the
@@ -129,7 +129,7 @@ the journal, if you keep one. `<canvas>` and the page's own script, no library.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/curves-dark.png">
   <img src="docs/media/curves-light.png" width="1100"
-       alt="The curves page of the demo fleet, on the 7d range out of the invented journal. Context is a row of small multiples, one line per session, each a sawtooth that climbs through the day and breaks where the session was recycled, the two still climbing labelled with an arrow. Cost is one stacked bar per day in a fixed project order, the current day shorter than the six complete ones. Quota is the seven-day line climbing over the five-hour window's highs. A banner above names one unrecognised status, and the header is badged demo data.">
+       alt="The curves page of the demo fleet, on the 7d range out of the invented journal. Context is a row of small multiples, one band per project: four sawtooths that climb through the day and break where the session was recycled, and storefront, a short stroke a day near the baseline. None carries the arrow that marks a climbing line, since the panel counts nothing climbing over this range. Cost is one stacked bar per day in a fixed project order, seven days between $128 and $221. Quota is the seven-day line climbing over the five-hour window's highs. A banner above names one unrecognised status, and the header is badged demo data.">
 </picture>
 
 A context line breaks where its session did, so a recycle at three in the morning reads as a
@@ -237,11 +237,12 @@ and what would have worked. Spellings, edge cases and the two health fields
 ```bash
 npm test                       # typecheck (src + test + scripts), then run the suite
 npm run build                  # flat JavaScript into dist/
-node scripts/demo-fleet.ts     # the invented fleet the captures above are taken of
+node scripts/demo-fleet.ts     # a second invented fleet, served on a port
 ```
 
-Every capture on this page is taken of a fleet that does not exist. A screenshot of a real
-machine carries working directories, prompts and costs, and nothing real enters this repo.
+Every capture on this page is taken of `serve --demo`, a fleet that does not exist. A
+screenshot of a real machine carries working directories, prompts and costs, and nothing real
+enters this repo.
 What CI covers, which Node version develops and which one ships:
 [the manual](docs/MANUAL.md#developing). Capturing the fixtures for a new Claude Code build:
 [the manual](docs/MANUAL.md#capturing-a-new-claude-code-version).
