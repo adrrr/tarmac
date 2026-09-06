@@ -21,7 +21,8 @@ import {
   renderHistoryView,
 } from './history-view.ts';
 import type { Berth, MapNode, NodeState } from './map.ts';
-import { schemaNotice } from './schema.ts';
+import { schemaNoteParts, schemaNotice } from './schema.ts';
+import type { NoteParts } from './schema.ts';
 import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
 import type { Gauge, LimitWhy } from './limits.ts';
 import { accountLimits, busyOnStaleFleet } from './fleet.ts';
@@ -471,16 +472,24 @@ export function renderLive(fleet: Fleet): string {
   // banner above could not take the number with it. The second is a maintainer's line: it
   // stands for every user of a released tarmac until the next release ships the fixture, so
   // amber would mean amber forever. Both keep every word they had.
-  const notes: string[] = [];
+  // Each one in two halves: the fact, printed, and what follows from it behind a disclosure.
+  // Between them they keep every word these notes have ever had — what changed is that the
+  // page no longer ends in four to nine lines of prose a reader did not scroll there for.
+  const notes: NoteParts[] = [];
   // Not under the stall banner, which names the same threshold two lines up: the pair reads as
   // the alarm followed by its own excuse, and the excuse is the reading the alarm exists to
   // tell you not to accept.
   if (health.stale > 0 && stalled === 0) {
-    notes.push(
-      `Readings past the ${formatDuration(health.staleAfterMs)} freshness threshold are dated where they sit — a statusline is only written when its terminal draws a frame, so an idle session's number is "as of" its last one. Set another with --stale-after.`,
-    );
+    notes.push({
+      // The legend for the mark, and the only half of this a reader ever has to be handed: it
+      // is what makes `! 3h ago` on a row something they can argue with.
+      lead: `Readings past the ${formatDuration(health.staleAfterMs)} freshness threshold are dated where they sit.`,
+      // Why that is so, and the flag that moves it. Every word it had; one join that was an
+      // em dash is a full stop.
+      rest: `A statusline is only written when its terminal draws a frame, so an idle session's number is "as of" its last one. Set another with --stale-after.`,
+    });
   }
-  const schema = schemaNotice(health.schemaGuard);
+  const schema = schemaNoteParts(health.schemaGuard);
   if (schema) notes.push(schema);
 
   // Both views, every time, out of the one reading the page just asked for. The tabs are
@@ -510,7 +519,25 @@ export function renderLive(fleet: Fleet): string {
 <div class="meta">${health.sessions} session${health.sessions === 1 ? '' : 's'} · ${health.busy} busy · ${cost(health)}<span class="stamp"> · ${esc(new Date(health.generatedAt).toISOString())}</span></div>
 ${warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}
 ${body}
-<div id="fleet-notes">${notes.map((n) => `<div class="note">${esc(n)}</div>`).join('')}</div>`;
+<div id="fleet-notes">${notes.map(renderNote).join('')}</div>`;
+}
+
+/**
+ * A footnote, folded.
+ *
+ * `<details>` and not a script: the page's one honest claim is that it is readable without
+ * JavaScript, and a disclosure the browser owns is open to a keyboard, to a screen reader and
+ * to a find-in-page that reaches inside a closed one. Shut, because open it is the wall of
+ * prose this was written to fold — and the LEAD is outside the fold, so what a reader is
+ * handed by `aria-describedby` is the fact, never a promise that there is one somewhere.
+ *
+ * A note with nothing behind its lead is not a disclosure at all: an empty fold is a control
+ * that answers a press with nothing.
+ */
+function renderNote(n: NoteParts): string {
+  return n.rest === ''
+    ? `<div class="note">${esc(n.lead)}</div>`
+    : `<details class="note"><summary>${esc(n.lead)}</summary>${esc(n.rest)}</details>`;
 }
 
 /**
@@ -829,6 +856,12 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
      table of contents. */
   #fleet-notes .note + .note { border-top:0; padding-top:0; margin-top:.5rem; }
   .note code { background:var(--surface-2); border:1px solid var(--line); border-radius:4px; padding:.05rem .3rem; }
+  /* The fold. The fact is the summary and stays on the page; what follows from it is one press
+     away. The marker is the browser's own — a disclosure a reader already knows how to work
+     beats a caret this page would have had to teach. */
+  .note summary { font-size:.75rem; padding:.15rem 0; cursor:pointer; }
+  .note summary:focus-visible { outline:2px solid var(--wait); outline-offset:2px; border-radius:4px; }
+  details.note[open] summary { margin-bottom:.3rem; }
   /* Two marks, one weight: a reading that has gone cold, and a reading picked out of several
      that were not about the same window. Both say the number beside them may not be what the
      reader takes it for, so neither may end up quieter than the other. */
@@ -882,6 +915,10 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
   .bar > i { display:block; height:100%; border-radius:99px; background:var(--dim); }
   .empty { color:var(--dim); }
   .freshness { margin-left:auto; color:var(--dim); font-size:.8rem; font-variant-numeric:tabular-nums; }
+  /* A line break in the header, and nothing else: it exists only on a phone, where the six
+     things up there have to be told which two rows they belong to. Off at every other width,
+     where they fit on one. */
+  .hdr-break { display:none; }
   .pulse { display:inline-block; width:.4rem; height:.4rem; border-radius:99px; background:var(--busy); margin-right:.4rem; vertical-align:middle; }
   /* The failing state is carried by the banner's words; the dashed frame only repeats it. */
   body.failing .pulse { background:var(--warn); }
@@ -915,9 +952,13 @@ export function renderPage(fleet: Fleet, view: View = 'table', { historyEnabled 
      Map, is 50), so a horizontal inset buys nothing — and at .3rem against a .15rem gap between
      the tabs it made their two overlays overlap by 7px, where a tap meant for Table landed on
      Map because Map's pseudo paints later. */
-  nav a, .replay button, .replaying-note button, .hist-range button, .to-now, .key { position:relative; }
+  nav a, .replay button, .replaying-note button, .hist-range button, .to-now, .key,
+  .note summary { position:relative; }
   @media (pointer: coarse) {
     nav a::after, .replay button::after { content:''; position:absolute; inset:-.7rem 0; }
+    /* The footnote's fold is a control like the rest of them, and set in the smallest type on
+       the page: it needs the most inset of any of these to clear 44. */
+    .note summary::after { content:''; position:absolute; inset:-.7rem 0; }
     .replaying-note button::after { content:''; position:absolute; inset:-.85rem 0; }${HISTORY_TOUCH_CSS}  }
   body[data-view="table"] .view-map { display:none; }
   body[data-view="map"] .view-table { display:none; }
@@ -1266,7 +1307,38 @@ ${HISTORY_CSS}
      as nothing at all — and the labels that go are the ones whose value says what it is on its
      own, with the exceptions named where they are given a word back. */
   @media (max-width: 46rem) {
-    body { padding:1.25rem .75rem; }
+    body { padding:.75rem .75rem 1.25rem; }
+    /* ── the header, in two lines ──────────────────────────────────────────────────────
+       Six objects wrapping as they pleased put five rows of chrome — a name, a badge, tabs,
+       two gauges and the age of the reading — above the first session on a 390px screen: the
+       fleet started a third of the way down a page that is about the fleet.
+
+       Three now, and the first two are DECLARED rather than left to the wrap: the name and the
+       tabs, then the account. The break is a real element in the markup between those two
+       groups, zero-height and full-width — NOT "order" on the items around it, which would be
+       this sheet moving two readings past each other to get a line break. Nothing here is
+       reordered: what the page shows is the order the markup is in.
+
+       Three and not two, and the missing one is arithmetic rather than taste. The account's own
+       row is 255px of "5h 62% resets in 59m  7d 43% resets in 4d 11h" and the age of the
+       reading is 92 more, against 346 of usable width: the pair is 7px over, and the reset
+       countdowns are the only words on this page that appear nowhere else — a phone that
+       dropped them would be a phone that cannot tell you when your window opens. So the age
+       takes the third row whole rather than a fact being spent on the second.
+
+       A demo badge takes the width it takes and pushes the tabs down, which is a fourth row on
+       a demo and none on a serve: it is the one element here whose job is to be in the way. */
+    header { gap:.3rem .5rem; padding:.5rem .6rem; margin-bottom:.75rem; }
+    .hdr-break { display:block; flex-basis:100%; height:0; }
+    /* The rule between the two groups is what the break already says at this width. */
+    header .limits:not([hidden]) { gap:.8rem; padding-left:0; border-left:0; }
+    .freshness { font-size:.72rem; }
+    .gauge { font-size:.72rem; }
+    /* The rail goes where the row bar goes, three rules below, and for the same reason: the
+       number beside it is the authority, the bar is a second telling of it, and a phone has no
+       width for the second telling. What it says in words — "62%", "resets in 1h" — is every
+       word it said before. */
+    .gauge .rail { display:none; }
     /* The summary's ISO stamp, spent. It is the widest thing on that line and the header two
        lines above already says the same fact in the words a reader uses — "updated 3s ago",
        counted by the shell whether or not a poll ever lands. Hidden rather than dropped: the
@@ -1292,7 +1364,10 @@ ${HISTORY_CSS}
     body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3;
          background:var(--bg); border-top:1px solid var(--line);
          padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
-    .wrap { overflow-x:visible; }
+    /* The panel goes with the table. Below this width the rows ARE cards, and a panel around
+       a column of cards is a frame drawn round a frame — the thing the two planes were
+       introduced to stop. */
+    .wrap { overflow-x:visible; background:transparent; border:0; border-radius:0; box-shadow:none; }
     table, tbody { display:block; }
     table { min-width:0; }
     thead { display:none; }
@@ -1309,8 +1384,12 @@ ${HISTORY_CSS}
        The cell steps out of the layout entirely, with display:contents, so the row is the flex
        container and every VALUE is one of its items. Anything else puts a box between the row
        and the thing being placed, and the order below would have nothing to order. */
+    /* And the strip becomes the card the desktop panel used to hold: filled, on the floor, with
+       the same hairline and the same shadow as a node on the map. Without the fill it would be
+       the one surface on the page still transparent over grey. */
     tr { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:.4rem; row-gap:.05rem;
-         border:1px solid var(--line); border-left-width:3px; border-radius:8px;
+         background:var(--surface); box-shadow:var(--shadow-1), var(--edge);
+         border:1px solid var(--line); border-left-width:3px; border-radius:var(--r-md);
          padding:.5rem .75rem .55rem; margin-bottom:.55rem; }
     /* white-space on the CELL, and not on the row: the desktop rule being undone is
        td { white-space:nowrap }, and an explicit declaration on the cell beats anything the row
@@ -1449,6 +1528,11 @@ ${HISTORY_PHONE_CSS}  }
     <a href="/map"${view === 'map' ? ' aria-current="page"' : ''}>Map</a>
     <a href="/history"${view === 'history' ? ' aria-current="page"' : ''}>History</a>
   </nav>
+  <!-- Where the header folds on a phone. An element and not a pseudo, because the alternative
+       is "order" on the two groups around it — this page's sheet may move a control and never
+       a reading, and both of those are readings. Empty, so there is nothing in it for anyone
+       to be read. -->
+  <span class="hdr-break" aria-hidden="true"></span>
   <!-- The account's two windows, page-level because that is what they are: a limit belongs to
        the account every session below is spending from, not to any one of them. Their VALUES
        come up from the fragment on every poll (the script's limits-src copy), so the header

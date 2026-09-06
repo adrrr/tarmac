@@ -132,7 +132,7 @@ function tapHeight(selector: string): number {
 // above and below each key, so the grid's ROW GAP has to be at least the whole of what the two
 // overlays add, or a tap meant for one project isolates the one under it. That sum is pinned
 // below the height check.
-const CONTROLS = ['nav a', '.replay button', '.replaying-note button', '.hist-range button', '.to-now', '.key'];
+const CONTROLS = ['nav a', '.replay button', '.replaying-note button', '.hist-range button', '.to-now', '.key', '.note summary'];
 
 test('every control a thumb has to hit is at least 44px tall on a coarse pointer', () => {
   for (const selector of CONTROLS) {

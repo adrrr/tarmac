@@ -12,7 +12,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { CHECKED_VERSIONS, guardVersions, schemaNotice } from '../src/schema.ts';
+import { CHECKED_VERSIONS, guardVersions, schemaNoteParts, schemaNotice } from '../src/schema.ts';
 import { extractTelemetry } from '../src/snapshots.ts';
 import { parseAgents } from '../src/sessions.ts';
 import { tempDir } from './sandbox.ts';
@@ -492,4 +492,26 @@ test('refuses an agents capture that shows no identifiable session', () => {
     assert.notEqual(r.status, 0, body);
     assert.deepEqual(fs.readdirSync(s.fixtures), [], body);
   }
+});
+
+// ── the notice, in two halves ────────────────────────────────────────────────────────────
+//
+// The whole of it is four lines of prose at the foot of the page, and on a phone that is most
+// of a screen spent on a maintainer's line. So it is produced as the fact and the reassurance
+// separately: the page shows the first and puts the second behind a disclosure. `schemaNotice`
+// is the two joined and has not changed a word, which is what keeps the pair honest — a lead
+// that drifted from the notice would be a page saying two different things.
+
+test('the notice comes apart into what was seen and what it means, and joins back whole', () => {
+  const g = guardVersions(['2.2.0']);
+  const parts = schemaNoteParts(g)!;
+  assert.match(parts.lead, /never been checked/i, 'the fact leads');
+  assert.match(parts.lead, /2\.2\.0/, 'and names the version');
+  assert.match(parts.rest, /Nothing is blocked/, 'the reassurance follows');
+  assert.doesNotMatch(parts.lead, /Nothing is blocked/, 'and is not in both halves');
+  assert.equal(`${parts.lead} ${parts.rest}`, schemaNotice(g), 'the two are the notice, to the word');
+});
+
+test('a version tarmac has checked comes apart into nothing at all', () => {
+  assert.equal(schemaNoteParts(guardVersions(['2.1.226'])), null);
 });

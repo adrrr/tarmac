@@ -9,7 +9,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { renderLive, renderPage, servingLine } from '../src/render.ts';
 import { createFleetServer, listenFleetServer, PORT_FALLBACK_TRIES } from '../src/server.ts';
-import { guardVersions } from '../src/schema.ts';
+import { guardVersions, schemaNotice } from '../src/schema.ts';
 import { buildFleet } from '../src/fleet.ts';
 import { parseAgents } from '../src/sessions.ts';
 import { health, row } from './fleet-fixtures.ts';
@@ -262,9 +262,18 @@ test('a finished background agent raises no banner about an unknown status', () 
 const amber = (fragment: string): string[] =>
   [...fragment.matchAll(/<div class="warn">([\s\S]*?)<\/div>/g)].map((m) => m[1]!);
 
-/** The quiet line under the fleet: the same facts, at the weight they are worth. */
+/**
+ * The quiet lines under the fleet: the same facts, at the weight they are worth.
+ *
+ * A footnote is a disclosure now — the fact in the summary, what follows behind the fold — so
+ * what is read back is both halves of it. A note with nothing behind its lead is still a plain
+ * div, and both shapes answer here: what these tests are about is the WORDS under the fleet,
+ * not which element is carrying them.
+ */
 const footnotes = (fragment: string): string[] =>
-  [...fragment.matchAll(/<div class="note">([\s\S]*?)<\/div>/g)].map((m) => m[1]!);
+  [...fragment.matchAll(/<(?:details|div) class="note">([\s\S]*?)<\/(?:details|div)>/g)].map((m) =>
+    m[1]!.replace(/<[^>]*>/g, ' '),
+  );
 
 test('an idle fleet past the freshness threshold raises no banner at all', () => {
   const live = renderLive({
@@ -356,8 +365,8 @@ test('an unchecked Claude Code version is a footnote, never a banner', () => {
 // reach the sessions first, and a maintainer looking for this knows to go to the bottom.
 test('puts the footnote under the fleet, where a scan ends rather than starts', () => {
   const live = renderLive({ rows: [row()], health: health({ schemaGuard: guardVersions(['2.9.9']) }) });
-  assert.ok(live.indexOf('<div class="note">') > live.indexOf('<table'), 'after the rows');
-  assert.ok(live.indexOf('<div class="note">') > live.indexOf('class="view view-map"'), 'and after the map');
+  assert.ok(live.indexOf('class="note"') > live.indexOf('<table'), 'after the rows');
+  assert.ok(live.indexOf('class="note"') > live.indexOf('class="view view-map"'), 'and after the map');
 });
 
 // Moving the legend below every row is free for a reader who can glance down the page and a
@@ -2015,4 +2024,43 @@ test('a FIFO in the journal directory is a range that answers, not a request tha
       // ENXIO: nobody is blocked, which is what a passing run leaves behind.
     }
   }
+});
+
+// ── the footnotes, folded ───────────────────────────────────────────────────────────────
+//
+// Both notes under the fleet are four to nine lines of prose on a phone — a maintainer's line
+// and a legend, together most of a screen of scrolling at the foot of a page nobody scrolled
+// there for. Neither may lose a word: the legend is what makes `! 3h ago` arguable, and the
+// other stands for every user of a released tarmac until the next one ships a fixture.
+//
+// So the fact is printed and what follows from it goes behind a native disclosure. The lead is
+// always rendered, always in the accessibility tree, and is what `aria-describedby` hands to a
+// reader who meets the mark before the legend.
+test('a footnote prints its fact and folds the rest of itself away', () => {
+  const live = renderLive({ rows: [row({ stale: true, snapshotAgeMs: 4 * 3600_000 })], health: health({ stale: 1 }) });
+  const m = /<details class="note"><summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/.exec(live);
+  assert.ok(m, 'the note is a disclosure');
+  assert.match(m![1], /freshness threshold/, 'the fact is the summary');
+  assert.doesNotMatch(m![1], /--stale-after/, 'the flag is not');
+  assert.match(m![2], /--stale-after/, 'and is behind the fold');
+  // Shut. A note nobody opened is a note nobody scrolled past either.
+  assert.doesNotMatch(live, /<details class="note" open/);
+});
+
+// Nothing is lost by folding: every word of the notice is still on the page, in the order it
+// was written. This is the assertion that would go red if a lead and a body ever drifted into
+// saying two different things.
+test('folding a footnote keeps every word the notice had', () => {
+  const guard = guardVersions(['2.9.9']);
+  const live = renderLive({ rows: [row()], health: health({ schemaGuard: guard }) });
+  const whole = schemaNotice(guard)!;
+  // Tags become spaces rather than nothing: the fold is a tag boundary, and a comparison that
+  // closed it up would pass on a page that had run two sentences together.
+  const flat = live
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ');
+  assert.ok(flat.includes(whole), 'the notice, entire, somewhere on the page');
 });
