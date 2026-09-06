@@ -1,4 +1,4 @@
-// The week of journal `serve --demo` shows, invented in memory.
+// The month of journal `serve --demo` shows, invented in memory.
 //
 // Why it ships. `/history` was the one page of the demo that showed the product switched off:
 // "History is off.", the 7d and 30d pills greyed out, nothing for the range charts or the
@@ -19,7 +19,9 @@
 //
 // One story, not two. Every record is `demoFleetAt` played through the same `record` a real
 // sampler calls and then through the store's own allowlist, so the last day of the journal and
-// the ring behind the scrubber are the same readings, minute for minute.
+// the ring behind the scrubber are the same readings, minute for minute. The days before it are
+// that same day again, scaled: see `demoDayFactor`, which is where a month of columns stops
+// being a month of one column.
 
 import { demoFleetAt, DEMO_HOME, DEMO_MINUTES } from './demo.ts';
 import { createHistory } from './history.ts';
@@ -31,11 +33,45 @@ import type { HistoryPruned, HistoryStats, HistoryStore } from './history-store.
 /**
  * How many local days of it there are, today included.
  *
- * Seven and not thirty. A month is four times the work for a page that says what it covers
- * anyway, and a `30d` that answers the week it has is a range showing what exists — which beats
- * one invented badly, and is what a real journal younger than its retention already does.
+ * Thirty, which is what the longest range asks for. A week answered both pills with the same
+ * seven columns, so `30d` and `7d` drew the identical picture on the one serve built to show
+ * them full — a range showing what exists is honest of a real journal younger than its
+ * retention, and pointless of a past that is invented anyway. Four times the records, and the
+ * whole month is built in about a third of a second.
  */
-export const DEMO_JOURNAL_DAYS = 7;
+export const DEMO_JOURNAL_DAYS = 30;
+
+/** A local day, in milliseconds. Used to count days apart, never to walk from one to the next. */
+const DAY = 86_400_000;
+
+/**
+ * What a day of the invented past cost, as a multiple of the day the ring holds.
+ *
+ * A month of identical columns at $147 is a chart that says "made up" before the reader has read
+ * the axis. A fleet's week has a shape — weekends nobody works, an ordinary run of weekdays, and
+ * now and then a day something big shipped — and that shape is the thing the cost chart exists
+ * to show, so the invented one has it too.
+ *
+ * Deterministic and stateless: a function of which day it is and nothing else, so two reads of
+ * one demo are one answer and a screenshot can be taken twice. The multiplier off Knuth's
+ * constant is a spread, not randomness — it just has to be unmemorable and stable.
+ *
+ * The newest day is never scaled. It is the ring's own day, minute for minute, and the one thing
+ * this journal may not do is disagree with the record behind the scrubber.
+ *
+ * The long day is a weekday, which is what keeps the shape readable: the peaks are then above
+ * every ordinary day and the weekends below every one of them, rather than a Saturday at $220
+ * saying the opposite of what the chart is showing. Seventeen apart is at most two of them in a
+ * month and never none — seventeen days is three weekdays along, so the pair cannot both land on
+ * a weekend.
+ */
+export function demoDayFactor(back: number, weekday: number): number {
+  if (back <= 0) return 1;
+  const spread = ((back * 2_654_435_761) % 1000) / 1000;
+  if (weekday === 0 || weekday === 6) return 0.55 + 0.12 * spread;
+  if (back % 17 === 6) return 1.5;
+  return 0.85 + 0.38 * spread;
+}
 
 /**
  * Where the journal would live if there were one. Named because a store names its directory,
@@ -57,8 +93,9 @@ const MINUTE = 60_000;
  * whatever this says. A period shorter than the day plays the fleet arriving and going home
  * more than once between two midnights, which charges a fraction of a day's work to each of
  * them and can leave an actor born late in the day out of the week entirely. The suite holds
- * the consequence rather than the number: every full day of the invented week costs the same
- * and carries all five projects, which is true of a whole day repeated and of nothing else.
+ * the consequence rather than the number: every full day of the invented past carries all five
+ * projects, and each of them costs its own day's scale of one whole day's work — which is true
+ * of a whole day repeated and of nothing else.
  *
  * What is NOT held, because it cannot be seen: whether an older cycle replays the day's last
  * minute or stops one short of it. Both tile the past exactly and both leave every day the same
@@ -149,15 +186,25 @@ export function demoJournalDay(date: string, dayStart: number): string | null {
   // call — what is wanted is the reduction, and a second copy of that reduction here would be
   // the one thing this module exists not to be.
   const ring = createHistory({ since: dayStart, cadence: MINUTE });
+  // What this whole day cost, against the day the ring holds. Decided once for the day rather
+  // than per reading: the reader charges a day what a session's highest reading in it exceeds its
+  // lowest, and a multiplier that moved inside the day would be charged that movement as spending.
+  const factor = demoDayFactor(Math.round((midnightOf(dayOf(last))! - midnight) / DAY), d.getDay());
   let text = '';
   for (let k = from; k <= to; k++) {
     const t = dayStart + k * MINUTE;
     const cycleStart = cycleStartFor(t, dayStart);
     const minute = Math.round((t - cycleStart) / MINUTE);
     // How many cycles before the newest day this reading belongs to — what lets the seven-day
-    // window climb across the whole invented week instead of replaying one day's ramp.
-    const cyclesBack = Math.round((dayStart - cycleStart) / CYCLE_MS);
-    text += `${JSON.stringify(journalRecordOf(ring.record(demoFleetAt(minute, cycleStart, t, undefined, cyclesBack))))}\n`;
+    // window climb across a whole invented week instead of replaying one day's ramp. Modulo the
+    // week, because that is how long the window IS: a ramp running the length of the journal put
+    // the account four times over its plan by the middle of the month and then flat on the floor
+    // for the three weeks before it, where a real one rolls over every seven days.
+    const cyclesBack = Math.round((dayStart - cycleStart) / CYCLE_MS) % 7;
+    const record = journalRecordOf(ring.record(demoFleetAt(minute, cycleStart, t, undefined, cyclesBack)));
+    if (factor !== 1)
+      for (const s of record.sessions) if (s.costUsd !== null) s.costUsd = Math.round(s.costUsd * factor * 100) / 100;
+    text += `${JSON.stringify(record)}\n`;
   }
   return text;
 }

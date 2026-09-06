@@ -13,6 +13,16 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`serve --demo` invents thirty days of journal instead of seven, and gives them a shape.** The
+  two long ranges drew the same seven columns as each other on the one serve built to show the
+  page full. Daily cost now varies the way a fleet's does — quiet weekends, ordinary weekdays, and
+  a day something big shipped — and it is still a function of the day and nothing else, so two
+  reads of one demo are the same answer and a capture can be re-taken. The invented seven-day
+  window rolls once a week rather than climbing for a month.
+- **`/api/history?range=` carries `from` and `to`**, the window the reader charged its records
+  against. Every day of the range is in it, including the ones nothing was written in, which is
+  what the charts need to draw the range that was asked for.
+
 - **`health.covered`, `health.unfilable` and `health.drift` are counted over the sessions a
   status line could write for.** `tarmac list --json` and `/api/fleet` carry a new
   `health.chainable` beside them, the size of that population, and it is the denominator the
@@ -24,6 +34,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The 7d and 30d charts are drawn over the days they asked for, not the days on disk.** A serve
+  whose journal was younger than the range drew one column alone in the middle of an empty plot,
+  and the identical picture at both ranges. Every day of the range has a slot now, a day nothing
+  was written in draws nothing in its own place, the axis names each day at 7d and each fifth date
+  at 30d, and the stretch in front of a young journal says once, quietly, where the record begins.
+  Bars are capped at 48px so one day of data is a bar and not a wall, and the per-column total is
+  dropped at 30d where thirty of them are noise — a tap still prices any column.
 - **A background agent no longer sends you to run `tarmac install`.** An agent session has no TUI
   and never draws a frame, so no status line can ever file a snapshot for it. Counted among the
   blind, one agent beside one chained terminal was enough to raise `statusline chained on 1/2

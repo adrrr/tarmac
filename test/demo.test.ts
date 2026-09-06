@@ -417,7 +417,7 @@ test('serve --demo answers the ranges a journal answers, and the pills that ask 
     coverage: { lines: number; daysRequested: number; skipped: number };
   };
   assert.equal(week.enabled, true);
-  assert.equal(week.days.length, DEMO_JOURNAL_DAYS, `the invented week is ${week.days.length} days`);
+  assert.equal(week.days.length, 7, `the invented week is ${week.days.length} days`);
   assert.equal(week.coverage.skipped, 0, 'the demo wrote a line its own reader could not parse');
   assert.ok(week.coverage.lines > 6 * 1400, `a week of minutes is not ${week.coverage.lines} readings`);
   assert.ok(week.resets.length > 0, 'a week of five-hour windows turned over nowhere');
@@ -425,7 +425,7 @@ test('serve --demo answers the ranges a journal answers, and the pills that ask 
     for (const p of d.byProject) assert.ok(p.costUsd > 0, `${d.date} charges ${p.project} nothing`);
   }
 
-  // The month shows the week it has rather than inventing the rest of itself.
+  // And the month is a month: the 30d pill was answering the same seven columns as the 7d one.
   const month = JSON.parse(await get(port, '/api/history?range=30d')) as { days: unknown[]; coverage: { daysRequested: number } };
   assert.equal(month.coverage.daysRequested, 30);
   assert.equal((month.days as unknown[]).length, DEMO_JOURNAL_DAYS);
