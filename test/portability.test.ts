@@ -11,8 +11,8 @@ import { tempDir } from './sandbox.ts';
 // The wrapper was developed on macOS, where /bin/sh is bash wearing a POSIX hat and
 // forgives a great deal. On Debian and Ubuntu — the primary target of a public npx tool —
 // /bin/sh is dash, which forgives nothing. Everything below runs the REAL generated script
-// under every POSIX shell this machine has, and audits its source for constructs no dash
-// implements.
+// under every POSIX shell this machine has — and under zsh, which is not one but is a
+// plausible `/bin/sh` — and audits its source for constructs no dash implements.
 
 interface Shell {
   label: string;
@@ -30,6 +30,13 @@ const CANDIDATES: Shell[] = [
   // On Debian and Ubuntu `/bin/sh` is dash, so without naming bash the collation case below
   // cannot be built there at all — the CI leg would pass by being unable to ask.
   { label: 'bash', cmd: 'bash', prefix: [] },
+  // Not a POSIX shell, and here for the one thing the others cannot ask: zsh reads a quote
+  // inside `${var%%…}` inside double quotes as a literal character, so a pattern every shell
+  // above parses leaves zsh with an unmatched `"` at end of file and the script never runs at
+  // all. Nobody ships it as `/bin/sh`, but linking it there is one command, and a wrapper that
+  // does not parse is a status line that never prints — the loudest failure this file guards
+  // against, and the only one no assertion below could have caught.
+  { label: 'zsh', cmd: 'zsh', prefix: [] },
 ];
 
 function runsHere(shell: Shell): boolean {
@@ -177,6 +184,16 @@ for (const shell of SHELLS) {
     const bare = runUnder(shell, payload(), null);
     assert.match(bare.stdout, /Fable 5/, 'falls back to the model name');
     assert.equal(bare.status, 0);
+
+    // The same branch, on a name that would not survive an UNQUOTED expansion — which is the
+    // shape the zsh fix must NOT take. Dropping the quotes around `${rest%%…}` is enough to
+    // make the line parse everywhere, and it hands `printf` a name the shell has split into
+    // three arguments and expanded against the working directory: three lines, the third one
+    // a list of files. Quoting is what this branch needs and the reason the value is cut into
+    // a variable of its own first.
+    const risky = runUnder(shell, payload({ model: { id: 'x', display_name: 'Fable 5 *' } }), null);
+    assert.equal(risky.stdout, 'Fable 5 *\n', 'the model name is printed verbatim, on one line');
+    assert.equal(risky.status, 0);
 
     // RULE 1 under every shell: a failing chain never breaks the display or the exit code.
     const broken = runUnder(shell, payload(), 'echo PARTIAL; exit 3');

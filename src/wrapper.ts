@@ -172,15 +172,20 @@ esac
 # --- drop the snapshot (best effort, atomic: temp file + rename in the same dir) ---
 if [ -n "$sid" ] && mkdir -p "$TARMAC_DIR" 2>/dev/null; then
   tmp="$TARMAC_DIR/${TEMP_PREFIX}$sid.$$.tmp"
-  # \`2>/dev/null\` comes FIRST, and the order is the whole point: redirections are applied
-  # left to right, so \`> "$tmp" 2>/dev/null\` opens the temp file while stderr is STILL the
-  # user's terminal — the shell prints its own \`cannot create …: Permission denied\` there,
-  # and the \`2>\` that was meant to swallow it only takes effect afterwards. On a snapshot
-  # directory that has become read-only that is one line of noise per FRAME, on the terminal
-  # of a script whose first rule is to be invisible. Exit code and display are untouched
-  # (\`printf\` is a regular built-in, so a failed redirection only fails the command), which
-  # is exactly why nothing but stderr itself catches this. RULE 1.
-  if printf '%s\\n' "$payload" 2>/dev/null > "$tmp"; then
+  # The \`2>/dev/null\` is on the GROUP, and that placement is the whole point: a redirection
+  # that cannot be performed is reported by the shell itself, not by \`printf\`, so it has to
+  # be silenced by something already in force when the failing redirection is attempted. On
+  # the simple command it is not — \`> "$tmp" 2>/dev/null\` opens the temp file while stderr is
+  # STILL the user's terminal, and even \`2>/dev/null > "$tmp"\`, which reads as the fix and
+  # was one under every POSIX sh, leaves zsh printing \`permission denied\` on the terminal.
+  # The group is entered first, so its stderr is /dev/null before the command inside it is
+  # attempted, and that holds under every shell here. On a snapshot directory that has become
+  # read-only the difference is one line of noise per FRAME, on the terminal of a script whose
+  # first rule is to be invisible. Exit code and display are untouched either way (\`printf\` is
+  # a regular built-in, so a failed redirection only fails the command, and a group carries
+  # the status of what it ran), which is exactly why nothing but stderr itself catches this.
+  # RULE 1.
+  if { printf '%s\\n' "$payload" > "$tmp"; } 2>/dev/null; then
     mv -f "$tmp" "$TARMAC_DIR/$sid.json" 2>/dev/null || rm -f "$tmp" 2>/dev/null
   else
     rm -f "$tmp" 2>/dev/null
@@ -308,7 +313,19 @@ else
       case "$rest" in
         *'"'*)
           rest=\${rest#*'"'}
-          printf '%s\\n' "\${rest%%'"'*}"
+          # Cut first, print second, and the two lines are not one on purpose. Spelled
+          # \`printf '%s\\n' "\${rest%%'"'*}"\` — a quoted pattern inside a quoted expansion —
+          # zsh reads the inner \`'\` as a literal character rather than as quoting, and the
+          # script ends on an unmatched \`"\`: a parse error, so nothing runs and the status
+          # line is blank. No POSIX sh does that, and no distribution ships zsh as
+          # \`/bin/sh\`, but linking it there is one command and this file's promise is that
+          # the wrapper runs wherever it is pointed. Dropping the outer quotes is the other
+          # way to make it parse, and it is wrong: unquoted, \`Fable 5\` reaches \`printf\` as
+          # two arguments and prints on two lines, and a \`*\` in a display name is expanded
+          # against the working directory. An assignment splits nothing and globs nothing,
+          # so the cut is safe unquoted and the value is quoted where it is used.
+          display=\${rest%%'"'*}
+          printf '%s\\n' "$display"
           ;;
       esac
       ;;
