@@ -1123,8 +1123,18 @@ ${HISTORY_CSS}
      a dial, a name, a caption clamped to two lines and the two numbers under it, 214px in
      Chrome. One value at every width: the columns narrow on a phone and the cards do not, so a
      floor cut to match them would sit under the cards it is supposed to hold up. */
+  /* 14rem and not 13.5: the floor is measured against the tallest card the record can draw,
+     and C5's dial takes that card from 215.9px to 223.9. Left at 13.5 it would clear its own
+     floor and push its row and every row under it at the minute it appears — the jump this
+     grid exists to remove, re-entered by a stroke width. The two are one change. */
   .map.flat { display:grid; grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));
-          grid-auto-rows:minmax(13.5rem,auto); }
+          grid-auto-rows:minmax(14rem,auto); }
+  /* And what is in a cell sits in the middle of it. A session card hung from the top left 67px
+     of white under its last line — 31% of the cell — which inside a bordered box reads as a
+     render that failed rather than as air. The agent already had this from #170; the cards
+     were the half that never got it. Where a cell is the height of its own content, which is
+     every card in a berth, the rule changes nothing. */
+  .map.flat .node { justify-content:center; }
   /* The berth: a frame around the nodes read in one directory, and the label is the whole of
      what it claims. Quiet on purpose — a hairline and a caption in the grey the rest of the
      page uses for a heading, because the loud thing on this view is a session's state, and a
@@ -1141,7 +1151,13 @@ ${HISTORY_CSS}
           letter-spacing:.06em; color:var(--dim); }
   /* The cards side by side at their own width, wrapping inside the frame when the directory
      holds more of them than the row can take. */
-  .berth-cards { display:flex; flex-wrap:wrap; gap:.6rem; align-items:stretch; }
+  /* flex-start, not stretch. Two cards with captions of different lengths were drawn to one
+     height and the shorter one carried 18.2px of white under its last line — C11.1's problem
+     at berth scale. Each card takes its own height instead. The DIALS stay level, which is the
+     line a reader scans a row along, and that is why a berth is not centred the way a replay
+     cell is: filled cards with a shadow read as two objects of two heights, not as one that
+     failed to fill. */
+  .berth-cards { display:flex; flex-wrap:wrap; gap:.6rem; align-items:flex-start; }
   .berth-cards .node { width:10.5rem; }
   /* And the strips docked underneath, full width of the frame, one under the other: a strip is
      a line of text, and a line of text in a column half a card wide is an ellipsis where the
@@ -1177,12 +1193,17 @@ ${HISTORY_CSS}
      height of a dial: hung from the top of one, two lines of text read as a cell that failed
      to draw. Docked in a berth the box is the text's own height and this does nothing. */
   .node[data-role="agent"] { align-items:stretch; justify-content:center; text-align:left;
-          padding:.5rem .7rem .55rem; border-radius:8px;
-          background:color-mix(in srgb, var(--line) 18%, transparent);
+          padding:.5rem .7rem .55rem; border-radius:var(--r-sm);
           /* The box goes back to the neutral line the tinted rule above gave it: the accent is
              the channel that carries state here, and a strip outlined in its hue as well was
              the same fact said twice, in two weights, on a shape half the size of a card. */
           border-color:var(--line); border-left-width:3px; border-left-color:var(--dim); }
+  /* The recessed fill belongs to the DOCKED strip, not to the agent. In a berth it is an object
+     nested under the cards and reads as one; behind the scrubber it is a cell beside other
+     cells, and --surface-2 there sinks it in light and lifts it in dark — the same object read
+     two opposite ways depending on the theme. In the grid it takes --surface, the shadow and
+     the 4% state wash like its neighbours, and the SHAPE goes on being what tells it apart. */
+  .berth-strips .node[data-role="agent"] { background:var(--surface-2); box-shadow:none; }
   .node[data-role="agent"][data-state="busy"] { border-left-color:var(--busy); }
   .node[data-role="agent"][data-state="waiting"] { border-left-color:var(--wait); }
   .node[data-role="agent"][data-state="unknown"] { border-left-color:var(--warn); }
@@ -1219,6 +1240,16 @@ ${HISTORY_CSS}
      want the day it grows one, and unprefixed they would take it. */
   .node .kind { margin-left:auto; font-size:.6rem; font-weight:700; text-transform:uppercase;
           letter-spacing:.08em; color:var(--dim); }
+  /* The reading on a strip, drawn. The bar is the table's own — same track, same fill, same
+     refusal to be coloured by a state or a threshold — and the number beside it is what is
+     authoritative, in the face every other number on this page wears. The word stays: a bar
+     says a magnitude and never which one. */
+  .node .ctx { display:inline-flex; align-items:center; gap:.3rem; white-space:nowrap; }
+  .node .bar { display:inline-block; width:2.75rem; height:.3rem; border-radius:var(--r-pill);
+          background:var(--line); vertical-align:middle; margin-right:0; }
+  .node .bar > i { display:block; height:100%; border-radius:var(--r-pill); background:var(--dim); }
+  .node .ctx-pct { font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:600;
+          font-size:.8rem; color:var(--fg); }
   /* The prompt a background session was named after — the strip's own line, now that the berth
      around it carries the directory. One line, clipped: it is a sentence somebody typed, and
      it is the only thing on the strip that has no length limit. */
@@ -1227,7 +1258,10 @@ ${HISTORY_CSS}
   /* Said, not shown: the four glyphs differ in silhouette, so a reader who cannot separate
      two hues still has the state — but a screen reader is handed a bullet and nothing else. */
   .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-  .dial { position:relative; width:5.5rem; height:5.5rem; }
+  /* 6rem. On a post the ring IS the product, and at 5.5 with a 5px stroke it was a progress
+     graphic. Ships WITH the 14rem row floor above — the taller card is what makes that floor
+     necessary. */
+  .dial { position:relative; width:6rem; height:6rem; }
   .dial svg { width:100%; height:100%; display:block; overflow:visible; }
   /* Thicker, and the ring becomes a dial rather than a progress graphic. Purely CSS: the
      percentage is carried by stroke-dasharray off DIAL_R, which no stroke width touches. */
@@ -1275,7 +1309,7 @@ ${HISTORY_CSS}
   /* 650 was a weight the sans had and the system mono faces do not — asked for it, they round
      back to 400 and the number came out lighter than before. 600 is a weight they carry. The
      negative tracking goes with the sans it was measured on. */
-  .pct { font-size:1.5rem; font-weight:600; }
+  .pct { font-size:1.55rem; font-weight:600; }
   .pct i { font-style:normal; font-size:.62em; font-weight:500; color:var(--dim); }
   .why { font-size:.68rem; color:var(--dim); line-height:1.2; max-width:4.4rem; }
   .why b { display:block; font-size:1.25rem; font-weight:400; }
@@ -1506,6 +1540,12 @@ ${HISTORY_CSS}
     td[data-label="Effort"] .v:has(.dim)::before { content:'· effort '; }
     td[data-label="Cost"] .v:has(.dim)::before { content:'· cost '; }
     .bar { display:none; }
+    /* And the one the map just drew is not that one. The rule above is written for the table's
+       strip, where every value gets its column's name back and a second telling of a number is
+       width a phone has not got. On the map the bar IS how an agent's reading is visible at
+       all — dropped here, the whole of it would be fixed everywhere except on the screen it
+       was reported from. */
+    .node .bar { display:inline-block; }
 ${HISTORY_PHONE_CSS}  }
 </style>
 </head><body data-view="${view}">
@@ -1991,7 +2031,15 @@ function pageScript(view: View): string {
         + '<span class="project">' + esc(x.project) + '</span>'
         + '<span class="kind">' + esc(x.kind) + '</span></div>'
         + (state === 'waiting' && x.waitingFor ? '<div class="sub waiting-for">' + esc(x.waitingFor) + '</div>' : '')
-        + (pct === null ? '' : '<div class="sub">ctx ' + pct + '%</div>')
+        // The same fragment the server writes for a live strip, in the browser's copy of the
+        // renderer: a bar for the magnitude, the number beside it, and the word that says which
+        // quantity the bar is about. Clamped, because the track sits in a fixed box and a fill
+        // wider than it paints over the text next to it.
+        + (pct === null
+          ? ''
+          : '<div class="sub"><span class="ctx">ctx <span class="bar"><i style="width:'
+            + Math.max(0, Math.min(100, pct)) + '%"></i></span>'
+            + '<span class="ctx-pct">' + pct + '%</span></span></div>')
         + (typeof x.costUsd === 'number' ? '<div class="sub">$' + x.costUsd.toFixed(2) + '</div>' : '')
         + '</article>';
     }
@@ -2394,10 +2442,26 @@ function renderNode({ row: r, role, state, reading, measured, pulse }: MapNode):
     // around it and the table a column header over it, and a bare `61%` under a line of prompt
     // reads as how much of the prompt is done. Each part is dropped on its own field being
     // null — a snapshot with no turn behind it has a model in it and no percentage.
-    const published = [pct === null ? null : `ctx ${pct}%`, r.model, r.effort]
+    //
+    // The reading is DRAWN now, in the bar the table's Context column already speaks — a
+    // magnitude at a glance beside the number that is the authority, track in --line and fill
+    // in --dim, coloured by neither the state nor a threshold. What it is not is a small dial:
+    // an arc at that size cannot be read (5% and 15% draw the same silhouette), and a ring on
+    // an agent is the claim #170 removed. A strip stays a line of text, now with 44x5px of
+    // graphic on it.
+    //
+    // Which is why the percentage leaves the escaped list: `published` puts `esc` over every
+    // one of its members, and markup through it would come back as text.
+    const ctx =
+      pct === null
+        ? ''
+        : `<span class="ctx">ctx <span class="bar"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span>` +
+          `<span class="ctx-pct">${pct}%</span></span>`;
+    const meta = [r.model, r.effort]
       .filter((v): v is string => v !== null && v !== '')
       .map(esc)
       .join(' · ');
+    const published = ctx === '' ? meta : meta === '' ? ctx : `${ctx} · ${meta}`;
     return `<article class="node" data-role="${role}" data-state="${state}" data-reading="${reading}">
       <div class="who"><span class="shape" aria-hidden="true">${SHAPE[state]}</span><span class="sr">${esc(stateWord(state, r))}</span><span class="prompt">${esc(r.name)}</span><span class="kind">${esc(r.kind)}</span></div>
       ${state === 'waiting' && r.waitingFor ? `<div class="sub waiting-for">${esc(r.waitingFor)}</div>` : ''}
