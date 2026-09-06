@@ -31,7 +31,7 @@ export async function collectFleet({
   installed = false,
 }: CollectOptions): Promise<Fleet> {
   const { sessions, health: discovery } = await discoverSessions({ claudeBin });
-  const { snapshots, dirError, unreadable, duplicates, dirMissing } = readSnapshots(snapshotsDir, { now });
+  const { snapshots, dirError, unreadable, notFiles, duplicates, dirMissing } = readSnapshots(snapshotsDir, { now });
   const fleet = buildFleet({ sessions, snapshots, now, discovery, staleAfterMs });
   // Both blind spots travel with the data: a directory we could not read and files we
   // could not parse are OUR failures to report, not silence to render as "all clear".
@@ -54,6 +54,7 @@ export async function collectFleet({
         ? `ENOENT: ${snapshotsDir} does not exist — the installed wrapper writes there`
         : dirError;
   fleet.health.snapshotsUnreadable = unreadable;
+  fleet.health.snapshotsNotFiles = notFiles;
   fleet.health.snapshotsDuplicates = duplicates;
   fleet.health.snapshotsDir = snapshotsDir;
   return fleet;

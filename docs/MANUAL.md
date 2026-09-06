@@ -35,6 +35,7 @@ change visible, and the table below is how.
 | a status string it does not know | that string, never "idle" |
 | a session halted until you answer something | `waiting`, and which answer: `permission prompt`, `dialog open`, … |
 | a snapshot directory it could not read | the errno, not "run tarmac install" |
+| a name in that directory that is not a regular file | stepped over unread, and a count saying how many. Never opened: reading a named pipe waits for a writer |
 | a cost key that is absent | `—` for the row, and a total qualified by how many sessions really report one |
 | no snapshot carrying the account's rate limits | `— no reading` in both windows, on the page a dotted rail, never a window at 0% |
 | a rate-limit reset nowhere near the reading that carried it | `reset —`. The percentage stands, the impossible countdown does not |
@@ -136,6 +137,12 @@ it either, and not your `settings.json` or `fleet.json` sitting next to it.
 `--snapshots-dir` is a *reader's* lens for `list` and `serve`. Point those at a directory
 another statusline owns and nothing is deleted, because no reader deletes anything.
 
+The reader has a kind rule of its own, and it is the same rule. Only a regular file is opened:
+a directory, a symlink or a named pipe wearing a `*.json` name is stepped over and counted,
+never read. That is not tidiness — `readFileSync` on a pipe waits for someone to write to the
+other end, and this loop runs under `list`, every page and the sampler alike, so one pipe there
+would stop all of them.
+
 So a session whose id is not a UUID gets no snapshot at all. `list` shows it as a live session
 with no reading, in those words, rather than telling you to run `tarmac install`. For that
 session the install is already right, the frame is already drawn, and the wrapper is declining
@@ -143,7 +150,7 @@ on purpose. That is the deliberate half of the trade. The alternative is a sweep
 every filename of eight characters or more.
 
 Two loose ends, if you ran a version before this one. A snapshot already on disk under a
-non-UUID name is still *read*, because the reader takes any `*.json` and keys on the
+non-UUID name is still *read*, because the reader takes any `*.json` file and keys on the
 `session_id` inside it, but no sweep will ever remove it. And a temp file left by an interrupted
 frame of the older wrapper, `.tarmac-<non-UUID sid>.<pid>.tmp`, is no longer collected at all.
 The reaper now matches only names the current writer can produce, so that is coverage *lost*

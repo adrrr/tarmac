@@ -405,10 +405,11 @@ export function demoFleetAt(minute: number, dayStart: number, now: number = dayS
 
   const fleet = buildFleet({ sessions, snapshots, now, staleAfterMs, discovery });
   // What the collector fills in, filled in here for the same reason it does it there: these
-  // four are how the page tells "nothing to report" from "we could not look", and leaving them
+  // five are how the page tells "nothing to report" from "we could not look", and leaving them
   // undefined would render the second as the first.
   fleet.health.snapshotsError = null;
   fleet.health.snapshotsUnreadable = 0;
+  fleet.health.snapshotsNotFiles = 0;
   fleet.health.snapshotsDuplicates = 0;
   fleet.health.snapshotsDir = `${DEMO_HOME}/.local/state/tarmac/snapshots`;
   return fleet;

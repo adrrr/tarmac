@@ -51,6 +51,19 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A named pipe in the snapshot directory no longer freezes every surface.** The snapshot reader
+  opened every `*.json` it listed without asking what wears the name, and `readFileSync` on a FIFO
+  waits for a writer that need never come — so one pipe there stopped `tarmac list`, `/`, `/live`,
+  `/map`, `/history`, `/api/fleet` and the sampler alike, this being the loop under all of them.
+  The kind is asked before the open now, as the journal reader has asked it since the same defect
+  was fixed on the colder path: only a regular file is read, and a directory, a link or a pipe
+  wearing a snapshot's name is stepped over and counted, on its own line rather than among the
+  unreadable payloads — a pipe somebody left in a directory is not a schema that moved, and
+  "check for a newer tarmac" is advice for the other one. A dangling symlink, which used to be
+  skipped in the silence a deleted snapshot is skipped in, is one of those names now: a state
+  that lasts is not a race that passes. The check before the open is a race and stays one, and
+  the cost of losing it is bounded at one blocked read on a directory somebody is racing.
+
 - **A first run raises one empty-state box, not two.** With no `history.days` set and a ring a
   minute old, the history view said "History is off." and "Nothing to draw yet." at once: two
   blocks on one screen, on exactly the fresh install the second of them was written for. The

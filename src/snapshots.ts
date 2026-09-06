@@ -57,6 +57,14 @@ export interface ReadSnapshotsResult {
    */
   duplicates: number;
   /**
+   * Names refused before they were opened, because what wears them is not a regular file.
+   * Counted rather than stepped over in silence: a session whose snapshot is not read is a
+   * blind spot, and this one is permanent — nothing behind that name will ever be a payload.
+   * Apart from `unreadable`, because the cause is a directory somebody put something in, not
+   * a schema that moved, and "check for a newer tarmac" is advice for the other one.
+   */
+  notFiles: number;
+  /**
    * The directory is not there. Whether that is innocent depends on who chose it, which is
    * knowledge this layer does not have — so it reports the fact and lets the caller judge.
    */
@@ -138,12 +146,14 @@ export function readSnapshots(dir: string, { now = Date.now() }: { now?: number 
       snapshots,
       dirError: code === 'ENOENT' ? null : `${code}: ${dir}`,
       unreadable: 0,
+      notFiles: 0,
       duplicates: 0,
       dirMissing: code === 'ENOENT',
     };
   }
 
   let unreadable = 0;
+  let notFiles = 0;
   let duplicates = 0;
   for (const name of entries) {
     if (!name.endsWith('.json') || name.startsWith('.')) continue;
@@ -151,7 +161,27 @@ export function readSnapshots(dir: string, { now = Date.now() }: { now?: number 
     let payload: unknown;
     let mtimeMs: number;
     try {
-      mtimeMs = fs.statSync(file).mtimeMs;
+      // The kind is asked BEFORE the open, and only a regular file is opened. What wears a
+      // snapshot's name is not this reader's to assume: the directory belongs to whoever owns
+      // the machine and a wrapper can be pointed at any of them, while `readFileSync` on a FIFO
+      // waits for someone to write to the other end — a wait with nothing to end it, on the
+      // loop under every surface tarmac has (#160).
+      //
+      // `lstat`, not `stat`, and not for the pipe: `stat` refuses a link to one exactly as this
+      // does. The one shape the two disagree about is a link to an ordinary file, and refusing
+      // that is the choice — a snapshot is what the wrapper wrote, and a link is a name someone
+      // else put there, aimed at something nobody told this reader about. The journal reader
+      // decides the same way for the same reason (#159); this is the hotter path.
+      //
+      // A check before an open is a race, and it stays one: nothing stops the name being
+      // replaced between the two. What that costs is bounded — one blocked read, on a directory
+      // somebody is racing — where reading the kind off the open would cost every read.
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile()) {
+        notFiles += 1;
+        continue;
+      }
+      mtimeMs = stat.mtimeMs;
       payload = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch (e) {
       // ENOENT: a name listed a moment ago that resolves to nothing now. Almost always the
@@ -159,15 +189,9 @@ export function readSnapshots(dir: string, { now = Date.now() }: { now?: number 
       // and a race with our own housekeeping rather than a payload we failed to parse.
       // Counting it made tarmac drive its own format-drift warning (up to 2675 phantom
       // unreadable on one read of a 20k directory, and `list --watch` and `serve` redraw
-      // often enough to be inside that window).
-      //
-      // The cost, said out loud: `statSync` follows symlinks, so a DANGLING one named like a
-      // snapshot is ENOENT too, and it goes silent forever — a permanent state skipped as if
-      // it were a passing race. Deliberate. There is no payload behind a dead link either,
-      // and telling the two apart (an `lstat` first) buys a warning about a file `ls` already
-      // shows. Note it is the opposite call from `reap.ts:75`, which lstats PRECISELY so a
-      // dead link is not ENOENT: it deletes, and `unlink` takes a link away just fine. Reader
-      // and reaper ask different questions of the same shape.
+      // often enough to be inside that window). A dead link named like a snapshot used to land
+      // here too, `statSync` having followed it — a permanent state skipped as a passing race;
+      // the kind check above refuses it by name now, and counts it.
       //
       // ENOENT only. A file we were not ALLOWED to open still counts, and must.
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT')
@@ -184,7 +208,7 @@ export function readSnapshots(dir: string, { now = Date.now() }: { now?: number 
     if (already) duplicates += 1;
     snapshots.set(t.sessionId, already ? preferred(already, snapshot) : snapshot);
   }
-  return { snapshots, dirError: null, unreadable, duplicates, dirMissing: false };
+  return { snapshots, dirError: null, unreadable, notFiles, duplicates, dirMissing: false };
 }
 
 /**
