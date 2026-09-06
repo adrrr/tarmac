@@ -133,6 +133,17 @@ export interface RangeCoverage {
 
 export interface RangeHistory {
   range: HistoryRange;
+  /**
+   * The window the records below were charged against: the midnight the range opens at, and the
+   * one that closes it.
+   *
+   * The reader is the only party that knows it. `hours` and `days` carry what was written, and a
+   * day nobody wrote in leaves no trace in either — so a page taking its axis from them draws the
+   * days it HAS rather than the range it asked for, which is one column alone in an empty plot
+   * for a journal a day old, and the same picture at 7d and at 30d.
+   */
+  from: number;
+  to: number;
   /** Oldest first, and only the hours something was written in. An hour nobody read the fleet
    * in is absent rather than a row of zeroes. */
   hours: RangeHour[];
@@ -396,6 +407,8 @@ export async function readRange({ dir, range, now, capped = false, readDay }: Re
 
   return {
     range,
+    from: windowStart,
+    to: windowEnd,
     hours: [...hours.entries()]
       .sort(([a], [b]) => a - b)
       .map(([t, acc]) => ({

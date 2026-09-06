@@ -771,3 +771,26 @@ test('a range reads its days through the reader it was given, and opens no file 
   assert.deepEqual(answer.days.map((d) => d.date), ['2026-08-06']);
   assert.deepEqual(answer.hours.map((h) => h.t), [hourOf(at(2026, 8, 6, 10))]);
 });
+
+// The window every record above was charged against, said out loud.
+//
+// The charts drawn from this answer used to take their x domain from the days that HAPPENED to
+// be in it, which is not the range anybody asked for: a journal one day old drew a single column
+// alone in the middle of an empty plot, and drew the identical picture at 7d and at 30d. The
+// reader already computes the window — it is what it refuses records outside of — and it is the
+// only party that knows it, since a day nobody wrote in leaves no trace anywhere else.
+test('a range says which window it read, whether or not anything was written in it', async () => {
+  const dir = journal();
+  const now = at(2026, 8, 7, 15);
+
+  const week = await readRange({ dir, range: '7d', now });
+
+  assert.equal(new Date(week.from).toString(), new Date(at(2026, 8, 1, 0)).toString(), 'the week opens somewhere other than the first of its seven midnights');
+  assert.equal(new Date(week.to).toString(), new Date(at(2026, 8, 8, 0)).toString(), 'the week closes somewhere other than the midnight that ends today');
+  assert.equal(week.days.length, 0, 'the fixture wrote a day: this range is meant to be empty');
+
+  const month = await readRange({ dir, range: '30d', now });
+
+  assert.equal(new Date(month.from).toString(), new Date(at(2026, 7, 9, 0)).toString(), 'thirty days back is not where the month opens');
+  assert.equal(month.to, week.to, 'two ranges read at one moment close at two different midnights');
+});

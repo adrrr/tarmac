@@ -36,6 +36,17 @@ const RESET_WATCHED_MS = 600000;
 const MIN = 60000;
 const HOUR = 3600000;
 
+/**
+ * The longest window this view will draw over, in days.
+ *
+ * Both ends of a range's window come off the wire, and the page's rule is that nothing off the
+ * wire may take it down. A `to` a century out is 1800 columns and 876,000 hour slots in every
+ * band, reallocated on every resize, every tap and every change of scheme — not a throw, and
+ * worse than one: a tab that stops answering with no error to read. Sixty times the longest
+ * range, which no answer this page understands can reach.
+ */
+const MAX_DAYS = 1800;
+
 /** One drawable line: a project's colour, a clock, and one reading per step. */
 export interface Series {
   name: string | null;
@@ -268,14 +279,15 @@ export function ctxLines(samples: any[], cadence: number, roster: Slot[]): Line[
  * reduced to the highest any of them reached — the same reduction the reader already made,
  * one level up.
  *
- * An hour nobody wrote a line in is absent from the reader's answer, so the grid is rebuilt
- * from the clocks rather than from the array's length: a serve that was off for a day leaves a
- * day-wide hole, not a day the chart quietly closes up.
+ * An hour nobody wrote a line in is absent from the reader's answer, so the grid is the RANGE's
+ * rather than the array's length: a serve that was off for a day leaves a day-wide hole, and a
+ * journal younger than the range it is asked for starts where it starts instead of being
+ * stretched across a week it was not running for.
  */
-export function ctxRows(hours: any[], roster: Slot[]): Series[] {
+export function ctxRows(hours: any[], roster: Slot[], from: number, to: number): Series[] {
   if (hours.length === 0) return [];
-  var t0 = hours[0].t;
-  var n = gridLen(t0, hours[hours.length - 1].t, HOUR);
+  var t0 = hourOf(from);
+  var n = hourSlots(from, to);
   if (n === 0) return [];
   var anchored = false;
   var i, j;
@@ -316,6 +328,68 @@ export function hourOf(t: number): number {
   var d = new Date(t);
   d.setMinutes(0, 0, 0);
   return d.getTime();
+}
+
+/**
+ * A moment the page may compute with.
+ *
+ * `typeof` and not `isFinite` alone, because `isFinite(null)` is true and `JSON.stringify(NaN)`
+ * is the string `null`: on a JSON wire, `null` is the one non-number that can arrive where a
+ * clock belongs, and it is exactly the one a bare `isFinite` waves through — as the zero it
+ * coerces to, which is the first of January 1970.
+ */
+export function moment(v: any): boolean {
+  return typeof v === 'number' && isFinite(v);
+}
+
+/** The local midnight that opens the day a moment falls in. */
+export function startOfDay(t: number): number {
+  var d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * The next local midnight, which is 23, 24 or 25 hours along.
+ *
+ * Calendar arithmetic, never 24-hour blocks: `history-range` walks the day files by this rule and
+ * everything drawn under them has to walk by the same one. Stepped by 86400000 instead, the
+ * morning a clock falls back lands back inside the day it just left — an eighth slot in a week of
+ * seven, the same name twice, and every column after it labelled with the day before.
+ */
+export function nextDay(t: number): number {
+  var d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
+}
+
+/**
+ * Every local day a range covers, oldest first: the days that were ASKED for.
+ *
+ * This is the whole of the fix in #168. A long range used to be drawn over the days that happened
+ * to be in the journal, so a serve one day old drew a single column alone in an empty plot — and
+ * the identical picture at 7d and at 30d, since one day is one column either way. The window the
+ * reader charged its records against is the domain, and a day nobody wrote in is a slot with
+ * nothing in it rather than a day the axis closes up.
+ *
+ * Bounded by `MAX_DAYS`, which every grid in this file is: the two ends come off the wire, and a
+ * `to` a century out would walk this loop for as long as the tab was open.
+ */
+export function daySlots(from: number, to: number): number[] {
+  var out: number[] = [];
+  if (!moment(from) || !moment(to)) return out;
+  for (var d = startOfDay(from); d < to && out.length < MAX_DAYS; d = nextDay(d)) out.push(d);
+  return out;
+}
+
+/**
+ * How many hour slots a range's window holds, to the same ceiling the day grid keeps.
+ *
+ * One place rather than two identical expressions: the bands and the quota curve are drawn over
+ * one window and a grid either of them read differently would be two charts about two ranges.
+ */
+export function hourSlots(from: number, to: number): number {
+  if (!moment(from) || !moment(to)) return 0;
+  return Math.min(gridLen(hourOf(from), to - HOUR, HOUR), MAX_DAYS * 24);
 }
 
 /**
@@ -394,30 +468,44 @@ export function costHourly(samples: any[], roster: Slot[]): CostSeries {
  * keeps its colour and its place in the column from Monday to Sunday and can be followed
  * across the week. A stack sorted by rank would have every project moving up and down the
  * column as its day went, which is a chart nobody can read sideways.
+ *
+ * A column a day of the RANGE, not a column a day of the journal. A day nobody wrote in is a
+ * column with nothing in it: the bars already draw an unread hour that way at 24h, and the two
+ * long ranges used to be the exception — one day on disk was one bar, centred in an empty plot,
+ * at 7d and at 30d alike.
  */
-export function costDaily(days: any[], roster: Slot[]): CostSeries {
+export function costDaily(days: any[], roster: Slot[], from: number, to: number): CostSeries {
   var buckets: { t: number; span: number; n: number; by: number[] }[] = [];
   var measured: boolean[] = [];
-  var z;
+  var i, z;
   for (z = 0; z < roster.length; z++) measured.push(false);
-  for (var i = 0; i < days.length; i++) {
+  // A range nothing was written in keeps the verdict it has always had. Thirty empty columns
+  // over "no readings in this range" is a chart claiming to have read a month.
+  if (days.length === 0) return { projects: roster, buckets: buckets, measured: measured };
+  var slots = daySlots(from, to);
+  for (i = 0; i < slots.length; i++) {
     var by: number[] = [];
-    var n = 0;
     for (z = 0; z < roster.length; z++) by.push(0);
+    buckets.push({ t: slots[i], span: nextDay(slots[i]) - slots[i], n: 0, by: by });
+  }
+  for (i = 0; i < days.length; i++) {
+    var t = dayStart(days[i].date);
+    var b = -1;
+    // A day nothing can date has no place on an axis, and neither has one the range never asked
+    // for. Dropped rather than drawn at NaN or at an edge, where it would take the whole plot's
+    // geometry or its arithmetic with it: the reader names its files after local days, and a
+    // directory can hold something the reader did not put there.
+    if (!isFinite(t)) continue;
+    for (z = 0; z < buckets.length; z++) if (buckets[z].t === t) b = z;
+    if (b === -1) continue;
     var list = days[i].byProject || [];
     for (var j = 0; j < list.length; j++)
       for (var k = 0; k < roster.length; k++)
         if (roster[k].name === list[j].project && typeof list[j].costUsd === 'number' && isFinite(list[j].costUsd)) {
-          by[k] += list[j].costUsd;
+          buckets[b].by[k] += list[j].costUsd;
           measured[k] = true;
-          n += 1;
+          buckets[b].n += 1;
         }
-    var t = dayStart(days[i].date);
-    // A day nothing can date has no place on an axis. It is dropped rather than drawn at NaN,
-    // where it would take the whole plot's geometry with it: the reader names its files after
-    // local days, and a directory can hold something the reader did not put there.
-    if (!isFinite(t)) continue;
-    buckets.push({ t: t, span: 86400000, n: n, by: by });
   }
   return { projects: roster, buckets: buckets, measured: measured };
 }
@@ -506,11 +594,13 @@ export function quotaOfSamples(samples: any[], cadence: number): QuotaSeries {
  * the chart draws such a marker faint and says "about": a firm line through a moment nobody
  * measured is the one thing this view must not draw.
  */
-export function quotaOfHours(hours: any[], resets: any[]): QuotaSeries {
+export function quotaOfHours(hours: any[], resets: any[], from: number, to: number): QuotaSeries {
   var out: QuotaSeries = { t0: 0, step: HOUR, five: [], seven: [], resets: [] };
   if (hours.length === 0) return out;
-  out.t0 = hours[0].t;
-  var n = gridLen(out.t0, hours[hours.length - 1].t, HOUR);
+  // The range's own grid, like the bands next door: a week the serve was up for one day of is a
+  // curve at the end of a week, not a curve stretched over one.
+  out.t0 = hourOf(from);
+  var n = hourSlots(from, to);
   if (n === 0) return out;
   for (var z = 0; z < n; z++) {
     out.five.push(null);
@@ -613,6 +703,11 @@ const PURE = [
   ctxLines,
   ctxRows,
   hourOf,
+  moment,
+  startOfDay,
+  nextDay,
+  daySlots,
+  hourSlots,
   costHourly,
   costDaily,
   dayStart,
@@ -831,7 +926,7 @@ export function historyScript(): string {
   return `
 (function () {
   var INTERACTIVE = ${JSON.stringify(INTERACTIVE)};
-  var SLOTS = ${SLOTS}, RESET_WATCHED_MS = ${RESET_WATCHED_MS}, MIN = ${MIN}, HOUR = ${HOUR};
+  var SLOTS = ${SLOTS}, RESET_WATCHED_MS = ${RESET_WATCHED_MS}, MIN = ${MIN}, HOUR = ${HOUR}, MAX_DAYS = ${MAX_DAYS};
   var H = ${JSON.stringify(HEIGHTS)};
   var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -877,13 +972,6 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   function dayWord(t) { var d = new Date(t); return DOW[d.getDay()] + ' ' + d.getDate(); }
   function monWord(t) { var d = new Date(t); return MON[d.getMonth()] + ' ' + d.getDate(); }
   function money(v) { return '$' + v.toFixed(2); }
-  function startOfDay(t) { var d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
-  // The next local midnight, which is 23, 24 or 25 hours along. Calendar arithmetic, never
-  // 24-hour blocks: history-range walks the day files by this rule and the axis under them has
-  // to walk by the same one. Stepped by 86400000 instead, the morning a clock falls back lands
-  // back inside the day it just left — an eighth tick in a week of seven, the same name twice,
-  // and every column after it labelled with the day before.
-  function nextDay(t) { var d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime(); }
   function cssVar(name) {
     if (typeof getComputedStyle !== 'function' || !document.documentElement) return '#888';
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
@@ -930,16 +1018,21 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   function timeTicks(g, b, t0, t1, range) {
     var ticks = [], x, d;
     if (t1 <= t0) t1 = t0 + 1;
+    // The walk's own ceiling, whatever ends it is handed. The grids above are capped in days and
+    // in hours; this is the one loop whose length is the SPAN rather than a grid, and an axis
+    // carrying more names than a reader can count is not an axis — it is three hundred thousand
+    // canvas calls a frame, drawn again on every resize, every tap and every change of scheme.
+    var MAX_TICKS = 400;
     if (range === '24h') {
       var t = new Date(t0); t.setMinutes(0, 0, 0);
-      for (x = t.getTime(); x <= t1; x += HOUR) if (new Date(x).getHours() % 6 === 0 && x >= t0) ticks.push({ t: x, text: hhmm(x) });
+      for (x = t.getTime(); x <= t1 && ticks.length < MAX_TICKS; x += HOUR) if (new Date(x).getHours() % 6 === 0 && x >= t0) ticks.push({ t: x, text: hhmm(x) });
     } else if (range === '7d') {
       // The name is centred over the day, so it is given the day's own width rather than a flat
       // twenty-four hours: the column a clock changed in is an hour wider or narrower than the
       // six beside it, and a centre measured off the wrong width sits in its neighbour.
-      for (d = startOfDay(t0); d < t1; d = nextDay(d)) if (d >= t0) ticks.push({ t: d, text: dayWord(d), center: nextDay(d) - d });
+      for (d = startOfDay(t0); d < t1 && ticks.length < MAX_TICKS; d = nextDay(d)) if (d >= t0) ticks.push({ t: d, text: dayWord(d), center: nextDay(d) - d });
     } else {
-      for (d = startOfDay(t0); d < t1; d = nextDay(d)) if (d >= t0 && new Date(d).getDate() % 5 === 0) ticks.push({ t: d, text: monWord(d) });
+      for (d = startOfDay(t0); d < t1 && ticks.length < MAX_TICKS; d = nextDay(d)) if (d >= t0 && new Date(d).getDate() % 5 === 0) ticks.push({ t: d, text: monWord(d) });
     }
     ticks.forEach(function (tk) {
       var xx = b.l + ((tk.t - t0) / (t1 - t0)) * (b.r - b.l);
@@ -969,6 +1062,48 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     g.c.stroke(); return end;
   }
   function xOf(b, cur) { return b.l + cur * (b.r - b.l); }
+  /**
+   * Which slot the reader's finger is over.
+   *
+   * A 24h chart plots POINTS a minute apart and the nearest one wins. A long range plots slots an
+   * hour or a day wide — the one the finger is inside wins, and the last of them ends at the edge
+   * of the range rather than at its own left corner.
+   */
+  function slotAt(cur, n, live) {
+    if (cur == null || !(n > 0)) return null;
+    return live ? Math.round(cur * (n - 1)) : Math.max(0, Math.min(n - 1, Math.floor(cur * n)));
+  }
+  /**
+   * The first moment the record covers, which on a range younger than itself is later than the
+   * range opens. Hours and days are written by one reader over one window, so the earlier of the
+   * two is where the journal begins.
+   */
+  function recordFrom() {
+    var d = state.data, t = null, i, x;
+    var hrs = (d && d.hours) || [], list = (d && d.days) || [];
+    for (i = 0; i < hrs.length; i++) { x = hrs[i].t; if (typeof x === 'number' && isFinite(x) && (t === null || x < t)) t = x; }
+    for (i = 0; i < list.length; i++) { x = dayStart(list[i].date); if (isFinite(x) && (t === null || x < t)) t = x; }
+    return t === null ? null : startOfDay(t);
+  }
+  /**
+   * The one line that explains an empty left half.
+   *
+   * "No readings before", and never "the journal starts here": what this can see is the oldest
+   * trace INSIDE the window, and a journal older than the range with a hole at the front — a
+   * serve that was off all week — hands back the same answer. The sentence says the thing that
+   * is true of both.
+   *
+   * Once a chart and in the page's grey. A serve younger than the range it is being asked for is
+   * not a fault — it is a serve that was started on Tuesday — and a warning would say otherwise
+   * three times over. Dropped where the empty zone is too narrow to hold it: a label wider than
+   * the space it explains is a label over the data.
+   */
+  function startNote(g, b, t0, t1, first) {
+    if (typeof first !== 'number' || !isFinite(first) || !(first > t0)) return;
+    var x = Math.min(b.r, b.l + ((first - t0) / (t1 - t0 || 1)) * (b.r - b.l));
+    if (x - b.l < 96) return;
+    label(g, 'no readings before ' + monWord(first), (b.l + x) / 2, (b.t + b.b) / 2, { align: 'center', size: 10 });
+  }
 
   // ── the head and the legend ─────────────────────────────────────────────────────────
   function head(id, sub, stat, tapped) {
@@ -1008,11 +1143,17 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
 
   function drawCtx() {
     var d = state.data, r = roster(), live = state.range === '24h';
-    var series = live ? ctxLines(d.samples, d.cadence || MIN, r) : ctxRows(d.hours, r);
+    var series = live ? ctxLines(d.samples, d.cadence || MIN, r) : ctxRows(d.hours, r, d.from, d.to);
     if (series.length === 0) return blank('ctx', live ? 'per session · 24h' : 'per session · hour max · ' + state.range);
     var g = setup(el('ctx-canvas'), height(live ? 'ctx24' : 'ctxRows')), b = plotBox(g);
-    var t0 = series[0].t0, t1 = t0 + (series[0].v.length - 1) * series[0].step;
-    var cur = state.cursor.ctx, idx = cur == null ? null : Math.round(cur * (series[0].v.length - 1));
+    // The long ranges close at the end of the WINDOW, not at the last hour that has a slot: the
+    // grid is the range's, so the last slot is an hour wide like the ones before it.
+    // The grid is capped and the window's far end is not, so the axis is drawn over what the
+    // grid actually covers. Handed the raw end, the tick walk turned a window off the wire
+    // into tens of thousands of labels a frame — a tab that stops answering, with no error.
+    var t0 = series[0].t0, t1 = live ? t0 + (series[0].v.length - 1) * series[0].step
+                                     : Math.min(d.to, t0 + series[0].v.length * series[0].step);
+    var cur = state.cursor.ctx, idx = slotAt(cur, series[0].v.length, live);
     var iso = isoOf('ctx'), climbing = 0, i;
     for (i = 0; i < series.length; i++) if (rising(series[i])) climbing++;
     if (live) {
@@ -1069,6 +1210,9 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
         label(g, (v === null ? '—' : Math.round(v) + '%') + (idx === null && up ? ' ↑' : ''), b.r - 2, top + 9, { align: 'right', size: 10, weight: 600, color: g.fg });
         if (idx !== null && s.v[idx] !== null) dot(g, xOf(b, cur), rowY(s.v[idx]), color, 3);
       });
+      // After the bands, never before: each row rules its own baseline straight through the
+      // sentence, and the sentence is what explains the space those baselines cross.
+      startNote(g, b, t0, t1, recordFrom());
       if (idx !== null) { var x2 = xOf(b, cur); hair(g, x2, b.t, x2, b.b, g.fg, .5); }
       head('ctx', idx === null ? 'per session · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + hhmm(t0 + idx * HOUR),
            climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
@@ -1078,7 +1222,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
 
   function drawCost() {
     var d = state.data, r = roster(), live = state.range === '24h';
-    var cost = live ? costHourly(d.samples, r) : costDaily(d.days, r);
+    var cost = live ? costHourly(d.samples, r) : costDaily(d.days, r, d.from, d.to);
     var buckets = cost.buckets, n = buckets.length;
     if (n === 0) return blank('cost', 'per project · ' + (live ? 'hourly · 24h' : 'daily · ' + state.range));
     var g = setup(el('cost-canvas'), height('cost')), b = plotBox(g);
@@ -1090,9 +1234,12 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       var y = b.b - (v / ymax) * (b.b - b.t); hair(g, b.l, y, b.r, y, g.line);
       if (v > 0) label(g, '$' + (v < 1 ? v.toFixed(1) : v), b.l + 2, y - 3);
     }
-    var slotW = (b.r - b.l) / n, barW = Math.min(24, slotW * .72);
+    // Capped, because the columns are the RANGE's now: a week in which the serve ran for one day
+    // is one bar with six empty slots beside it, and a bar given the whole plot to fill is a
+    // single day drawn as a wall. Wide enough to stay a bar, never wide enough to be a panel.
+    var slotW = (b.r - b.l) / n, barW = Math.min(48, slotW * .72);
     var cur = state.cursor.cost, iso = isoOf('cost');
-    var sel = cur == null ? null : Math.min(n - 1, Math.floor(cur * n));
+    var sel = slotAt(cur, n, false);
     buckets.forEach(function (bk, i) {
       var x = b.l + i * slotW + (slotW - barW) / 2, acc = 0, yTop = b.b, top = -1;
       bk.by.forEach(function (val, k) { if (val > 0) top = k; });
@@ -1112,7 +1259,9 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       // The column's own total on its cap, only where a week of them has the room.
       if (n <= 7 && totals[i] > 0) label(g, '$' + totals[i].toFixed(totals[i] >= 100 ? 0 : 1), x + barW / 2, yTop - 5, { align: 'center', color: g.fg, weight: 600 });
     });
-    timeTicks(g, b, buckets[0].t, buckets[n - 1].t + buckets[n - 1].span, state.range);
+    var xEnd = buckets[n - 1].t + buckets[n - 1].span;
+    timeTicks(g, b, buckets[0].t, xEnd, state.range);
+    if (!live) startNote(g, b, buckets[0].t, xEnd, recordFrom());
     var total = totals.reduce(function (a, v) { return a + v; }, 0);
     var keys = legendByCost(cost), bk2 = sel === null ? null : buckets[sel];
     // A bucket nobody read is not a bucket that cost nothing. The bars already draw it as the
@@ -1133,15 +1282,17 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
 
   function drawQuota() {
     var d = state.data, live = state.range === '24h';
-    var q = live ? quotaOfSamples(d.samples, d.cadence || MIN) : quotaOfHours(d.hours, d.resets);
+    var q = live ? quotaOfSamples(d.samples, d.cadence || MIN) : quotaOfHours(d.hours, d.resets, d.from, d.to);
     var n = q.five.length;
     if (n === 0) return blank('quota', 'account · ' + state.range);
     var g = setup(el('quota-canvas'), height('quota')), b = plotBox(g);
-    var t0 = q.t0, t1 = t0 + (n - 1) * q.step;
+    var t0 = q.t0, t1 = live ? t0 + (n - 1) * q.step : Math.min(d.to, t0 + n * q.step);
     var yOf = function (v) { return b.b - (v / 100) * (b.b - b.t); };
     var xAt = function (t) { return b.l + ((t - t0) / (t1 - t0 || 1)) * (b.r - b.l); };
     var iso = isoOf('quota'), a5 = iso !== null && iso !== '5h' ? .25 : 1, a7 = iso !== null && iso !== '7d' ? .25 : 1;
+    var end5 = null, end7 = null;
     pctGrid(g, b); timeTicks(g, b, t0, t1, state.range);
+    if (!live) startNote(g, b, t0, t1, recordFrom());
     // The seven-day turnover is the event of the week and gets a full line with its name. The
     // five-hour one does not: there are five a day, so a week is thirty lines and a month a
     // hundred and fifty — a picket fence over the chart, each one labelled the same thing. It
@@ -1179,13 +1330,19 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       }
       g.c.restore();
       g.c.save(); g.c.globalAlpha = a5; g.c.strokeStyle = g.dim; g.c.lineWidth = 2; g.c.lineJoin = 'round';
-      polyline(g, { v: q.five, step: q.step }, b, t0, t1, yOf); g.c.restore();
+      end5 = polyline(g, { v: q.five, step: q.step }, b, t0, t1, yOf); g.c.restore();
     } else {
       // A hundred and fifty sawtooth windows in a month is a wall: each window is drawn as
       // its own high instead, a bar as wide as the window, its right edge the reset.
       var bounds = [t0], w;
       for (w = 0; w < q.resets.length; w++) if (q.resets[w].limit === 'five_hour') bounds.push(q.resets[w].t);
-      bounds.push(t1);
+      // The record's end closes the last window, not the range's. Run to the far end instead,
+      // the bar paints every hour between the last reading and the close of the range at the
+      // height of a peak reached before any of them — the firm line through a moment nobody
+      // measured that this chart exists not to draw.
+      var lastFive = -1;
+      for (w = n - 1; w >= 0 && lastFive < 0; w--) if (q.five[w] !== null) lastFive = w;
+      bounds.push(lastFive < 0 ? t1 : Math.min(t1, t0 + (lastFive + 1) * q.step));
       for (w = 0; w < bounds.length - 1; w++) {
         var i0 = Math.round((bounds[w] - t0) / q.step), i1 = Math.round((bounds[w + 1] - t0) / q.step), peak = null;
         // The hour a window turns over in belongs to BOTH windows, ten minutes to the one that
@@ -1203,11 +1360,14 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       }
     }
     g.c.save(); g.c.globalAlpha = a7; g.c.strokeStyle = g.fg; g.c.lineWidth = 2; g.c.lineJoin = 'round';
-    polyline(g, { v: q.seven, step: q.step }, b, t0, t1, yOf); g.c.restore();
+    end7 = polyline(g, { v: q.seven, step: q.step }, b, t0, t1, yOf); g.c.restore();
     var e5 = lastOf(q.five), e7 = lastOf(q.seven);
-    if (e5 !== null && live) dot(g, b.r, yOf(e5), g.dim);
-    if (e7 !== null) dot(g, b.r, yOf(e7), g.fg);
-    var cur = state.cursor.quota, idx = cur == null ? null : Math.round(cur * (n - 1));
+    // On the curve's own last point, which is the right edge only where the range ends at a
+    // reading. A dot at the edge, over a week the serve was up for one day of, is a reading
+    // nobody took, dated thirteen hours after the last one anybody did.
+    if (live && end5 !== null) dot(g, end5.x, end5.y, g.dim);
+    if (end7 !== null) dot(g, end7.x, end7.y, g.fg);
+    var cur = state.cursor.quota, idx = slotAt(cur, n, live);
     if (idx !== null) {
       var x3 = xOf(b, cur); hair(g, x3, b.t, x3, b.b, g.fg, .5);
       if (live && q.five[idx] !== null) dot(g, x3, yOf(q.five[idx]), g.dim, 3.5);
