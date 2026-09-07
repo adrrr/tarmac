@@ -313,20 +313,37 @@ export function createFleetServer({
       return;
     }
 
+    // `url` is always set on a server-side request; the assertion adds no branch.
+    const url = new URL(req.url!, 'http://localhost');
+
     // The Host check stops another origin READING this port; it does not stop one poking it.
     // Any page the user visits can `fetch(…, {mode:'no-cors'})` here as fast as it likes —
     // CORS hides the answer, but each request still spawns `claude agents --json`. Browsers
     // label their own requests, so a label that says cross-site is refused before anything is
     // spawned; a client that sends no label (curl, a script) is left alone.
     const site = req.headers['sec-fetch-site'];
-    if (typeof site === 'string' && site !== 'same-origin' && site !== 'none') {
+    // A top-level navigation to one of the pages is exempt, whatever site it says it came
+    // from. Going to the page is not being used to reach it: a link tapped in a chat app, or
+    // in any other application, arrives labelled `cross-site` — the user's own tap, refused,
+    // while the same URL retyped in the address bar (`none`) was served, so the dashboard
+    // looked broken depending on how you had arrived (#168).
+    //
+    // Three words keep the exemption exactly that tap. `document`: a page framing us is
+    // `iframe`, `embed` or `object`, and a page fetching us is a mode of its own — every
+    // shape where the browser is somebody else's hands stays refused. GET: an auto-submitted
+    // cross-site form arrives with this exact label triple and no tap at all. And the pages:
+    // a person lands on `/`, `/map` or `/history`; nothing human navigates to the JSON, which
+    // is the very data (cwd paths, session ids, costs) this guard keeps on the machine.
+    const navigating =
+      req.method === 'GET' &&
+      req.headers['sec-fetch-mode'] === 'navigate' &&
+      req.headers['sec-fetch-dest'] === 'document' &&
+      PAGES.has(url.pathname);
+    if (typeof site === 'string' && site !== 'same-origin' && site !== 'none' && !navigating) {
       res.writeHead(403, { ...identity, 'content-type': 'text/plain; charset=utf-8' });
       res.end('tarmac serves same-origin requests only\n');
       return;
     }
-
-    // `url` is always set on a server-side request; the assertion adds no branch.
-    const url = new URL(req.url!, 'http://localhost');
 
     // `/live` is what the open page asks for every few seconds: the same render as `/`, minus
     // the shell. Serving the whole page there would hand the running script a copy of itself.
