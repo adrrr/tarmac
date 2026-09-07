@@ -214,11 +214,38 @@ export function rawGetText(
   extra: Record<string, string> = {},
   timeoutMs = NET_DEADLINE_MS,
 ): Promise<RawAnswer> {
+  return rawRequest('GET', port, host, path, extra, timeoutMs);
+}
+
+/**
+ * The same bounded request with the verb in hand, status only. The cross-site guard exempts
+ * GET navigations alone, and the test that pins the verb has to send another one — through
+ * this file, which is where every raw request stays bounded once.
+ */
+export function rawSend(
+  method: string,
+  port: string,
+  host: string,
+  path = '/api/fleet',
+  extra: Record<string, string> = {},
+  timeoutMs = NET_DEADLINE_MS,
+): Promise<number | undefined> {
+  return rawRequest(method, port, host, path, extra, timeoutMs).then((answer) => answer.status);
+}
+
+function rawRequest(
+  method: string,
+  port: string,
+  host: string,
+  path: string,
+  extra: Record<string, string>,
+  timeoutMs: number,
+): Promise<RawAnswer> {
   return new Promise((resolve, reject) => {
     // `setHost` off for the empty one, and only for it: node reads a `Host` of `''` as no Host
     // given and writes its OWN — `127.0.0.1:port`, which is loopback, which is the one answer
     // that would make an empty Host look served. A test that asks for nothing has to get it.
-    const options = { host: '127.0.0.1', port, path, headers: { Host: host, ...extra }, timeout: timeoutMs };
+    const options = { method, host: '127.0.0.1', port, path, headers: { Host: host, ...extra }, timeout: timeoutMs };
     const req = http.request(host === '' ? { ...options, setHost: false } : options, (res) => {
       let body = '';
       res.setEncoding('utf8');

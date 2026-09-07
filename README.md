@@ -76,7 +76,9 @@ silence.
 
 It binds to loopback. It refuses any request whose `Host` is not loopback, and any request a
 browser marks as coming from another origin, so your cwd paths and costs never leave the
-machine. A client that sends no such mark, curl or a script, is left alone. A reverse proxy
+machine. A link tapped in a chat app still opens the dashboard — a top-level GET navigation to
+a page is you arriving, not a page reading you. A client that sends no such mark, curl or a
+script, is left alone. A reverse proxy
 presents a `Host` of its own, so `--trust-host <name>` names the one to let through;
 [the manual](docs/MANUAL.md#putting-it-behind-a-reverse-proxy) says who that lets in. The
 listening rules are [there too](docs/MANUAL.md#what-serve-listens-on).

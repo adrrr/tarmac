@@ -242,7 +242,11 @@ tarmac serving http://127.0.0.1:4477
 It binds to loopback. It refuses any request whose `Host` is not loopback, and any request a
 browser marks as coming from another origin, meaning `Sec-Fetch-Site` anything but
 `same-origin` or `none`. Your cwd paths and costs never leave the machine. A client that sends
-no such header, curl or a script, is left alone. Naming a host yourself is the one way past the
+no such header, curl or a script, is left alone. So is a top-level GET navigation to one of the
+pages — `Sec-Fetch-Mode: navigate` with `Sec-Fetch-Dest: document` — because a link tapped in a
+chat app is you going to the page, and it arrives labelled like any other cross-site request. A
+frame, a subresource, a `fetch`, a cross-site form and a navigation aimed at the JSON endpoints
+are not that tap and are still refused. Naming a host yourself is the one way past the
 `Host` rule, and that is [below](#putting-it-behind-a-reverse-proxy).
 
 A busy default port walks up to the next free one and says so. A port you chose yourself, by

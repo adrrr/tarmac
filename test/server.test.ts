@@ -13,7 +13,7 @@ import { guardVersions, schemaNotice } from '../src/schema.ts';
 import { buildFleet } from '../src/fleet.ts';
 import { parseAgents } from '../src/sessions.ts';
 import { health, row } from './fleet-fixtures.ts';
-import { NET_DEADLINE_MS, rawGet, rawGetText } from './bounded.ts';
+import { NET_DEADLINE_MS, rawGet, rawGetText, rawSend } from './bounded.ts';
 import type { FleetServerDeps } from '../src/server.ts';
 import { HISTORY_CADENCE_MS } from '../src/history.ts';
 import type { HistoryPayload } from '../src/history.ts';
@@ -817,6 +817,43 @@ test('a request a browser labels cross-site is refused before it can spawn anyth
     assert.equal(collected, 0, 'and nothing was spawned');
     assert.equal(await rawGet(port, `localhost:${port}`, '/api/fleet', { 'sec-fetch-site': 'same-origin' }), 200);
     assert.equal(await rawGet(port, `localhost:${port}`, '/api/fleet'), 200, 'curl sends no such header');
+  });
+});
+
+// A link tapped in a chat app arrives labelled `cross-site`, exactly as a hostile page's fetch
+// does, and the dashboard rendered the refusal at it — while the same URL retyped in the address
+// bar (`none`) worked, so the page looked broken depending on how you had arrived (#168). What
+// separates the two is not the site: it is that the user is GOING to the page rather than being
+// used by one, and only a top-level document navigation is that.
+test('a top-level navigation is served whatever site a browser says it came from', async () => {
+  let collected = 0;
+  const counting = async (): Promise<Fleet> => {
+    collected++;
+    return { rows: [row()], health: health() };
+  };
+  await withServer(counting, async (base) => {
+    const port = new URL(base).port;
+    const navigation = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+    const answer = await rawGetText(port, `localhost:${port}`, '/', navigation);
+    assert.equal(answer.status, 200);
+    assert.match(answer.body, /<!doctype/i, 'the page, not the refusal');
+    // A hostile page can frame us, and the destination is what says so: `document` is the
+    // top-level one.
+    assert.equal(await rawGet(port, `localhost:${port}`, '/', { ...navigation, 'sec-fetch-dest': 'iframe' }), 403);
+    // The other two words of the exemption, each pinned on its own. The mode: `no-cors` with a
+    // `document` destination is not a navigation. The verb: an auto-submitted cross-site form
+    // arrives with the exact label triple of a tapped link and no tap at all. The target: nothing
+    // human navigates to the JSON, and the guard was written for that data in the first place.
+    assert.equal(await rawGet(port, `localhost:${port}`, '/', { ...navigation, 'sec-fetch-mode': 'no-cors' }), 403);
+    assert.equal(await rawSend('POST', port, `localhost:${port}`, '/', navigation), 403);
+    assert.equal(await rawGet(port, `localhost:${port}`, '/api/fleet', navigation), 403);
+    // And the request this guard was written for is untouched: a page using the browser as its
+    // hands, which spawns `claude agents --json` however little of the answer it can read.
+    assert.equal(
+      await rawGet(port, `localhost:${port}`, '/api/fleet', { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty' }),
+      403,
+    );
+    assert.equal(collected, 1, 'the navigation was served and nothing else was');
   });
 });
 

@@ -22,6 +22,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   than treated as no config at all. Through the link, deliberately, where the snapshot reader
   looks at the link itself: a config kept in a dotfiles repository and symlinked into place is a
   setup this file honours, and a link to a pipe still freezes nothing.
+- **A dashboard link tapped in another app opens the dashboard.** Chrome labels a navigation that
+  starts in a chat app or on another site `Sec-Fetch-Site: cross-site`, and the cross-site guard
+  refused it — so the same URL rendered `tarmac serves same-origin requests only` when tapped and
+  the page when retyped in the address bar, which reads as randomly broken. A top-level GET
+  navigation to one of the pages is exempt now: the user is going to the page, not being used by
+  one. Everything the guard was written for stands — a frame, a `fetch`, a cross-site form and a
+  navigation aimed at the JSON endpoints included — so no page can still make this port spawn
+  `claude agents --json` behind your back.
 
 ## [0.10.0] - 2026-09-06
 
