@@ -153,6 +153,21 @@ test('a config file that exists but cannot be read is reported, never treated as
   const file = path.join(tmpdir(), 'config.json');
   fs.mkdirSync(file);
   assert.throws(() => readConfigFile(file), new RegExp(escape(file)));
+  // Refused on the kind since #165, which is what keeps a FIFO from being opened at all: the
+  // message has to name what was found, not the errno of an open that no longer happens.
+  assert.match(failure(() => readConfigFile(file)), /not a regular file/);
+});
+
+// The other half of the kind check, and the half the snapshot reader answers the other way: a
+// config kept in a dotfiles repository and symlinked into place is an ordinary setup, so the
+// kind is asked THROUGH the link. Refusing it would drop settings its owner wrote and can see.
+test('a config file symlinked from somewhere else is read through the link', () => {
+  const dir = tmpdir();
+  const real = path.join(dir, 'dotfiles-config.json');
+  fs.writeFileSync(real, JSON.stringify({ port: 8080 }));
+  const link = path.join(dir, 'config.json');
+  fs.symlinkSync(real, link);
+  assert.deepEqual(readConfigFile(link), { port: 8080 });
 });
 
 test('an unknown key is refused, and the message says what would have been understood', () => {

@@ -167,6 +167,28 @@ const KNOWN_KEYS = ['staleAfterMs', 'port', 'snapshotsDir', 'trustHosts', 'histo
 export function readConfigFile(file: string): FileConfig {
   let text: string;
   try {
+    // The kind is asked BEFORE the open, and only a regular file is opened: `readFileSync` on a
+    // FIFO waits for a writer that need never come, and every reading command resolves settings
+    // first — one named pipe here stopped `list` and `serve` alike, with no output and nothing
+    // to press (#165). The snapshot reader asks the same question for the same reason (#160).
+    //
+    // `stat`, where that reader takes `lstat`, and the difference is the whole of the thought:
+    // the one shape the two disagree about is a link to an ordinary file, which here is a config
+    // kept in a dotfiles repository and symlinked into place — a setup this file must honour,
+    // where a snapshot is only ever what the wrapper wrote. `stat` refuses a link to a pipe
+    // exactly as `lstat` does, and that is the shape that freezes.
+    //
+    // A check before an open is a race, and it stays one: a pipe put there between the stat and
+    // the read still blocks — and of the three places that ask this question, this is the one
+    // where losing costs an unbounded hang, not a skipped entry. What the check removes is the
+    // case that happens, a FIFO sitting at the path; the residue needs a writer racing to the
+    // microsecond for the same local hang he could have caused outright.
+    //
+    // Refused, not read as absent: a config file that turns out to have been ignored all along
+    // is the lie this module exists to prevent, and nothing behind that name will ever be read.
+    if (!fs.statSync(file).isFile()) {
+      throw new Error('not a regular file — a directory, a socket or a named pipe cannot carry settings, and reading one can wait for ever');
+    }
     text = fs.readFileSync(file, 'utf8');
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return {};

@@ -207,6 +207,22 @@ test('a config file that is not JSON is reported', () => {
   assert.match(r.stderr, /not valid JSON/);
 });
 
+// Settings are resolved before anything is printed, and `readFileSync` on a FIFO waits for a
+// writer that need never come: a named pipe wearing the config file's name used to stop every
+// reading command with no output and nothing to press (#165). Through the binary, where the
+// spawn timeout bounds it — a unit call that regressed would hang this suite rather than fail
+// it, the read being synchronous.
+test('a config file that is a named pipe is refused by kind rather than opened', () => {
+  const h = fakeHome();
+  const made = spawnSync('mkfifo', [h.config]);
+  assert.equal(made.status, 0, `mkfifo ${h.config}: ${made.error?.message ?? made.stderr}`);
+  const r = list(h, { flags: ['--json'] });
+  assert.equal(r.status, 1, 'it finished rather than waiting for a writer');
+  assert.match(r.stderr, /not a regular file/, 'and says what it found');
+  assert.match(r.stderr, new RegExp(escapeRe(h.config)), 'under which name');
+  assert.equal(r.stdout, '', 'no fleet printed as if the file had been read');
+});
+
 // A directory set once in a config file and later renamed is the ordinary way this goes
 // wrong, and the old answer — "statusline chained on 0/1 sessions", exit 0 — reads as a
 // perfectly healthy fleet that simply has not been installed yet.
