@@ -34,8 +34,8 @@ npx @adrrr/tarmac uninstall    # hand your status line back
 On a fresh machine the first three of those are one session and no history, which is not much
 of a dashboard. `serve --demo` is the same dashboard over eight invented sessions, a day of
 their record and a month of journal under that, so the map, the replay and every range of the
-curves have something in them. It reads no fleet and writes nothing — the month it shows is
-invented in memory, like the rest of it — and the page it serves is badged `demo data`
+curves have something in them. It reads no fleet and writes nothing. The month it shows is
+invented in memory, like the rest of it, and the page it serves is badged `demo data`
 throughout.
 
 ```
@@ -76,7 +76,7 @@ silence.
 
 It binds to loopback. It refuses any request whose `Host` is not loopback, and any request a
 browser marks as coming from another origin, so your cwd paths and costs never leave the
-machine. A link tapped in a chat app still opens the dashboard — a top-level GET navigation to
+machine. A link tapped in a chat app still opens the dashboard. A top-level GET navigation to
 a page is you arriving, not a page reading you. A client that sends no such mark, curl or a
 script, is left alone. A reverse proxy
 presents a `Host` of its own, so `--trust-host <name>` names the one to let through;
