@@ -13,6 +13,15 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A named pipe named `config.json` no longer freezes every command.** The config read opened
+  `~/.claude/tarmac/config.json` without asking what wears the name, and `readFileSync` on a FIFO
+  waits for a writer that need never come — so one pipe there stopped `list`, `serve` and every
+  other reading command before a line was printed, the settings being resolved first. The kind is
+  asked before the open now, as it is in the snapshot directory since the same defect was fixed
+  there: only a regular file is read, and anything else under that name is refused by kind rather
+  than treated as no config at all. Through the link, deliberately, where the snapshot reader
+  looks at the link itself: a config kept in a dotfiles repository and symlinked into place is a
+  setup this file honours, and a link to a pipe still freezes nothing.
 - **A dashboard link tapped in another app opens the dashboard.** Chrome labels a navigation that
   starts in a chat app or on another site `Sec-Fetch-Site: cross-site`, and the cross-site guard
   refused it — so the same URL rendered `tarmac serves same-origin requests only` when tapped and
