@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: ['22', '24']
     steps:
       # `fetch-depth: 0` for the tags, which `test/changelog.test.ts` compares the CHANGELOG's
@@ -50,9 +50,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+        if: runner.os != 'Windows'
         env:
           # The whole reason this matrix includes Ubuntu.
           TARMAC_REQUIRE_DASH: '1'
+      # Windows has no dash to require, so the flag stays off this leg: the suite says
+      # itself which POSIX-only assertions it skips there, and the leg exists to watch
+      # everything else (issue #2 names this exact criterion).
+      - run: npm test
+        if: runner.os == 'Windows'
 
   artifact:
     name: artifact · node 20 · the published dist/
