@@ -52,16 +52,46 @@ const AGENTS_FIXTURE = /^agents-(\d+\.\d+\.\d+(?:-[0-9a-z.]+)?)(?:--[a-z]+)?\.js
 
 const agentsVersion = (file: string): string | null => AGENTS_FIXTURE.exec(file)?.[1] ?? null;
 
-const STATUSLINE_FIXTURE = /^statusline-payload-(.+)-[^-]+\.json$/;
+/**
+ * Every tag a statusline capture can wear, and the verdict each one claims about its payload.
+ * Not a word a human picked for what the file shows: `scripts/capture-fixtures.ts` names the
+ * file after the state `extractTelemetry` reached, and these are the three states it reaches.
+ */
+const CTX_STATE_BY_TAG: Record<string, string> = { live: 'ok', fresh: 'fresh', drift: 'drift' };
+
+/**
+ * The statusline family, where the tag is mandatory and sits behind a SINGLE dash — so the
+ * ambiguity the double dash settles above has to be settled here another way.
+ *
+ * `(.+)-[^-]+` read the last dash-separated word of any name as that tag, so
+ * `statusline-payload-2.1.232-rc.json` — the name a human writes for a dotless prerelease
+ * nobody tagged — parsed as build `2.1.232` wearing a tag called `rc`, and the checked list
+ * gained a build nobody captured: #50's failure, on the surface #50 did not cover (#82).
+ *
+ * The statusline tag has what the agents tag has not: a closed vocabulary. So the rule reads
+ * its tags off `CTX_STATE_BY_TAG` rather than off a list kept beside it, which is a list that
+ * stops being updated, and a last word that is no verdict is no tag. `…-rc.json` then matches
+ * nothing and reaches the reader as the naming rule rather than as a version, while
+ * `statusline-payload-2.1.232-rc-live.json` — that prerelease, captured live — reads as the
+ * build it names.
+ */
+const STATUSLINE_FIXTURE = new RegExp(`^statusline-payload-(.+)-(${Object.keys(CTX_STATE_BY_TAG).join('|')})\\.json$`);
+
+/** The build a statusline capture came from and the verdict its name claims, or nothing. */
+const statuslineFixture = (file: string): { version: string; tag: string } | null => {
+  const m = STATUSLINE_FIXTURE.exec(file);
+  return m ? { version: m[1]!, tag: m[2]! } : null;
+};
 
 /** What a fixture may be called, said once, in the words the failure below hands the reader. */
 const NAMING_RULE =
   'an agents capture is `agents-<version>.json` or `agents-<version>--<tag>.json` (one lowercase word for the tag, ' +
-  'behind a double dash); a statusline capture is `statusline-payload-<version>-<tag>.json`';
+  'behind a double dash); a statusline capture is `statusline-payload-<version>-<tag>.json`, where the tag is the ' +
+  `verdict the reader reaches on the payload (${Object.keys(CTX_STATE_BY_TAG).join(', ')})`;
 
 test('the checked versions are exactly the ones fixtures/ covers', () => {
   const files = fs.readdirSync(fixturesDir).filter((f) => f.endsWith('.json'));
-  const statusline = files.map((f) => STATUSLINE_FIXTURE.exec(f)?.[1]).filter((v): v is string => Boolean(v));
+  const statusline = files.map((f) => statuslineFixture(f)?.version).filter((v): v is string => Boolean(v));
   const agents = files.map(agentsVersion).filter((v): v is string => Boolean(v));
 
   // Same rule in both failures: a version in one list and not the other usually means a
@@ -81,7 +111,7 @@ test('the checked versions are exactly the ones fixtures/ covers', () => {
   // reader of that failure is someone who has just captured one and needs the rule, not a
   // pair of numbers that do not match.
   assert.deepEqual(
-    files.filter((f) => agentsVersion(f) === null && !STATUSLINE_FIXTURE.test(f)),
+    files.filter((f) => agentsVersion(f) === null && statuslineFixture(f) === null),
     [],
     `fixtures/ holds a name no rule here reads — ${NAMING_RULE}`,
   );
@@ -117,6 +147,37 @@ test('a name that breaks the tag rule is refused, never bent into a version', ()
     'not-agents-2.1.232.json', // the anchor: a suffix match would read a version out of this
   ]) {
     assert.equal(agentsVersion(bad), null, `${bad} is not a version this suite may vouch for`);
+  }
+});
+
+// The statusline half of the same promise, and the half that was resolving the ambiguity in
+// silence: the tag being a closed vocabulary is the whole of what tells it from the tail of a
+// prerelease, so both directions are pinned here as they are for the agents family above.
+test('a statusline tag is one of the verdicts the reader reaches, and a dash before anything else is version', () => {
+  assert.deepEqual(statuslineFixture('statusline-payload-2.1.232-live.json'), { version: '2.1.232', tag: 'live' });
+  assert.deepEqual(statuslineFixture('statusline-payload-2.1.226-fresh.json'), { version: '2.1.226', tag: 'fresh' });
+  assert.deepEqual(
+    statuslineFixture('statusline-payload-2.1.226-rc.1-drift.json'),
+    { version: '2.1.226-rc.1', tag: 'drift' },
+    'a prerelease is a version, not a tag',
+  );
+  assert.deepEqual(
+    statuslineFixture('statusline-payload-2.1.232-rc-live.json'),
+    { version: '2.1.232-rc', tag: 'live' },
+    'a dotless one is a version too, and can still be tagged',
+  );
+});
+
+test('a statusline name whose last word is no verdict is refused, never bent into a version', () => {
+  for (const bad of [
+    'statusline-payload-2.1.232-rc.json', // #82: a dotless prerelease nobody tagged, read as build 2.1.232
+    'statusline-payload-2.1.232.json', // no tag at all, and the tag is not optional here
+    'statusline-payload-2.1.232-LIVE.json', // the vocabulary is lowercase, as the manual says
+    'statusline-payload-2.1.232-alive.json', // and whole words: a verdict is not a suffix match
+    'statusline-payload--live.json', // a tag with no build in front of it
+    'agents-2.1.232.json', // the other family is not this one
+  ]) {
+    assert.equal(statuslineFixture(bad), null, `${bad} is not a version this suite may vouch for`);
   }
 });
 
@@ -213,19 +274,20 @@ test('every value the agents fixtures show is one the reader can actually read',
 //
 // Two claims per file, both read through the module that will have to read the real thing:
 // the build named in the filename is the build the payload says wrote it, and the tag is the
-// verdict `extractTelemetry` actually reaches (the mapping `scripts/capture-fixtures.ts` uses
-// to choose the name in the first place).
-const CTX_STATE_BY_TAG: Record<string, string> = { live: 'ok', fresh: 'fresh', drift: 'drift' };
-
+// verdict `extractTelemetry` actually reaches (`CTX_STATE_BY_TAG` above, the mapping
+// `scripts/capture-fixtures.ts` uses to choose the name in the first place).
 test('every statusline fixture is the build and the state its name claims', () => {
   const files = fs.readdirSync(fixturesDir).filter((f) => /^statusline-payload-/.test(f));
   assert.ok(files.length > 0, 'no statusline fixtures found — this test has stopped watching anything');
 
   for (const f of files) {
-    const [, version, tag] = /^statusline-payload-(.+)-([^-]+)\.json$/.exec(f)!;
+    // The name is read by the one rule, so a file the rule refuses is named here rather than
+    // parsed by a looser copy of it — which is how the tag came to be read as free text (#82).
+    const named = statuslineFixture(f);
+    assert.ok(named, `${f}: a name no rule here reads — ${NAMING_RULE}`);
     const t = extractTelemetry(JSON.parse(fs.readFileSync(path.join(fixturesDir, f), 'utf8')));
-    assert.equal(t.ccVersion, version, `${f}: the payload names a different build than the filename`);
-    assert.equal(t.ctxState, CTX_STATE_BY_TAG[tag!], `${f}: the tag is not the verdict the reader reaches`);
+    assert.equal(t.ccVersion, named.version, `${f}: the payload names a different build than the filename`);
+    assert.equal(t.ctxState, CTX_STATE_BY_TAG[named.tag], `${f}: the tag is not the verdict the reader reaches`);
   }
 });
 
@@ -233,7 +295,7 @@ test('every statusline fixture is the build and the state its name claims', () =
 // reads carrying a real value. A fixture where half of them come back null would freeze a
 // version as "checked" on a payload that never demonstrated the shape.
 test('a live statusline fixture carries every field the reader takes off a payload', () => {
-  const live = fs.readdirSync(fixturesDir).filter((f) => /^statusline-payload-.+-live\.json$/.test(f));
+  const live = fs.readdirSync(fixturesDir).filter((f) => statuslineFixture(f)?.tag === 'live');
   assert.ok(live.length > 0, 'no live statusline fixture — nothing proves the fields exist anywhere');
 
   for (const f of live) {
