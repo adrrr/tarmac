@@ -1210,8 +1210,12 @@ at least one frame:
 npm run fixtures:capture
 ```
 
-It writes `fixtures/agents-<version>.json` and `fixtures/statusline-payload-<version>-*.json`
-verbatim, then tells you to add the version to `CHECKED_VERSIONS` in `src/schema.ts`. The
+It writes `fixtures/agents-<version>.json` and `fixtures/statusline-payload-<version>-<tag>.json`
+verbatim, where the tag is the verdict the reader reached on that payload — `live`, `fresh` or
+`drift`, and nothing else, which is what tells the tag from the tail of a prerelease: a
+statusline capture of `2.1.232-rc` is `statusline-payload-2.1.232-rc-live.json`, and a name whose
+last word is no verdict fails the suite with the rule rather than being read as a build nobody
+captured. It then tells you to add the version to `CHECKED_VERSIONS` in `src/schema.ts`. The
 suite fails while the constant and the directory disagree, which is what keeps the guard
 from claiming a coverage nobody verified. Read both files before committing, and scrub
 them: they come off your machine carrying real paths, session names and costs. The
