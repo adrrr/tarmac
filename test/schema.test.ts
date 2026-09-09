@@ -74,8 +74,14 @@ const CTX_STATE_BY_TAG: Record<string, string> = { live: 'ok', fresh: 'fresh', d
  * nothing and reaches the reader as the naming rule rather than as a version, while
  * `statusline-payload-2.1.232-rc-live.json` — that prerelease, captured live — reads as the
  * build it names.
+ *
+ * The build in front keeps the shape the agents rule enforces, `x.y.z` with an optional
+ * prerelease: `statusline-payload-two-live.json` and a double dash before the tag are refused
+ * too, where `(.+)` read them as builds called `two` and `2.1.232-`.
  */
-const STATUSLINE_FIXTURE = new RegExp(`^statusline-payload-(.+)-(${Object.keys(CTX_STATE_BY_TAG).join('|')})\\.json$`);
+const STATUSLINE_FIXTURE = new RegExp(
+  `^statusline-payload-(\\d+\\.\\d+\\.\\d+(?:-[0-9a-z.]+)?)-(${Object.keys(CTX_STATE_BY_TAG).join('|')})\\.json$`,
+);
 
 /** The build a statusline capture came from and the verdict its name claims, or nothing. */
 const statuslineFixture = (file: string): { version: string; tag: string } | null => {
@@ -175,6 +181,9 @@ test('a statusline name whose last word is no verdict is refused, never bent int
     'statusline-payload-2.1.232-LIVE.json', // the vocabulary is lowercase, as the manual says
     'statusline-payload-2.1.232-alive.json', // and whole words: a verdict is not a suffix match
     'statusline-payload--live.json', // a tag with no build in front of it
+    'statusline-payload-2.1.232--live.json', // the agents double dash, misapplied: `2.1.232-` is no build
+    'statusline-payload-two-live.json', // a word in front of the tag is not a build either
+    'statusline-payload-2.1.232-WAITING-live.json', // #50 verbatim, now behind a real tag
     'agents-2.1.232.json', // the other family is not this one
   ]) {
     assert.equal(statuslineFixture(bad), null, `${bad} is not a version this suite may vouch for`);
