@@ -208,8 +208,11 @@ export function renderTable({ rows, health }: Fleet): string {
       r.uptimeMs === null ? '—' : `${Math.round(r.uptimeMs / 3600000)}h`,
     ].map(clip),
   );
-  const w = head.map((h, i) => Math.max(h.length, ...body.map((r) => r[i].length)));
-  const line = (cells: string[]): string => cells.map((c, i) => c.padEnd(w[i])).join('  ').trimEnd();
+  // Columns, not code points, on both halves of the arithmetic: a cap measured one way and a
+  // padding measured the other would line the table up against a width the cap never bounded.
+  const w = head.map((h, i) => Math.max(cols(h), ...body.map((r) => cols(r[i]))));
+  const line = (cells: string[]): string =>
+    cells.map((c, i) => c + ' '.repeat(Math.max(0, w[i] - cols(c)))).join('  ').trimEnd();
 
   const warns: string[] = [];
   if (health.noSessionId > 0)
@@ -330,11 +333,12 @@ function accountSplit(account: AccountReading | null, gauges: Gauge[]): string |
  * basename, a status word tarmac does not know or the free text a `waiting` session gives, a
  * model name, an effort — and one long value in any of them used to push every row of the
  * table past 190 columns, on a terminal that wraps at 80. The caps are picked so that the
- * worst fleet a source can hand this renderer stays within 120 CODE POINTS a row — display
- * width is the wider, separate question (#80): a CJK glyph is one point and two columns, and
- * the width math below counts `.length` like it always has. The page has CSS to wrap with, a
- * terminal has nothing. The other four are a percentage, an age, a cost and an hour count;
- * their own magnitude is what bounds them, and no cap here would ever bite.
+ * worst fleet a source can hand this renderer stays within 120 COLUMNS a row — what the
+ * terminal counts, rather than the code points the string holds (#80): a CJK name of 20
+ * glyphs is 20 points and 40 columns, and a cap that could not tell them apart kept its
+ * promise for ASCII alone. The page has CSS to wrap with, a terminal has nothing. The other
+ * four are a percentage, an age, a cost and an hour count; their own magnitude is what bounds
+ * them, and no cap here would ever bite.
  */
 // STATE is the widest of the four because it is two facts on one line: the state, and the
 // reason a `waiting` session gives for being in it. `waiting · permission prompt` — the
@@ -342,16 +346,189 @@ function accountSplit(account: AccountReading | null, gauges: Gauge[]): string |
 const CAPS: Array<number | null> = [20, 28, null, null, 16, 8, null, null];
 
 /**
- * One cell, cut to its column. The ellipsis is spent out of the cap rather than added past
- * it — a cap a cut cell can exceed is not a cap — and the cut is by code point, because half
- * a surrogate pair is not a shorter name, it is a broken one.
+ * One cell, made safe to print and cut to its column. The ellipsis is spent out of the cap
+ * rather than added past it — a cap a cut cell can exceed is not a cap — and the cut is by
+ * glyph, because half a surrogate pair is not a shorter name, it is a broken one, and neither
+ * is a name whose accent was left behind by the cut before it.
  */
 function clip(cell: string, i: number): string {
   const cap = CAPS[i];
-  if (cap === null) return cell;
-  const chars = Array.from(cell);
-  return chars.length <= cap ? cell : chars.slice(0, cap - 1).join('') + '…';
+  const text = sanitise(cell);
+  if (cap === null || cols(text) <= cap) return text;
+  let cut = '';
+  let n = 0;
+  for (const g of glyphs(text)) {
+    const width = widthOf(g);
+    // `>` and not `>=`: the budget is the cap minus the ellipsis, and a wide glyph that would
+    // land astride the edge is dropped whole, leaving the cell a column short of its cap.
+    if (n + width > cap - 1) break;
+    cut += g;
+    n += width;
+  }
+  return cut + '…';
 }
+
+/**
+ * What a source string is allowed to put in a cell.
+ *
+ * Three of the four capped values are the machine's, not ours: a POSIX basename may hold any
+ * byte but `/` and NUL, `waitingFor` is free text, and a status word is whatever the payload
+ * said. Printed as they arrive, a `\n` breaks one row into two physical lines that no cap
+ * measured and no padding aligned, a `\r` paints the next cell over this one, and an ESC hands
+ * whatever named that directory the terminal's own escape codes. Each control character
+ * becomes U+FFFD: one column, and visible, because a character silently dropped is a name
+ * silently rewritten — the reader has to be able to see that something was there.
+ */
+const sanitise = (cell: string): string => cell.replace(/\p{Cc}/gu, '\uFFFD');
+
+/**
+ * How many columns a string paints. What the terminal counts, and what neither `.length` nor
+ * a count of code points answers: a CJK ideograph and a fullwidth form take two, a combining
+ * accent takes none, and everything else takes one.
+ *
+ * A table rather than a dependency. What it does not resolve is what no two terminals agree
+ * on either: the East Asian Ambiguous class, whose width depends on the font the reader
+ * chose. Those stay at one, which is what a Western terminal draws.
+ */
+function cols(s: string): number {
+  let n = 0;
+  for (const g of glyphs(s)) n += widthOf(g);
+  return n;
+}
+
+/**
+ * The string split where a terminal can cut it: a code point, plus whatever rides on it.
+ *
+ * A combining mark, a variation selector, a skin tone and a zero-width joiner have no column
+ * of their own — they modify the glyph before them — so a cut between the two is the surrogate
+ * pair bug in another alphabet: a name that comes back missing its accent, or a family emoji
+ * ending in a joiner that binds to the ellipsis.
+ */
+function glyphs(s: string): string[] {
+  const out: string[] = [];
+  for (const ch of s) {
+    const prev = out.length - 1;
+    if (prev >= 0 && (RIDES.test(ch) || out[prev].endsWith(ZWJ))) out[prev] += ch;
+    else out.push(ch);
+  }
+  return out;
+}
+
+const ZWJ = '\u200D';
+/** Marks, joiners, variation selectors and skin tones: everything that belongs to a neighbour. */
+const RIDES = /\p{Mn}|\p{Me}|[\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}]/u;
+
+/**
+ * One glyph's columns. U+FE0F is asked about first because it is a REQUEST: it selects the
+ * emoji presentation of a character a terminal would otherwise draw in one column, and the
+ * terminals that honour it draw two.
+ */
+function widthOf(g: string): number {
+  if (g.includes('\uFE0F')) return 2;
+  const cp = g.codePointAt(0)!;
+  return WIDE.some(([lo, hi]) => cp >= lo && cp <= hi) ? 2 : 1;
+}
+
+/**
+ * Every code point Unicode 16.0 assigns and calls East Asian Wide or Fullwidth, and no other
+ * assigned one, plus the regions the standard leaves wide before assignment (the undesignated
+ * code points of planes 2 and 3 and of the CJK blocks), so a future CJK extension counts two
+ * columns before anyone regenerates this. Generated, not written: a range spans a gap only
+ * where the gap holds nothing assigned, so no narrow or ambiguous character is swept up by a
+ * round number.
+ *
+ *   python3 -c "import re,unicodedata as u;D=((0x3400,0x4dbf),(0x4e00,0x9fff),(0xf900,0xfaff),(0x20000,0x2fffd),(0x30000,0x3fffd));w=lambda c:(u.east_asian_width(chr(c)) in 'WF') if u.category(chr(c))!='Cn' else any(a<=c<=b for a,b in D);s=''.join('W' if w(c) else 'U' if u.category(chr(c))=='Cn' else 'N' for c in range(0x110000));print('\n'.join('  [0x%04x, 0x%04x],'%(m.start(),m.end()-1) for m in re.finditer('W[WU]*W|W',s)))"
+ *
+ * A block list is what this replaced, and it is the shape of the bug it fixes: U+2705,
+ * U+2B50 and U+23F3 are two columns and sit in no emoji block, U+1F321 is one column and
+ * sits inside one. There are 83 ranges because the standard has that many runs, not because
+ * anybody chose 83.
+ */
+const WIDE: Array<[number, number]> = [
+  [0x1100, 0x115f],
+  [0x231a, 0x231b],
+  [0x2329, 0x232a],
+  [0x23e9, 0x23ec],
+  [0x23f0, 0x23f0],
+  [0x23f3, 0x23f3],
+  [0x25fd, 0x25fe],
+  [0x2614, 0x2615],
+  [0x2630, 0x2637],
+  [0x2648, 0x2653],
+  [0x267f, 0x267f],
+  [0x268a, 0x268f],
+  [0x2693, 0x2693],
+  [0x26a1, 0x26a1],
+  [0x26aa, 0x26ab],
+  [0x26bd, 0x26be],
+  [0x26c4, 0x26c5],
+  [0x26ce, 0x26ce],
+  [0x26d4, 0x26d4],
+  [0x26ea, 0x26ea],
+  [0x26f2, 0x26f3],
+  [0x26f5, 0x26f5],
+  [0x26fa, 0x26fa],
+  [0x26fd, 0x26fd],
+  [0x2705, 0x2705],
+  [0x270a, 0x270b],
+  [0x2728, 0x2728],
+  [0x274c, 0x274c],
+  [0x274e, 0x274e],
+  [0x2753, 0x2755],
+  [0x2757, 0x2757],
+  [0x2795, 0x2797],
+  [0x27b0, 0x27b0],
+  [0x27bf, 0x27bf],
+  [0x2b1b, 0x2b1c],
+  [0x2b50, 0x2b50],
+  [0x2b55, 0x2b55],
+  [0x2e80, 0x303e],
+  [0x3041, 0x3247],
+  [0x3250, 0xa4c6],
+  [0xa960, 0xa97c],
+  [0xac00, 0xd7a3],
+  [0xf900, 0xfaff],
+  [0xfe10, 0xfe19],
+  [0xfe30, 0xfe6b],
+  [0xff01, 0xff60],
+  [0xffe0, 0xffe6],
+  [0x16fe0, 0x1b2fb],
+  [0x1d300, 0x1d376],
+  [0x1f004, 0x1f004],
+  [0x1f0cf, 0x1f0cf],
+  [0x1f18e, 0x1f18e],
+  [0x1f191, 0x1f19a],
+  [0x1f200, 0x1f320],
+  [0x1f32d, 0x1f335],
+  [0x1f337, 0x1f37c],
+  [0x1f37e, 0x1f393],
+  [0x1f3a0, 0x1f3ca],
+  [0x1f3cf, 0x1f3d3],
+  [0x1f3e0, 0x1f3f0],
+  [0x1f3f4, 0x1f3f4],
+  [0x1f3f8, 0x1f43e],
+  [0x1f440, 0x1f440],
+  [0x1f442, 0x1f4fc],
+  [0x1f4ff, 0x1f53d],
+  [0x1f54b, 0x1f54e],
+  [0x1f550, 0x1f567],
+  [0x1f57a, 0x1f57a],
+  [0x1f595, 0x1f596],
+  [0x1f5a4, 0x1f5a4],
+  [0x1f5fb, 0x1f64f],
+  [0x1f680, 0x1f6c5],
+  [0x1f6cc, 0x1f6cc],
+  [0x1f6d0, 0x1f6d2],
+  [0x1f6d5, 0x1f6df],
+  [0x1f6eb, 0x1f6ec],
+  [0x1f6f4, 0x1f6fc],
+  [0x1f7e0, 0x1f7f0],
+  [0x1f90c, 0x1f93a],
+  [0x1f93c, 0x1f945],
+  [0x1f947, 0x1f9ff],
+  [0x1fa70, 0x1faf8],
+  [0x20000, 0x3fffd],
+];
 
 /**
  * The STATE column, out of the same verdict the page draws from.

@@ -13,6 +13,22 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`tarmac list` keeps its width promise in every alphabet.** The four caps that bound a project,
+  a state, a model and an effort counted code points, and the padding that lines the columns up
+  counted them too — so a fleet whose names are written in CJK spent 102 points and painted 160
+  columns, on a terminal wrapping at 80, and one wide glyph in a project name pushed every cell
+  after it out of line with the row below. Both halves of the arithmetic measure display columns
+  now: every code point Unicode 16.0 calls East Asian Wide or Fullwidth counts for two, and the
+  cut falls between glyphs rather than between code points, so that an accent is never left behind
+  by the cut before it. Emoji are in that answer wherever the standard puts them, which is not
+  where the emoji blocks are: `✅`, `⭐` and `⏳` are two columns and sit outside them, and U+1F321
+  is one column and sits inside one. Ambiguous-width characters stay at one column, which is what
+  a Western terminal draws and what no two terminals agree on.
+- **A control character in a name can no longer break the table it sits in.** A POSIX basename may
+  hold anything but `/` and NUL and `waitingFor` is free text, so a `\n` in either broke one row
+  into two physical lines that no cap measured and no padding aligned — and an ESC handed whatever
+  named that directory the terminal's own escape codes. Each control character is rendered as
+  U+FFFD, one column and visible: what was there is not printed, and not silently dropped either.
 - **A named pipe named `config.json` no longer freezes every command.** The config read opened
   `~/.claude/tarmac/config.json` without asking what wears the name, and `readFileSync` on a FIFO
   waits for a writer that need never come — so one pipe there stopped `list`, `serve` and every

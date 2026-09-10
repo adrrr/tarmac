@@ -235,6 +235,170 @@ test('leaves an ordinary fleet whole', () => {
   assert.doesNotMatch(renderTable(fleet([row(), row({ project: 'mercury-dashboard', model: 'Opus 5' })])), /…/);
 });
 
+// #80: the caps above bound code points, and a terminal counts COLUMNS. The measure this
+// section argues from is written here rather than imported, so that it is a fact about the
+// fixtures and not the renderer agreeing with itself: one width per glyph they use, read off
+// Unicode 16.0 East_Asian_Width. A non-ASCII glyph nobody wrote down throws rather than
+// counting one, because the two-block regex this replaced gave U+2705 one column, which is
+// the bug's own answer.
+const REFERENCE_WIDTHS = new Map<string, number>([
+  ['項', 2],
+  ['目', 2],
+  ['✅', 2],
+  ['⭐', 2],
+  ['⏳', 2],
+  ['\u{1f21a}', 2], // squared CJK
+  ['\u{1b000}', 2], // kana supplement
+  ['…', 1],
+  ['·', 1],
+]);
+const cols = (s: string): number =>
+  Array.from(s).reduce((n, ch) => {
+    const cp = ch.codePointAt(0)!;
+    if (cp < 0x80) return n + 1;
+    const width = REFERENCE_WIDTHS.get(ch);
+    if (width === undefined) throw new Error(`no reference width for U+${cp.toString(16).toUpperCase()}`);
+    return n + width;
+  }, 0);
+
+/** The #49 fixture, in an alphabet whose glyphs are twice as wide as its code points. */
+const widest = (glyph: string): FleetRow =>
+  row({
+    project: glyph.repeat(60),
+    busy: null,
+    status: 'waiting',
+    waitingFor: glyph.repeat(60),
+    model: glyph.repeat(60),
+    effort: glyph.repeat(60),
+    costUsd: 98765.43,
+    uptimeMs: 999 * 3600_000,
+  });
+
+// The first is a CJK ideograph. The other five live nowhere near the CJK blocks: three emoji
+// the standard calls W (U+2705, U+2B50, U+23F3), a squared CJK form (U+1F21A) and a kana
+// supplement letter (U+1B000). A table written block by block missed all five, and any one of
+// them in every column painted a row 165 columns wide.
+const WIDE_GLYPHS = ['項', '✅', '⭐', '⏳', '\u{1f21a}', '\u{1b000}'];
+
+test('caps the columns a row paints, not the code points it spends', () => {
+  for (const glyph of WIDE_GLYPHS) {
+    const out = renderTable(fleet([widest(glyph)], { costUsd: 98765.43 }));
+    for (const l of out.split('\n').slice(0, 2)) assert.ok(cols(l) <= 120, `${glyph}: a row ${cols(l)} columns wide: ${l}`);
+  }
+});
+
+// The other half of the same measure, and the one a reader sees on an ordinary fleet: the
+// padding that lines the columns up has to spend the same units the cap does, or one wide
+// project pushes every cell after it out of line with the row below.
+test('a wide glyph pushes the next column by the columns it paints', () => {
+  for (const project of ['項目', '✅✅']) {
+    const out = renderTable(fleet([row({ project }), row({ sessionId: 's2', project: 'ab' })], { sessions: 2 }));
+    const [wide, ascii] = out.split('\n').slice(1, 3);
+    assert.equal(
+      cols(wide.slice(0, wide.indexOf('idle'))),
+      cols(ascii.slice(0, ascii.indexOf('idle'))),
+      `${project}: the STATE column starts at one place, whatever the project is written in`,
+    );
+  }
+});
+
+// Where the cut lands, pinned to the glyph: nine of these fill nineteen of the twenty columns,
+// and the ellipsis is spent out of the cap as it always was. Cutting by code point puts the
+// mark ten glyphs late and the row twenty columns wide.
+test('cuts a wide cell where its columns run out, not where its code points do', () => {
+  const out = renderTable(fleet([row({ project: '項'.repeat(60) })]));
+  assert.match(out.split('\n')[1], /^項{9}… {2}idle/);
+});
+
+// The table in `render.ts` against a reference it cannot influence: code points read off
+// `python3 -c "import unicodedata as u; print(u.east_asian_width(chr(0x2705)))"` on Unicode
+// 16.0, W and F two columns and every other assigned class one, taken on both sides of each
+// boundary a block-shaped table got wrong. U+3248..U+324F are the Ambiguous run inside the
+// kana block, and one column is what a Western terminal draws them in.
+const EAW_POINTS: Array<[number, number]> = [
+  [0x2319, 1], [0x231a, 2], [0x231b, 2], [0x231c, 1],
+  [0x23f2, 1], [0x23f3, 2], [0x23f4, 1],
+  [0x2704, 1], [0x2705, 2],
+  [0x26a0, 1], [0x26a1, 2],
+  [0x2b1a, 1], [0x2b1b, 2],
+  [0x2b4f, 1], [0x2b50, 2], [0x2b51, 1],
+  [0x3247, 2], [0x3248, 1], [0x324f, 1], [0x3250, 2],
+  [0x4dbf, 2], [0x4dc0, 2], [0x4dff, 2], [0xa4c6, 2],
+  [0x1f004, 2], [0x1f18e, 2], [0x1f19a, 2], [0x1f19b, 1],
+  [0x1f21a, 2], [0x1f320, 2], [0x1f321, 1], [0x1f32c, 1], [0x1f32d, 2],
+  [0x1f3ca, 2], [0x1f3cb, 1], [0x1f3ce, 1], [0x1f3cf, 2],
+  [0x1f5a4, 2], [0x1f5a5, 1], [0x1f5fa, 1], [0x1f5fb, 2],
+  [0x1f7f0, 2], [0x18b00, 2], [0x1b000, 2], [0x1b2fb, 2], [0x20000, 2], [0x323af, 2],
+];
+
+/** The spaces the padding spent on a cell: how many columns the renderer thinks it painted. */
+const padding = (line: string): number => {
+  const cell = line.slice(0, line.indexOf('idle'));
+  return cell.length - cell.trimEnd().length;
+};
+
+// Three of the glyph beside an ASCII cell of the columns it claims: same measure, same
+// padding. A glyph the renderer counts one column short pads one column long, and the two
+// rows come apart.
+test('measures a glyph the way East_Asian_Width does', () => {
+  for (const [cp, expected] of EAW_POINTS) {
+    const glyph = String.fromCodePoint(cp);
+    const out = renderTable(
+      fleet([row({ project: glyph.repeat(3) }), row({ sessionId: 's2', project: 'a'.repeat(3 * expected) })], { sessions: 2 }),
+    );
+    const [wide, ascii] = out.split('\n').slice(1, 3);
+    assert.equal(padding(wide), padding(ascii), `U+${cp.toString(16).toUpperCase()} paints ${expected} column(s)`);
+  }
+});
+
+// A basename may hold anything a filesystem allows and `waitingFor` is free text, so a control
+// character reaches this renderer with nothing between it and the terminal: a `\n` breaks one
+// row into two physical lines that no cap measured and no padding aligned.
+test('a control character cannot break the row it sits in', () => {
+  const out = renderTable(fleet([row({ project: 'al\npha' })]));
+  assert.equal(out.split('\n')[2], '', 'the table is still a header and one row');
+  assert.match(out, /al\ufffdpha +idle/, 'and the character that could not be printed is shown as one');
+});
+
+// ESC is the one whose consequence is not cosmetic: a project directory named with an escape
+// sequence would be handing whatever created it the terminal's own codes.
+test('an escape sequence in a source string never reaches the terminal', () => {
+  const out = renderTable(fleet([row({ busy: null, status: 'waiting', waitingFor: '\u001b[31mred' })], { unknownStatus: 0 }));
+  assert.doesNotMatch(out, /\u001b/, 'no escape survives the cell it arrived in');
+  assert.match(out, /waiting · \ufffd\[31mred/);
+});
+
+// The cut falls between glyphs, and a combining mark is not one: 'e' + U+0301 is a letter
+// with an accent on it, one column, and cutting between the two hands the ellipsis a bare
+// 'e' and drops the accent from the name. Nineteen of them fill nineteen of the twenty
+// columns; cut by code point, the mark lands mid-letter on the tenth.
+test('never cuts a combining mark away from the letter it rides on', () => {
+  const out = renderTable(fleet([row({ project: 'e\u0301'.repeat(30) })]));
+  assert.match(out.split('\n')[1], /^(e\u0301){19}… {2}idle/);
+});
+
+// U+FE0F is a request for the emoji presentation of a character the terminal would otherwise
+// draw in one column, and the terminals that honour it draw two. U+2764 is Neutral in the
+// standard and one column on its own, so the selector is the whole difference here.
+test('a variation selector asking for the emoji presentation is two columns', () => {
+  const out = renderTable(
+    fleet([row({ project: '\u2764\ufe0f'.repeat(3) }), row({ sessionId: 's2', project: 'a'.repeat(6) })], { sessions: 2 }),
+  );
+  const [emoji, ascii] = out.split('\n').slice(1, 3);
+  assert.equal(padding(emoji), padding(ascii), 'U+2764 U+FE0F paints the two columns U+2764 alone would not');
+});
+
+// A cell is made safe to print before the cap is consulted, and that order is the point: four
+// of the eight columns have no cap, and a guard that lived past the early return would cover
+// the capped four alone. The type forbids the word below. CTX prints the reader's own
+// vocabulary, not a payload's, so the fixture forces it, which is what a column moved to the
+// uncapped side of the list would not have to do.
+test('makes a cell safe to print before asking whether its column has a cap', () => {
+  const out = renderTable(fleet([row({ ctxPct: null, ctxState: 'dr\u001bift' as FleetRow['ctxState'] })]));
+  assert.doesNotMatch(out, /\u001b/, 'an uncapped column is no less printed than a capped one');
+  assert.match(out, /— dr\ufffdift/);
+});
+
 // ── the settings block ────────────────────────────────────────────────────────────────
 // `serve` runs unattended for hours, so the run has to open by saying what it decided and
 // on whose authority. A threshold whose origin is invisible is one nobody can correct.
