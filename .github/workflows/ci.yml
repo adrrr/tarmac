@@ -54,6 +54,34 @@ jobs:
           # The whole reason this matrix includes Ubuntu.
           TARMAC_REQUIRE_DASH: '1'
 
+  hygiene:
+    name: hygiene · no session links
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # `fetch-depth: 0` again, for a different reason than the test job's: what is under test is
+      # the commits this pull request ADDS, and a depth-1 checkout has neither the base it starts
+      # from nor anything between. On a pull request the checkout is the merge ref, whose two
+      # parents are the base and head shas named below, so full history reaches both.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The runner has shellcheck preinstalled, and dash mode is the shell CI runs it under.
+      - name: the guard parses where it will run
+        run: shellcheck --shell=dash scripts/no-session-links.sh
+
+      # On a push, `before` is the sha main stood at. It is the null sha on the first push to a
+      # branch, and a collected object after a force-push; the script reads the last commit alone
+      # rather than erroring out on either, so this passes the range as it comes.
+      - name: no session link in the commits this adds, or in the files it tracks
+        run: sh scripts/no-session-links.sh "$RANGE"
+        env:
+          RANGE: >-
+            ${{ github.event_name == 'pull_request'
+            && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha)
+            || format('{0}..{1}', github.event.before, github.sha) }}
+
   artifact:
     name: artifact · node 20 · the published dist/
     runs-on: ubuntu-latest
