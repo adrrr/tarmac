@@ -208,8 +208,11 @@ export function renderTable({ rows, health }: Fleet): string {
       r.uptimeMs === null ? '—' : `${Math.round(r.uptimeMs / 3600000)}h`,
     ].map(clip),
   );
-  const w = head.map((h, i) => Math.max(h.length, ...body.map((r) => r[i].length)));
-  const line = (cells: string[]): string => cells.map((c, i) => c.padEnd(w[i])).join('  ').trimEnd();
+  // Columns, not code points, on both halves of the arithmetic: a cap measured one way and a
+  // padding measured the other would line the table up against a width the cap never bounded.
+  const w = head.map((h, i) => Math.max(cols(h), ...body.map((r) => cols(r[i]))));
+  const line = (cells: string[]): string =>
+    cells.map((c, i) => c + ' '.repeat(Math.max(0, w[i] - cols(c)))).join('  ').trimEnd();
 
   const warns: string[] = [];
   if (health.noSessionId > 0)
@@ -330,11 +333,12 @@ function accountSplit(account: AccountReading | null, gauges: Gauge[]): string |
  * basename, a status word tarmac does not know or the free text a `waiting` session gives, a
  * model name, an effort — and one long value in any of them used to push every row of the
  * table past 190 columns, on a terminal that wraps at 80. The caps are picked so that the
- * worst fleet a source can hand this renderer stays within 120 CODE POINTS a row — display
- * width is the wider, separate question (#80): a CJK glyph is one point and two columns, and
- * the width math below counts `.length` like it always has. The page has CSS to wrap with, a
- * terminal has nothing. The other four are a percentage, an age, a cost and an hour count;
- * their own magnitude is what bounds them, and no cap here would ever bite.
+ * worst fleet a source can hand this renderer stays within 120 COLUMNS a row — what the
+ * terminal counts, rather than the code points the string holds (#80): a CJK name of 20
+ * glyphs is 20 points and 40 columns, and a cap that could not tell them apart kept its
+ * promise for ASCII alone. The page has CSS to wrap with, a terminal has nothing. The other
+ * four are a percentage, an age, a cost and an hour count; their own magnitude is what bounds
+ * them, and no cap here would ever bite.
  */
 // STATE is the widest of the four because it is two facts on one line: the state, and the
 // reason a `waiting` session gives for being in it. `waiting · permission prompt` — the
@@ -342,16 +346,115 @@ function accountSplit(account: AccountReading | null, gauges: Gauge[]): string |
 const CAPS: Array<number | null> = [20, 28, null, null, 16, 8, null, null];
 
 /**
- * One cell, cut to its column. The ellipsis is spent out of the cap rather than added past
- * it — a cap a cut cell can exceed is not a cap — and the cut is by code point, because half
- * a surrogate pair is not a shorter name, it is a broken one.
+ * One cell, made safe to print and cut to its column. The ellipsis is spent out of the cap
+ * rather than added past it — a cap a cut cell can exceed is not a cap — and the cut is by
+ * glyph, because half a surrogate pair is not a shorter name, it is a broken one, and neither
+ * is a name whose accent was left behind by the cut before it.
  */
 function clip(cell: string, i: number): string {
   const cap = CAPS[i];
-  if (cap === null) return cell;
-  const chars = Array.from(cell);
-  return chars.length <= cap ? cell : chars.slice(0, cap - 1).join('') + '…';
+  const text = sanitise(cell);
+  if (cap === null || cols(text) <= cap) return text;
+  let cut = '';
+  let n = 0;
+  for (const g of glyphs(text)) {
+    const width = widthOf(g);
+    // `>` and not `>=`: the budget is the cap minus the ellipsis, and a wide glyph that would
+    // land astride the edge is dropped whole, leaving the cell a column short of its cap.
+    if (n + width > cap - 1) break;
+    cut += g;
+    n += width;
+  }
+  return cut + '…';
 }
+
+/**
+ * What a source string is allowed to put in a cell.
+ *
+ * Three of the four capped values are the machine's, not ours: a POSIX basename may hold any
+ * byte but `/` and NUL, `waitingFor` is free text, and a status word is whatever the payload
+ * said. Printed as they arrive, a `\n` breaks one row into two physical lines that no cap
+ * measured and no padding aligned, a `\r` paints the next cell over this one, and an ESC hands
+ * whatever named that directory the terminal's own escape codes. Each control character
+ * becomes U+FFFD: one column, and visible, because a character silently dropped is a name
+ * silently rewritten — the reader has to be able to see that something was there.
+ */
+const sanitise = (cell: string): string => cell.replace(/\p{Cc}/gu, '\uFFFD');
+
+/**
+ * How many columns a string paints. What the terminal counts, and what neither `.length` nor
+ * a count of code points answers: a CJK ideograph and a fullwidth form take two, a combining
+ * accent takes none, and everything else takes one.
+ *
+ * A small table rather than a dependency, and deliberately an approximation of one terminal
+ * rule this repo cannot read: the East Asian Wide and Fullwidth blocks plus the emoji ones,
+ * which is where every glyph that is not one column comes from in practice. What it does not
+ * resolve is what no two terminals agree on either — the East Asian Ambiguous class, whose
+ * width depends on the font the reader chose. Those stay at one, which is what a Western
+ * terminal draws.
+ */
+function cols(s: string): number {
+  let n = 0;
+  for (const g of glyphs(s)) n += widthOf(g);
+  return n;
+}
+
+/**
+ * The string split where a terminal can cut it: a code point, plus whatever rides on it.
+ *
+ * A combining mark, a variation selector, a skin tone and a zero-width joiner have no column
+ * of their own — they modify the glyph before them — so a cut between the two is the surrogate
+ * pair bug in another alphabet: a name that comes back missing its accent, or a family emoji
+ * ending in a joiner that binds to the ellipsis.
+ */
+function glyphs(s: string): string[] {
+  const out: string[] = [];
+  for (const ch of s) {
+    const prev = out.length - 1;
+    if (prev >= 0 && (RIDES.test(ch) || out[prev].endsWith(ZWJ))) out[prev] += ch;
+    else out.push(ch);
+  }
+  return out;
+}
+
+const ZWJ = '\u200D';
+/** Marks, joiners, variation selectors and skin tones: everything that belongs to a neighbour. */
+const RIDES = /\p{Mn}|\p{Me}|[\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}]/u;
+
+/**
+ * One glyph's columns. U+FE0F is asked about first because it is a REQUEST: it selects the
+ * emoji presentation of a character a terminal would otherwise draw in one column, and the
+ * terminals that honour it draw two.
+ */
+function widthOf(g: string): number {
+  if (g.includes('\uFE0F')) return 2;
+  const cp = g.codePointAt(0)!;
+  return WIDE.some(([lo, hi]) => cp >= lo && cp <= hi) ? 2 : 1;
+}
+
+/** The blocks a terminal draws two columns wide, as ranges rather than as a 65k table. */
+const WIDE: Array<[number, number]> = [
+  [0x1100, 0x115f], // Hangul Jamo, initial consonants
+  [0x2e80, 0x303e], // CJK radicals, Kangxi, punctuation
+  [0x3041, 0x33ff], // kana, Hangul compatibility jamo, CJK squared forms
+  [0x3400, 0x4dbf], // CJK extension A
+  [0x4e00, 0x9fff], // CJK unified ideographs
+  [0xa000, 0xa4cf], // Yi
+  [0xa960, 0xa97f], // Hangul Jamo extended A
+  [0xac00, 0xd7a3], // Hangul syllables
+  [0xf900, 0xfaff], // CJK compatibility ideographs
+  [0xfe10, 0xfe19], // vertical forms
+  [0xfe30, 0xfe6f], // CJK compatibility forms, small forms
+  [0xff00, 0xff60], // fullwidth forms
+  [0xffe0, 0xffe6], // fullwidth signs
+  [0x17000, 0x18aff], // Tangut, Khitan
+  [0x1f300, 0x1f64f], // symbols and pictographs, emoticons
+  [0x1f680, 0x1f6ff], // transport and map
+  [0x1f7e0, 0x1f7eb], // geometric shapes extended, the coloured circles
+  [0x1f900, 0x1f9ff], // supplemental symbols, people
+  [0x1fa70, 0x1faff], // symbols and pictographs extended A
+  [0x20000, 0x3fffd], // CJK extensions B and beyond
+];
 
 /**
  * The STATE column, out of the same verdict the page draws from.

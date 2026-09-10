@@ -235,6 +235,68 @@ test('leaves an ordinary fleet whole', () => {
   assert.doesNotMatch(renderTable(fleet([row(), row({ project: 'mercury-dashboard', model: 'Opus 5' })])), /…/);
 });
 
+// #80: the caps above bound code points, and a terminal counts COLUMNS. The measure this
+// section argues from is written here rather than imported, so that it is a fact about the
+// fixtures — every glyph in them is ASCII, one column, or from a CJK block, two — instead of
+// the renderer agreeing with itself.
+const cols = (s: string): number =>
+  Array.from(s).reduce((n, ch) => n + (/[\u3000-\u9fff\uff01-\uff60]/.test(ch) ? 2 : 1), 0);
+
+/** The #49 fixture in an alphabet whose glyphs are twice as wide as its code points. */
+const WIDEST_CJK = row({
+  project: '項'.repeat(60),
+  busy: null,
+  status: 'waiting',
+  waitingFor: '待'.repeat(60),
+  model: '模'.repeat(60),
+  effort: '力'.repeat(60),
+  costUsd: 98765.43,
+  uptimeMs: 999 * 3600_000,
+});
+
+test('caps the columns a row paints, not the code points it spends', () => {
+  const out = renderTable(fleet([WIDEST_CJK], { costUsd: 98765.43 }));
+  for (const l of out.split('\n').slice(0, 2)) assert.ok(cols(l) <= 120, `a row ${cols(l)} columns wide: ${l}`);
+});
+
+// The other half of the same measure, and the one a reader sees on an ordinary fleet: the
+// padding that lines the columns up has to spend the same units the cap does, or one CJK
+// project pushes every cell after it out of line with the row below.
+test('a wide glyph pushes the next column by the columns it paints', () => {
+  const out = renderTable(fleet([row({ project: '項目' }), row({ sessionId: 's2', project: 'ab' })], { sessions: 2 }));
+  const [wide, ascii] = out.split('\n').slice(1, 3);
+  assert.equal(
+    cols(wide.slice(0, wide.indexOf('idle'))),
+    cols(ascii.slice(0, ascii.indexOf('idle'))),
+    'the STATE column starts at one place, whatever the project is written in',
+  );
+});
+
+// Where the cut lands, pinned to the glyph: nine of these fill nineteen of the twenty columns,
+// and the ellipsis is spent out of the cap as it always was. Cutting by code point puts the
+// mark ten glyphs late and the row twenty columns wide.
+test('cuts a wide cell where its columns run out, not where its code points do', () => {
+  const out = renderTable(fleet([row({ project: '項'.repeat(60) })]));
+  assert.match(out.split('\n')[1], /^項{9}… {2}idle/);
+});
+
+// A basename may hold anything a filesystem allows and `waitingFor` is free text, so a control
+// character reaches this renderer with nothing between it and the terminal: a `\n` breaks one
+// row into two physical lines that no cap measured and no padding aligned.
+test('a control character cannot break the row it sits in', () => {
+  const out = renderTable(fleet([row({ project: 'al\npha' })]));
+  assert.equal(out.split('\n')[2], '', 'the table is still a header and one row');
+  assert.match(out, /al\ufffdpha +idle/, 'and the character that could not be printed is shown as one');
+});
+
+// ESC is the one whose consequence is not cosmetic: a project directory named with an escape
+// sequence would be handing whatever created it the terminal's own codes.
+test('an escape sequence in a source string never reaches the terminal', () => {
+  const out = renderTable(fleet([row({ busy: null, status: 'waiting', waitingFor: '\u001b[31mred' })], { unknownStatus: 0 }));
+  assert.doesNotMatch(out, /\u001b/, 'no escape survives the cell it arrived in');
+  assert.match(out, /waiting · \ufffd\[31mred/);
+});
+
 // ── the settings block ────────────────────────────────────────────────────────────────
 // `serve` runs unattended for hours, so the run has to open by saying what it decided and
 // on whose authority. A threshold whose origin is invisible is one nobody can correct.
