@@ -431,10 +431,13 @@ function widthOf(g: string): number {
 
 /**
  * Every code point Unicode 16.0 assigns and calls East Asian Wide or Fullwidth, and no other
- * assigned one. Generated, not written: a range spans a gap only where the gap holds nothing
- * assigned, so no narrow or ambiguous character is swept up by a round number.
+ * assigned one, plus the regions the standard leaves wide before assignment (the undesignated
+ * code points of planes 2 and 3 and of the CJK blocks), so a future CJK extension counts two
+ * columns before anyone regenerates this. Generated, not written: a range spans a gap only
+ * where the gap holds nothing assigned, so no narrow or ambiguous character is swept up by a
+ * round number.
  *
- *   python3 -c "import re,unicodedata as u;s=''.join('U' if u.category(chr(c))=='Cn' else 'W' if u.east_asian_width(chr(c)) in 'WF' else 'N' for c in range(0x110000));print('\n'.join('  [0x%04x, 0x%04x],'%(m.start(),m.end()-1) for m in re.finditer('W[WU]*W|W',s)))"
+ *   python3 -c "import re,unicodedata as u;D=((0x3400,0x4dbf),(0x4e00,0x9fff),(0xf900,0xfaff),(0x20000,0x2fffd),(0x30000,0x3fffd));w=lambda c:(u.east_asian_width(chr(c)) in 'WF') if u.category(chr(c))!='Cn' else any(a<=c<=b for a,b in D);s=''.join('W' if w(c) else 'U' if u.category(chr(c))=='Cn' else 'N' for c in range(0x110000));print('\n'.join('  [0x%04x, 0x%04x],'%(m.start(),m.end()-1) for m in re.finditer('W[WU]*W|W',s)))"
  *
  * A block list is what this replaced, and it is the shape of the bug it fixes: U+2705,
  * U+2B50 and U+23F3 are two columns and sit in no emoji block, U+1F321 is one column and
@@ -484,7 +487,7 @@ const WIDE: Array<[number, number]> = [
   [0x3250, 0xa4c6],
   [0xa960, 0xa97c],
   [0xac00, 0xd7a3],
-  [0xf900, 0xfad9],
+  [0xf900, 0xfaff],
   [0xfe10, 0xfe19],
   [0xfe30, 0xfe6b],
   [0xff01, 0xff60],
@@ -524,7 +527,7 @@ const WIDE: Array<[number, number]> = [
   [0x1f93c, 0x1f945],
   [0x1f947, 0x1f9ff],
   [0x1fa70, 0x1faf8],
-  [0x20000, 0x323af],
+  [0x20000, 0x3fffd],
 ];
 
 /**

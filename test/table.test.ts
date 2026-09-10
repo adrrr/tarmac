@@ -251,8 +251,6 @@ const REFERENCE_WIDTHS = new Map<string, number>([
   ['\u{1b000}', 2], // kana supplement
   ['…', 1],
   ['·', 1],
-  ['—', 1],
-  ['�', 1],
 ]);
 const cols = (s: string): number =>
   Array.from(s).reduce((n, ch) => {
