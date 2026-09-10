@@ -17,7 +17,7 @@
 # `working-tree-encoding` hands a reader something other than the blob.
 #
 # What is deliberately NOT matched: a `Co-Authored-By:` trailer, which names a co-author and is
-# nobody's session. Nor is the other half of the rule this enforces — a link to private
+# nobody's session. Nor is the other half of the rule this enforces. A link to private
 # infrastructure that is not a session URL is not in the pattern.
 set -eu
 
@@ -41,7 +41,7 @@ range="${1:-}"
 if [ -n "$range" ] && git rev-list "$range" >/dev/null 2>&1; then
   shas=$(git rev-list "$range")
 else
-  [ -z "$range" ] || echo "no such range: $range — reading the last commit instead" >&2
+  [ -z "$range" ] || echo "no such range: $range, reading the last commit instead" >&2
   shas=$(git rev-list -1 HEAD)
 fi
 
@@ -52,7 +52,7 @@ for sha in $shas; do
   status=1
 done
 
-# 0 is a hit, 1 is a clean tree, anything else is git failing to look — and a guard that
+# 0 is a hit, 1 is a clean tree, anything else is git failing to look, and a guard that
 # reports clean because it could not read is worth less than no guard at all.
 rc=0
 hits=$(git grep --cached -nE "$pattern" -- .) || rc=$?
