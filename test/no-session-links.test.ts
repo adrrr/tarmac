@@ -9,7 +9,7 @@
 // That last part is deliberate. Running it over this repository would look like the stronger
 // promise and would be a trap: `squash_merge_commit_message` is COMMIT_MESSAGES here, so a
 // branch whose commits carry a trailer lands it in main's message, and every leg of the matrix
-// would then go red for a reason that has nothing to do with the code — `prepublishOnly` runs
+// would then go red for a reason that has nothing to do with the code: `prepublishOnly` runs
 // this suite, so it would block publishing until somebody wrote an empty commit. The job in
 // `ci.yml` is where the rule is enforced, at the one moment it can still be acted on.
 //
@@ -32,7 +32,7 @@ const TRAILER = `${['Claude', '-Session:'].join('')} ${LINK}`;
 
 /**
  * The three shapes the check is made of, each carrying ONE of them. A fixture holding all three
- * at once — the trailer above, which is what actually slipped through — cannot tell which of the
+ * at once (the trailer above, which is what actually slipped through) cannot tell which of the
  * three caught it: dropping a branch of the pattern left the suite green under it.
  */
 const ALONE = {
@@ -63,7 +63,7 @@ function commit(dir: string, file: string, body: string, message: string): strin
 }
 
 /**
- * The script, under `sh` — which is dash on the Ubuntu leg of CI, bash on macOS. The same job
+ * The script, under `sh`, which is dash on the Ubuntu leg of CI, bash on macOS. The same job
  * runs shellcheck over it in dash mode, so the one shell that matters is checked twice.
  */
 function run(cwd: string, range?: string, pathPrefix?: string): { status: number | null; out: string } {
@@ -107,8 +107,8 @@ test('each of the three shapes fails on its own', () => {
 });
 
 // The two halves are independent, and CI only ever exercises them together: it always passes a
-// range. Each is therefore asserted in the OTHER half's configuration too — a range whose commits
-// are clean, and no range at all — or a script that answered for one and skipped the other would
+// range. Each is therefore asserted in the OTHER half's configuration too, a range whose commits
+// are clean, and no range at all, or a script that answered for one and skipped the other would
 // still have looked green here.
 test('the commits in the middle of a range are read, not just its tip', () => {
   const dir = repo();
