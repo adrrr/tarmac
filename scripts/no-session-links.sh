@@ -6,18 +6,30 @@
 # Usage: scripts/no-session-links.sh [range]
 #
 #   range   commit messages to read, as `base..head`. Omitted, or naming a commit this
-#           checkout does not have, the last commit alone is read: a first push and a
-#           force-push both hand the workflow a null base sha, and a guard that errors out
-#           there is a guard that is skipped exactly when history is being rewritten.
+#           checkout does not have, the last commit alone is read. Both happen: the first
+#           push to a branch has no base at all and the workflow hands over a null sha, and
+#           after a force-push the old tip is unreachable, so no checkout fetches it. A guard
+#           that errors out there is a guard that is skipped exactly when history is being
+#           rewritten.
 #
-# Tracked files are read whatever the range says. What is deliberately NOT matched: a
-# `Co-Authored-By:` trailer, which names a co-author and is nobody's session.
+# The index is read whatever the range says, not the working tree: what is committed is what a
+# push carries, and the two differ whenever a file is cleaned on disk after the fact or
+# `working-tree-encoding` hands a reader something other than the blob.
+#
+# What is deliberately NOT matched: a `Co-Authored-By:` trailer, which names a co-author and is
+# nobody's session. Nor is the other half of the rule this enforces — a link to private
+# infrastructure that is not a session URL is not in the pattern.
 set -eu
 
-cd "$(git rev-parse --show-toplevel)" || exit 2
+root=$(git rev-parse --show-toplevel) || exit 2
+cd "$root" || exit 2
 
 # Assembled from fragments, deliberately: this script is tracked, and the sweep below would
 # otherwise report itself as the first offender.
+#
+# `01` is not decoration on the session id: `session_` alone appears in 28 tracked files, as the
+# `session_id` key of the statusline payload this product reads. The prefix is what separates an
+# id from that key, so an id that ever stops carrying it goes unseen here.
 host='claude'
 sid='session_'
 trailer='Claude'
@@ -43,7 +55,7 @@ done
 # 0 is a hit, 1 is a clean tree, anything else is git failing to look — and a guard that
 # reports clean because it could not read is worth less than no guard at all.
 rc=0
-hits=$(git grep -nE "$pattern" -- .) || rc=$?
+hits=$(git grep --cached -nE "$pattern" -- .) || rc=$?
 case "$rc" in
   0)
     echo "a session link in tracked files:"
