@@ -386,12 +386,9 @@ const sanitise = (cell: string): string => cell.replace(/\p{Cc}/gu, '\uFFFD');
  * a count of code points answers: a CJK ideograph and a fullwidth form take two, a combining
  * accent takes none, and everything else takes one.
  *
- * A small table rather than a dependency, and deliberately an approximation of one terminal
- * rule this repo cannot read: the East Asian Wide and Fullwidth blocks plus the emoji ones,
- * which is where every glyph that is not one column comes from in practice. What it does not
- * resolve is what no two terminals agree on either — the East Asian Ambiguous class, whose
- * width depends on the font the reader chose. Those stay at one, which is what a Western
- * terminal draws.
+ * A table rather than a dependency. What it does not resolve is what no two terminals agree
+ * on either: the East Asian Ambiguous class, whose width depends on the font the reader
+ * chose. Those stay at one, which is what a Western terminal draws.
  */
 function cols(s: string): number {
   let n = 0;
@@ -432,28 +429,102 @@ function widthOf(g: string): number {
   return WIDE.some(([lo, hi]) => cp >= lo && cp <= hi) ? 2 : 1;
 }
 
-/** The blocks a terminal draws two columns wide, as ranges rather than as a 65k table. */
+/**
+ * Every code point Unicode 16.0 assigns and calls East Asian Wide or Fullwidth, and no other
+ * assigned one. Generated, not written: a range spans a gap only where the gap holds nothing
+ * assigned, so no narrow or ambiguous character is swept up by a round number.
+ *
+ *   python3 -c "import re,unicodedata as u;s=''.join('U' if u.category(chr(c))=='Cn' else 'W' if u.east_asian_width(chr(c)) in 'WF' else 'N' for c in range(0x110000));print('\n'.join('  [0x%04x, 0x%04x],'%(m.start(),m.end()-1) for m in re.finditer('W[WU]*W|W',s)))"
+ *
+ * A block list is what this replaced, and it is the shape of the bug it fixes: U+2705,
+ * U+2B50 and U+23F3 are two columns and sit in no emoji block, U+1F321 is one column and
+ * sits inside one. There are 83 ranges because the standard has that many runs, not because
+ * anybody chose 83.
+ */
 const WIDE: Array<[number, number]> = [
-  [0x1100, 0x115f], // Hangul Jamo, initial consonants
-  [0x2e80, 0x303e], // CJK radicals, Kangxi, punctuation
-  [0x3041, 0x33ff], // kana, Hangul compatibility jamo, CJK squared forms
-  [0x3400, 0x4dbf], // CJK extension A
-  [0x4e00, 0x9fff], // CJK unified ideographs
-  [0xa000, 0xa4cf], // Yi
-  [0xa960, 0xa97f], // Hangul Jamo extended A
-  [0xac00, 0xd7a3], // Hangul syllables
-  [0xf900, 0xfaff], // CJK compatibility ideographs
-  [0xfe10, 0xfe19], // vertical forms
-  [0xfe30, 0xfe6f], // CJK compatibility forms, small forms
-  [0xff00, 0xff60], // fullwidth forms
-  [0xffe0, 0xffe6], // fullwidth signs
-  [0x17000, 0x18aff], // Tangut, Khitan
-  [0x1f300, 0x1f64f], // symbols and pictographs, emoticons
-  [0x1f680, 0x1f6ff], // transport and map
-  [0x1f7e0, 0x1f7eb], // geometric shapes extended, the coloured circles
-  [0x1f900, 0x1f9ff], // supplemental symbols, people
-  [0x1fa70, 0x1faff], // symbols and pictographs extended A
-  [0x20000, 0x3fffd], // CJK extensions B and beyond
+  [0x1100, 0x115f],
+  [0x231a, 0x231b],
+  [0x2329, 0x232a],
+  [0x23e9, 0x23ec],
+  [0x23f0, 0x23f0],
+  [0x23f3, 0x23f3],
+  [0x25fd, 0x25fe],
+  [0x2614, 0x2615],
+  [0x2630, 0x2637],
+  [0x2648, 0x2653],
+  [0x267f, 0x267f],
+  [0x268a, 0x268f],
+  [0x2693, 0x2693],
+  [0x26a1, 0x26a1],
+  [0x26aa, 0x26ab],
+  [0x26bd, 0x26be],
+  [0x26c4, 0x26c5],
+  [0x26ce, 0x26ce],
+  [0x26d4, 0x26d4],
+  [0x26ea, 0x26ea],
+  [0x26f2, 0x26f3],
+  [0x26f5, 0x26f5],
+  [0x26fa, 0x26fa],
+  [0x26fd, 0x26fd],
+  [0x2705, 0x2705],
+  [0x270a, 0x270b],
+  [0x2728, 0x2728],
+  [0x274c, 0x274c],
+  [0x274e, 0x274e],
+  [0x2753, 0x2755],
+  [0x2757, 0x2757],
+  [0x2795, 0x2797],
+  [0x27b0, 0x27b0],
+  [0x27bf, 0x27bf],
+  [0x2b1b, 0x2b1c],
+  [0x2b50, 0x2b50],
+  [0x2b55, 0x2b55],
+  [0x2e80, 0x303e],
+  [0x3041, 0x3247],
+  [0x3250, 0xa4c6],
+  [0xa960, 0xa97c],
+  [0xac00, 0xd7a3],
+  [0xf900, 0xfad9],
+  [0xfe10, 0xfe19],
+  [0xfe30, 0xfe6b],
+  [0xff01, 0xff60],
+  [0xffe0, 0xffe6],
+  [0x16fe0, 0x1b2fb],
+  [0x1d300, 0x1d376],
+  [0x1f004, 0x1f004],
+  [0x1f0cf, 0x1f0cf],
+  [0x1f18e, 0x1f18e],
+  [0x1f191, 0x1f19a],
+  [0x1f200, 0x1f320],
+  [0x1f32d, 0x1f335],
+  [0x1f337, 0x1f37c],
+  [0x1f37e, 0x1f393],
+  [0x1f3a0, 0x1f3ca],
+  [0x1f3cf, 0x1f3d3],
+  [0x1f3e0, 0x1f3f0],
+  [0x1f3f4, 0x1f3f4],
+  [0x1f3f8, 0x1f43e],
+  [0x1f440, 0x1f440],
+  [0x1f442, 0x1f4fc],
+  [0x1f4ff, 0x1f53d],
+  [0x1f54b, 0x1f54e],
+  [0x1f550, 0x1f567],
+  [0x1f57a, 0x1f57a],
+  [0x1f595, 0x1f596],
+  [0x1f5a4, 0x1f5a4],
+  [0x1f5fb, 0x1f64f],
+  [0x1f680, 0x1f6c5],
+  [0x1f6cc, 0x1f6cc],
+  [0x1f6d0, 0x1f6d2],
+  [0x1f6d5, 0x1f6df],
+  [0x1f6eb, 0x1f6ec],
+  [0x1f6f4, 0x1f6fc],
+  [0x1f7e0, 0x1f7f0],
+  [0x1f90c, 0x1f93a],
+  [0x1f93c, 0x1f945],
+  [0x1f947, 0x1f9ff],
+  [0x1fa70, 0x1faf8],
+  [0x20000, 0x323af],
 ];
 
 /**
