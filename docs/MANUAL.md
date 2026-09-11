@@ -219,9 +219,12 @@ every session diffs forever (#20). The rules that came out of the move:
   sweeps only where it is pointed, the reaper only where the reader is, and the purge above
   only `.claude`. So an install that would land on another directory refuses, and names
   `--snapshots-dir`. That flag says *where*: pass the new directory to move there, or the
-  installed one to keep writing where it writes today. What a move leaves is cleared by the
-  same two rules as the old directory, the provenance being the wrapper's own frozen path —
-  and the move out of `.claude` is the exception, being the migration above.
+  installed one to keep writing where it writes today. What a move clears in the directory it
+  leaves is what the old directory's purge clears: the runtime payloads this wrapper wrote
+  there, plain files, in that directory and not a level below it, the provenance being the
+  wrapper's own frozen path. The `history/` journal sits *beside* that directory rather than
+  in it, so a move leaves it where it was and `serve --range` starts a new one at the new
+  location (#140). The move out of `.claude` is the exception, being the migration above.
 
 If you read the snapshots with something other than tarmac, this is a breaking change of path.
 `tarmac list --json` reports the effective directory as `health.snapshotsDir`, and

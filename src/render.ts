@@ -92,15 +92,6 @@ export function renderPlan(plan: Plan): string {
 }
 
 /**
- * The line #20 asked for, said once, to the only people it concerns: those whose `.claude`
- * is a git repository.
- *
- * It has two jobs, and which one is live depends on whether the payloads are still there:
- * an install that clears them produces a DELETION the user has to commit, and a `.gitignore`
- * line keeps them from coming back if that directory is ever pointed at again. With nothing
- * to clear, the only thing left to say is that this install adds nothing that churns.
- */
-/**
  * What becomes of the directory a move leaves — the same three answers the legacy purge has,
  * said in one line because the row above it already names the directory.
  */
@@ -115,6 +106,15 @@ export const clearedLine = (cleared: ClearedPayloads, snapshots: string): string
   `install: cleared ${cleared.payloads} runtime payload(s) from ${cleared.dir} — they belong in ${snapshots}` +
   (cleared.kept > 0 ? ` (${cleared.kept} file(s) kept, so the directory stays)` : '');
 
+/**
+ * The line #20 asked for, said once, to the only people it concerns: those whose `.claude`
+ * is a git repository.
+ *
+ * It has two jobs, and which one is live depends on whether the payloads are still there:
+ * an install that clears them produces a DELETION the user has to commit, and a `.gitignore`
+ * line keeps them from coming back if that directory is ever pointed at again. With nothing
+ * to clear, the only thing left to say is that this install adds nothing that churns.
+ */
 const gitHint = (repo: { dir: string; ignore: string }, hasLegacy: boolean): string =>
   `${repo.dir} is a git repository — ` +
   (hasLegacy

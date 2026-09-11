@@ -1664,6 +1664,33 @@ test('the move out of .claude needs no flag, and is cleared as it always was', (
   assert.equal(install({ home }).legacy?.payloads, 4);
 });
 
+// The exemption above is that one DIRECTORY, and not the word `.claude` anywhere in a path.
+// An `XDG_STATE_HOME` under `.claude` — a home that keeps its state beside its config — freezes
+// `<home>/.claude/state/tarmac/snapshots`, which nothing collects either: the legacy purge only
+// ever looks at `<home>/.claude/tarmac/snapshots`. An exemption drawn on the ancestor rather
+// than on identity would wave that move through, and leave the directory #11 is about.
+test('a frozen directory that merely contains `.claude` is not the legacy location, and still refuses', () => {
+  const home = fakeHome('{}');
+  const state = path.join(home, '.claude', 'state');
+  const env: Record<string, string | undefined> = { ...process.env, HOME: home, XDG_STATE_HOME: state };
+  const plain: Record<string, string | undefined> = { ...process.env, HOME: home };
+  delete plain.XDG_STATE_HOME;
+  const run = (e: typeof env) => spawnSync(process.execPath, [CLI, 'install', '--yes'], { env: e, encoding: 'utf8', timeout: 20000 });
+
+  const first = run(env);
+  assert.equal(first.status, 0, first.stderr);
+  const from = path.join(state, 'tarmac', 'snapshots');
+  assert.equal(installedSnapshotsDir(paths(home)), from, 'inside `.claude`, and not where the legacy purge looks');
+  litter(from);
+  const settingsBefore = settingsOf(home);
+
+  const refused = run(plain);
+  assert.equal(refused.status, 1, 'the install is refused');
+  assert.match(refused.stderr, /^tarmac: .*--snapshots-dir/s);
+  assert.equal(fs.readdirSync(from).length, 4, 'and the payloads are where the wrapper still files them');
+  assert.equal(settingsOf(home), settingsBefore, 'nothing else was touched either');
+});
+
 test('the flag names the directory, and a move it asks for is made', () => {
   const home = fakeHome(MINE);
   install({ home });
