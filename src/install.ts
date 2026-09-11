@@ -40,7 +40,10 @@ export interface TarmacPaths {
    * business in a directory whose purpose is to be committed.
    */
   snapshots: string;
-  /** `<state>/tarmac` — the parent of `snapshots`, and ours to take back if an install fails. */
+  /**
+   * The parent of `snapshots`, wherever that path came from — the rung `mkdir -p` makes on
+   * the way to it, and so the one ours to take back if an install fails.
+   */
   stateDir: string;
   /** Where they lived before: inside `.claude`. Cleared by `install`, never written again. */
   legacySnapshots: string;
@@ -53,6 +56,11 @@ export interface PathOptions {
   env?: Record<string, string | undefined>;
   /** The home this process runs under, i.e. the one `XDG_STATE_HOME` speaks for. */
   realHome?: string;
+  /**
+   * Where the payloads go, when that was typed rather than derived — `install` only, and the
+   * environment is then not consulted at all. A reader passes nothing: it follows the wrapper.
+   */
+  snapshotsDir?: string;
 }
 
 /** The only record of the statusline we wrapped. Losing it means losing the way back. */
@@ -68,11 +76,17 @@ export type InstallResult = TarmacPaths & {
   alreadyInstalled: boolean;
   previous: StatusLineCommand | null;
   /** What an older tarmac had left inside `.claude`, and this run cleared. `null`: nothing. */
-  legacy: LegacySnapshots | null;
+  legacy: ClearedPayloads | null;
+  /** The directory this run moved the wrapper off, and cleared. `null`: nothing moved. */
+  moving: ClearedPayloads | null;
 };
 
-/** The runtime payloads a pre-#20 install left under `.claude`, as counted or as cleared. */
-export interface LegacySnapshots {
+/**
+ * A directory of runtime payloads an install clears, as counted beforehand or as cleared
+ * afterwards. Two of them now: the one a pre-#20 install left under `.claude`, and the one a
+ * relocation moves the writer off (#11). The rule that decides what goes is the same for both.
+ */
+export interface ClearedPayloads {
   /** The directory itself, so a plan or a report can name it. */
   dir: string;
   /** Payloads this tool wrote there — removed, since the next frame writes them anew. */
@@ -85,6 +99,12 @@ export type UninstallMode = 'bytes' | 'surgical' | 'absent' | 'foreign';
 
 export interface HomeOptions {
   home: string;
+  /**
+   * Where this install freezes the payloads, when it was typed — and, when an install is
+   * already here, the consent to MOVE them. Absent, a relocation is refused rather than made:
+   * see `relocationOrRefuse`.
+   */
+  snapshotsDir?: string | null;
 }
 
 export interface PlanOptions extends HomeOptions {
@@ -129,7 +149,7 @@ export interface InstallPlan extends PlanBase {
   chained: string | null;
   alreadyInstalled: boolean;
   /** The payloads an older tarmac left inside `.claude`, which this install clears. */
-  legacy: LegacySnapshots | null;
+  legacy: ClearedPayloads | null;
   /**
    * The version-controlled directory this install writes into, and the pattern that would
    * ignore the payloads FROM THAT REPOSITORY's root — a `.gitignore` pattern is relative to
@@ -137,11 +157,11 @@ export interface InstallPlan extends PlanBase {
    */
   gitRepo: { dir: string; ignore: string } | null;
   /**
-   * Where the installed wrapper writes today, when this install is about to freeze a
-   * different path into it. `null` when nothing moves, which is every install but a
-   * relocation.
+   * The directory the installed wrapper writes to today, and what moving off it clears, when
+   * this install is about to freeze a different path. `null` when nothing moves, which is
+   * every install but a relocation — and a relocation is now one that was asked for.
    */
-  movingFrom: string | null;
+  moving: ClearedPayloads | null;
 }
 
 export interface UninstallPlan extends PlanBase {
@@ -177,18 +197,25 @@ export interface UninstallPlan extends PlanBase {
 
 export type Plan = InstallPlan | UninstallPlan;
 
-export function paths(home: string, { env = process.env, realHome }: PathOptions = {}): TarmacPaths {
+export function paths(home: string, { env = process.env, realHome, snapshotsDir }: PathOptions = {}): TarmacPaths {
   const claude = path.join(home, '.claude');
   const dir = path.join(claude, 'tarmac');
-  const stateDir = path.join(stateRoot(home, env, realHome), 'tarmac');
+  // A path someone typed is made absolute HERE and nowhere later: the wrapper carries it into
+  // a shell whose working directory is wherever Claude Code was started, so `TARMAC_DIR=snaps`
+  // would name a different directory at every frame. The environment is not consulted for it —
+  // a directory that was chosen does not also get to be derived.
+  const snapshots =
+    snapshotsDir === undefined
+      ? path.join(stateRoot(home, env, realHome), 'tarmac', 'snapshots')
+      : path.resolve(snapshotsDir);
   return {
     claude,
     settings: path.join(claude, 'settings.json'),
     dir,
     wrapper: path.join(dir, 'statusline.sh'),
     backup: path.join(dir, 'backup.json'),
-    snapshots: path.join(stateDir, 'snapshots'),
-    stateDir,
+    snapshots,
+    stateDir: path.dirname(snapshots),
     legacySnapshots: path.join(dir, 'snapshots'),
     config: path.join(dir, 'config.json'),
   };
@@ -348,7 +375,8 @@ function writesInstead(file: string): string | null {
 // files the issue is about, dated from before the move.
 
 /**
- * What is in the legacy directory: the payloads this tool wrote, and everything else.
+ * What is in a directory an install clears — the legacy one, or the one a move leaves behind:
+ * the payloads this tool wrote, and everything else.
  *
  * The "ours" set is the WRITER'S RULE, not merely the writer's names. The wrapper's own
  * sweep is `-name '<sid shape>' -type f`, and both halves are the rule — `wrapper.ts` refuses
@@ -357,13 +385,12 @@ function writesInstead(file: string): string | null {
  * else is someone's, and one of them is enough to keep the directory (`rmdir`, never a
  * recursive remove: the same rule the unwind states, and this one runs inside a git repo).
  */
-function readLegacyDir(p: TarmacPaths): { ours: string[]; kept: number } | null {
+function readPayloadDir(p: TarmacPaths, dir: string): { ours: string[]; kept: number } | null {
   // The directory the wrapper is ABOUT TO WRITE TO is never the directory we clear, however
   // the two came to be the same path — `XDG_STATE_HOME=$HOME/.claude` is enough. Purging it
   // would delete the payloads while announcing the very same path as their new home.
-  if (sameFile(p.snapshots, p.legacySnapshots)) return null;
+  if (sameFile(p.snapshots, dir)) return null;
 
-  const dir = p.legacySnapshots;
   // `lstat`, not `readdir` alone: a SYMLINK here is the workaround someone will already have
   // applied to #20 — the directory pointed at a disk outside the repo. `readdir` follows it,
   // so an unguarded sweep would delete their snapshots at the far end and leave the link.
@@ -449,10 +476,13 @@ export function tarmacWasInstalledHere(p: TarmacPaths, alreadyInstalled: boolean
 }
 
 /** Read-only, for the plan: what an install would clear, before a byte is written. */
-export function countLegacySnapshots(p: TarmacPaths, wasInstalled: boolean): LegacySnapshots | null {
-  if (!wasInstalled) return null;
-  const found = readLegacyDir(p);
-  return found === null ? null : { dir: p.legacySnapshots, payloads: found.ours.length, kept: found.kept };
+export function countLegacySnapshots(p: TarmacPaths, wasInstalled: boolean): ClearedPayloads | null {
+  return wasInstalled ? countPayloads(p, p.legacySnapshots) : null;
+}
+
+function countPayloads(p: TarmacPaths, dir: string): ClearedPayloads | null {
+  const found = readPayloadDir(p, dir);
+  return found === null ? null : { dir, payloads: found.ours.length, kept: found.kept };
 }
 
 /**
@@ -466,16 +496,19 @@ export function countLegacySnapshots(p: TarmacPaths, wasInstalled: boolean): Leg
  * what is reported is what is ON DISK afterwards, never what was asked for. A user told to
  * commit a removal that had already been undone is worse served than one told it did not take.
  */
-export function purgeLegacySnapshots(p: TarmacPaths, wasInstalled: boolean): LegacySnapshots | null {
-  if (!wasInstalled) return null;
-  const found = readLegacyDir(p);
+export function purgeLegacySnapshots(p: TarmacPaths, wasInstalled: boolean): ClearedPayloads | null {
+  return wasInstalled ? purgePayloads(p, p.legacySnapshots) : null;
+}
+
+function purgePayloads(p: TarmacPaths, dir: string): ClearedPayloads | null {
+  const found = readPayloadDir(p, dir);
   if (found === null) return null;
 
   let payloads = 0;
   let kept = found.kept;
   for (const name of found.ours) {
     try {
-      fs.unlinkSync(path.join(p.legacySnapshots, name));
+      fs.unlinkSync(path.join(dir, name));
       payloads += 1;
     } catch {
       kept += 1;
@@ -488,16 +521,16 @@ export function purgeLegacySnapshots(p: TarmacPaths, wasInstalled: boolean): Leg
     // install and not a daemon. Either way what is reported is read back from disk.
     for (let pass = 0; pass < 2; pass++) {
       try {
-        fs.rmdirSync(p.legacySnapshots);
+        fs.rmdirSync(dir);
       } catch {
         // ENOTEMPTY from a frame that landed mid-sweep — the read-back below reports it.
       }
-      const after = readLegacyDir(p);
+      const after = readPayloadDir(p, dir);
       if (after === null) break; // gone, which is the whole point
       kept = after.ours.length + after.kept;
     }
   }
-  return { dir: p.legacySnapshots, payloads, kept };
+  return { dir, payloads, kept };
 }
 
 /**
@@ -522,9 +555,10 @@ function gitRepoOf(p: TarmacPaths, home: string): { dir: string; ignore: string 
   return { dir, ignore: `${path.relative(dir, p.legacySnapshots)}/` };
 }
 
-export function planInstall({ home, realHome = os.homedir() }: PlanOptions): InstallPlan {
+export function planInstall({ home, realHome = os.homedir(), snapshotsDir }: PlanOptions): InstallPlan {
   const root = requireHome(home);
-  const p = paths(root);
+  const p = paths(root, { snapshotsDir: snapshotsDir ?? undefined });
+  const moving = relocationOrRefuse(p, snapshotsDir != null);
   const { settings } = readSettings(p);
   const { previous, alreadyInstalled } = chainStatusLine(settings, p.wrapper, {
     isSameCommand: (command, wrapper) => isWrapperCommand(command, root, wrapper),
@@ -548,25 +582,53 @@ export function planInstall({ home, realHome = os.homedir() }: PlanOptions): Ins
     snapshots: p.snapshots,
     legacy: countLegacySnapshots(p, tarmacWasInstalledHere(p, alreadyInstalled)),
     gitRepo: gitRepoOf(p, root),
-    movingFrom: movedFrom(p),
+    moving: moving === null ? null : orEmpty(moving, countPayloads(p, moving)),
     undo: undoCommand('uninstall', root, isRealHome),
   };
 }
 
 /**
  * The directory the installed wrapper writes to today, when this install is about to freeze a
- * different one into it — `null` when nothing moves.
+ * different one into it — `null` when nothing moves, and a refusal when nobody asked for it.
  *
- * `install` re-derives the path from ITS OWN environment, so a shell that exports
- * `XDG_STATE_HOME` and a cron job that does not relocate the writer back and forth. The
- * relocation itself is a separate question; a plan that changes where the telemetry lands
- * without saying so is not, and the payloads left in the old directory are collected by
- * nothing.
+ * `install` derives the path from ITS OWN environment, so a shell that exports
+ * `XDG_STATE_HOME` and a cron job that does not relocated the writer back and forth. Both runs
+ * are legitimate; what is not is the aftermath, since nothing collects the directory left
+ * behind — the wrapper's own sweep only ever touches the directory it is pointed at, `reap.ts`
+ * only the one the reader was given, and the purge below only the legacy directory inside
+ * `.claude`. That is the "one dead file per session per night, forever" that pruning was added
+ * for, one level up (#11).
+ *
+ * So the move is asked for or it does not happen, which is how this codebase treats every
+ * other setting it will not silently correct. `--snapshots-dir` is the asking, and because it
+ * says WHERE, the same flag also keeps the writer exactly where it is today.
+ *
+ * Identity, not spelling: a path that resolves to the directory already in use moves nothing,
+ * and a refusal there would be one nobody could act on.
  */
-function movedFrom(p: TarmacPaths): string | null {
+function relocationOrRefuse(p: TarmacPaths, chosen: boolean): string | null {
   const current = installedSnapshotsDir(p);
-  return current === null || current === p.snapshots ? null : current;
+  if (current === null || sameFile(current, p.snapshots)) return null;
+  // The one move nobody has to ask for: OFF `<home>/.claude/tarmac/snapshots`. That is the
+  // migration of #20 — the plan names the directory and counts what it clears, and the legacy
+  // purge below is what collects it. Refusing it would leave every install made before that
+  // move unable to upgrade without a flag naming a path its owner never chose.
+  if (sameFile(current, p.legacySnapshots)) return null;
+  if (!chosen)
+    throw new Error(
+      `the installed wrapper writes its payloads to ${current}, and this install would freeze ${p.snapshots} instead — ` +
+        `nothing would collect what is left behind. Re-run with \`--snapshots-dir ${quoteArg(p.snapshots)}\` to move it ` +
+        `and clear the old directory, or with \`--snapshots-dir ${quoteArg(current)}\` to keep writing where it writes today.`,
+    );
+  return current;
 }
+
+/**
+ * What a move clears, counted or cleared — and named even when there is nothing in it. The
+ * directory is CHANGING, and a report that spoke only when it had files to show would be
+ * silent for exactly the relocation made before the first frame was drawn.
+ */
+const orEmpty = (dir: string, found: ClearedPayloads | null): ClearedPayloads => found ?? { dir, payloads: 0, kept: 0 };
 
 /** The statusLine command as written, or `null` when there is none to read. */
 function commandOf(statusLine: unknown): string | null {
@@ -708,9 +770,13 @@ function isUsableBackup(b: unknown): b is Backup {
   );
 }
 
-export function install({ home }: HomeOptions): InstallResult {
+export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
   const root = requireHome(home);
-  const p = paths(root);
+  const p = paths(root, { snapshotsDir: snapshotsDir ?? undefined });
+  // Read before anything is written, and refused here as well as in the plan: a caller that
+  // never asked for a plan must not be the one that gets to relocate in silence. Afterwards
+  // the wrapper names the new directory, and nothing on disk still says which one it left.
+  const moving = relocationOrRefuse(p, snapshotsDir != null);
 
   const { text: originalText, settings } = readSettings(p);
   const { settings: next, previous, alreadyInstalled } = chainStatusLine(settings, p.wrapper, {
@@ -727,7 +793,13 @@ export function install({ home }: HomeOptions): InstallResult {
     writeWrapper(p, backup.previous?.command ?? null, root);
     // After the wrapper, always: this is the update path, and until that write lands the
     // frames are still filing into the directory being cleared.
-    return { alreadyInstalled: true, previous: backup.previous ?? null, legacy: purgeLegacySnapshots(p, wasInstalled), ...p };
+    return {
+      alreadyInstalled: true,
+      previous: backup.previous ?? null,
+      legacy: purgeLegacySnapshots(p, wasInstalled),
+      moving: clearMoved(p, moving),
+      ...p,
+    };
   }
 
   // The other end of that order: everything from here CREATES, and the settings write is
@@ -756,8 +828,18 @@ export function install({ home }: HomeOptions): InstallResult {
     throw failure;
   }
 
-  return { alreadyInstalled: false, previous, legacy: purgeLegacySnapshots(p, wasInstalled), ...p };
+  return { alreadyInstalled: false, previous, legacy: purgeLegacySnapshots(p, wasInstalled), moving: clearMoved(p, moving), ...p };
 }
+
+/**
+ * The directory a move leaves, cleared by the rule the legacy purge already applies: only the
+ * names this wrapper writes, only plain files, and one file we cannot show we wrote keeps the
+ * directory. The provenance is stronger here than there — the path came out of OUR wrapper,
+ * which is the only file that carries it — and the timing is the same: after the new wrapper
+ * is on disk, because until then the old one is still the one Claude Code calls.
+ */
+const clearMoved = (p: TarmacPaths, moving: string | null): ClearedPayloads | null =>
+  moving === null ? null : orEmpty(moving, purgePayloads(p, moving));
 
 /**
  * What is on disk before we touch it: the paths that are already there, mapped to the bytes

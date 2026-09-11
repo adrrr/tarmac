@@ -9,7 +9,7 @@ the test suite, so none of it is aspiration.
 |---|---|---|
 | `tarmac list` | one-shot fleet table, and the default, so bare `tarmac` runs it | `--home`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--json`, `--watch` |
 | `tarmac serve` | local dashboard, `GET /` for the table, `GET /map` for the map, `GET /history` for the curves, `GET /live` for the fragment an open page refreshes from, `GET /api/fleet` for JSON, `GET /api/history` for the last 24h of readings it took while it ran, or `?range=7d` and `?range=30d` for the journal on disk | `--home`, `--port`, `--stale-after`, `--snapshots-dir`, `--claude-bin`, `--trust-host`, `--history-days`, `--demo` |
-| `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes` |
+| `tarmac install` | chain the status line under `<home>/.claude/settings.json`, after confirmation | `--home`, `--yes`, `--snapshots-dir` |
 | `tarmac uninstall` | restore it, and say which of the four restore modes ran | `--home`, `--yes` |
 
 `--help` works everywhere, and so does `--version` (`-v`). It prints the version of the
@@ -138,6 +138,9 @@ it either, and not your `settings.json` or `fleet.json` sitting next to it.
 `--snapshots-dir` is a *reader's* lens for `list` and `serve`. Point those at a directory
 another statusline owns and nothing is deleted, because no reader deletes anything.
 
+On `install` the same flag is the *writer's*: the directory the wrapper freezes, and the only
+way to move an installed one. See [where the snapshots live](#where-the-snapshots-live-and-why-not-in-claude).
+
 The reader has a kind rule of its own, and it is the same rule. Only a regular file is opened:
 a directory, a symlink or a named pipe wearing a `*.json` name is stepped over and counted,
 never read. That is not tidiness — `readFileSync` on a pipe waits for someone to write to the
@@ -210,6 +213,15 @@ every session diffs forever (#20). The rules that came out of the move:
   directory to stay. The plan says how many, and where, before you confirm.
 - **If `.claude` is a git repository, the plan says so**, and names the `.gitignore` line
   worth adding.
+- **A move anywhere else is asked for.** `install` derives its path from *its own*
+  environment, so a shell that exports `XDG_STATE_HOME` and a cron job that does not relocated
+  the writer back and forth — and nothing collects the directory left behind: the wrapper
+  sweeps only where it is pointed, the reaper only where the reader is, and the purge above
+  only `.claude`. So an install that would land on another directory refuses, and names
+  `--snapshots-dir`. That flag says *where*: pass the new directory to move there, or the
+  installed one to keep writing where it writes today. What a move leaves is cleared by the
+  same two rules as the old directory, the provenance being the wrapper's own frozen path —
+  and the move out of `.claude` is the exception, being the migration above.
 
 If you read the snapshots with something other than tarmac, this is a breaking change of path.
 `tarmac list --json` reports the effective directory as `health.snapshotsDir`, and
@@ -1120,6 +1132,10 @@ the file and a threshold tightened for one run is the normal case.
 | snapshots | `--snapshots-dir DIR` | `TARMAC_SNAPSHOTS_DIR` | `"snapshotsDir": "DIR"` |
 | trusted hosts | `--trust-host HOST`, once per host | `TARMAC_TRUST_HOST`, comma-separated | `"trustHosts": ["HOST"]` |
 | journal retention | `--history-days 30`, on `serve` only | `TARMAC_HISTORY_DAYS` | `"history": {"days": 30}` |
+
+`--snapshots-dir` on `install` is a different setting wearing the same spelling: it is the path
+the wrapper freezes, and neither the environment nor the config file is read for it. A writer
+moves because someone said to move it, never because a shell exported something.
 
 ```json
 { "staleAfterMs": 900000, "port": 8080 }

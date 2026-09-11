@@ -27,7 +27,7 @@ import { LIMIT_WINDOWS, RESET_HORIZON_MS, readLimits } from './limits.ts';
 import type { Gauge, LimitWhy } from './limits.ts';
 import { accountLimits, busyOnStaleFleet } from './fleet.ts';
 import type { AccountReading, Fleet, FleetHealth, FleetRow } from './fleet.ts';
-import type { Plan, UninstallMode, UninstallPlan } from './install.ts';
+import type { ClearedPayloads, Plan, UninstallMode, UninstallPlan } from './install.ts';
 
 /**
  * The other thing this module renders: the plan a user consents to before install or
@@ -51,9 +51,10 @@ export function renderPlan(plan: Plan): string {
     // from the path above it: naming it here is how a reader of `list`, `serve` or any other
     // tool finds out where the payloads land.
     rows.push(['snapshots', plan.snapshots]);
-    // A relocation is a change to where the telemetry lands, so it is never implied.
-    if (plan.movingFrom !== null)
-      rows.push(['↳ moving from', `${plan.movingFrom}   (its payloads are left there, and nothing collects them)`]);
+    // A relocation is a change to where the telemetry lands, so it is never implied — and it
+    // is now one the user asked for, which makes what happens to the old directory the thing
+    // left to say. Named whether or not there is anything in it: the move is the news.
+    if (plan.moving !== null) rows.push(['↳ moving from', `${plan.moving.dir}   (${movedFate(plan.moving)})`]);
     // This operation now DELETES files, inside a directory people commit. A plan that can
     // disagree with what runs is worse than no plan — so it says how many, and where.
     // A directory that is THERE but holds none of our payloads is the state the previous
@@ -99,6 +100,21 @@ export function renderPlan(plan: Plan): string {
  * line keeps them from coming back if that directory is ever pointed at again. With nothing
  * to clear, the only thing left to say is that this install adds nothing that churns.
  */
+/**
+ * What becomes of the directory a move leaves — the same three answers the legacy purge has,
+ * said in one line because the row above it already names the directory.
+ */
+const movedFate = (moving: ClearedPayloads): string =>
+  moving.payloads === 0 && moving.kept === 0
+    ? 'nothing of ours is there to clear'
+    : `${moving.payloads} runtime payload(s) there are cleared — each one is written again on the next frame` +
+      (moving.kept > 0 ? `; ${moving.kept} file(s) nothing here wrote stay, so the directory does` : '');
+
+/** What an install cleared, as it went: the same sentence for both directories it can clear. */
+export const clearedLine = (cleared: ClearedPayloads, snapshots: string): string =>
+  `install: cleared ${cleared.payloads} runtime payload(s) from ${cleared.dir} — they belong in ${snapshots}` +
+  (cleared.kept > 0 ? ` (${cleared.kept} file(s) kept, so the directory stays)` : '');
+
 const gitHint = (repo: { dir: string; ignore: string }, hasLegacy: boolean): string =>
   `${repo.dir} is a git repository — ` +
   (hasLegacy
