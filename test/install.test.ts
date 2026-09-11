@@ -1185,8 +1185,10 @@ function oldInstall(home: string, chained = 'echo MINE'): void {
 }
 
 /** A legacy directory as an older tarmac left it: payloads, a temp file, the prune marker. */
-function legacyLitter(home: string, extra: Record<string, string> = {}): string {
-  const dir = legacyDir(home);
+const legacyLitter = (home: string, extra: Record<string, string> = {}): string => litter(legacyDir(home), extra);
+
+/** The same four files, in whichever directory a purge is being asked about. */
+function litter(dir: string, extra: Record<string, string> = {}): string {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'aaaaaaaa-1111-1111-1111-111111111111.json'), '{"session_id":"a"}');
   fs.writeFileSync(path.join(dir, 'bbbbbbbb-2222-2222-2222-222222222222.json'), '{"session_id":"b"}');
@@ -1625,31 +1627,214 @@ test('the pattern the hint prints is one git honours, from the repository it nam
 });
 
 // ── a wrapper that already points somewhere else ──────────────────────────────────────
-// S3 (review): the READER follows the wrapper, but `install` re-freezes the path from its own
+// S3 (review): the READER follows the wrapper, but `install` re-froze the path from its own
 // environment. Run it from a shell that exports XDG_STATE_HOME after an install made without
-// one (or the reverse) and the writer relocates — silently, with the payloads of the old
-// directory left behind for nothing to ever collect. Fixing the relocation is a separate
-// question; announcing it is not, because a plan that changes where the telemetry lands
-// without saying so is the one thing `renderPlan` exists to prevent.
-test('the plan says so when the install moves the snapshots directory', () => {
+// one (or the reverse) and the writer relocated — with the payloads of the old directory left
+// behind for nothing to ever collect: the wrapper's own sweep only ever touches the directory
+// it is pointed at, `reap.ts` only the one the reader was given, and the legacy purge only
+// `<home>/.claude/tarmac/snapshots`. Announcing the move was the honest half (#11); this is
+// the other. A move is now ASKED FOR — `--snapshots-dir`, the same flag `list` and `serve`
+// read with — and what it leaves is cleared under the rule the legacy purge already applies.
+test('an install that would move the snapshots directory refuses, and names the flag', () => {
+  const home = fakeHome(MINE);
+  const elsewhere = path.join(tempDir('tarmac-was-'), 'snapshots');
+  install({ home });
+  const settingsBefore = settingsOf(home);
+  fs.writeFileSync(paths(home).wrapper, renderWrapper({ snapshotDir: elsewhere, chainCommand: 'echo MINE' }), { mode: 0o755 });
+
+  for (const run of [() => planInstall({ home }), () => install({ home })]) {
+    assert.throws(run, new RegExp(`--snapshots-dir.*${escapeRe(elsewhere)}`, 's'));
+  }
+  assert.equal(installedSnapshotsDir(paths(home)), elsewhere, 'the wrapper still writes where it wrote');
+  assert.equal(settingsOf(home), settingsBefore, 'and nothing else was touched either');
+});
+
+// The one move nobody has to ask for, and the reason the refusal above is not simply "the
+// path changed": every install made before #20 writes inside `.claude`, and an upgrade that
+// demanded a flag naming a path its owner never chose would be a migration nobody can take.
+// That move is announced and collected by the legacy purge, which is the asking done once.
+test('the move out of .claude needs no flag, and is cleared as it always was', () => {
+  const home = fakeHome('{}');
+  oldInstall(home);
+  legacyLitter(home);
+
+  const plan = planInstall({ home });
+  assert.equal(plan.moving, null, 'not a relocation to refuse: the legacy purge collects this one');
+  assert.equal(plan.legacy?.payloads, 4);
+  assert.equal(install({ home }).legacy?.payloads, 4);
+});
+
+// The exemption above is that one DIRECTORY, and not the word `.claude` anywhere in a path.
+// An `XDG_STATE_HOME` under `.claude` — a home that keeps its state beside its config — freezes
+// `<home>/.claude/state/tarmac/snapshots`, which nothing collects either: the legacy purge only
+// ever looks at `<home>/.claude/tarmac/snapshots`. An exemption drawn on the ancestor rather
+// than on identity would wave that move through, and leave the directory #11 is about.
+test('a frozen directory that merely contains `.claude` is not the legacy location, and still refuses', () => {
+  const home = fakeHome('{}');
+  const state = path.join(home, '.claude', 'state');
+  const env: Record<string, string | undefined> = { ...process.env, HOME: home, XDG_STATE_HOME: state };
+  const plain: Record<string, string | undefined> = { ...process.env, HOME: home };
+  delete plain.XDG_STATE_HOME;
+  const run = (e: typeof env) => spawnSync(process.execPath, [CLI, 'install', '--yes'], { env: e, encoding: 'utf8', timeout: 20000 });
+
+  const first = run(env);
+  assert.equal(first.status, 0, first.stderr);
+  const from = path.join(state, 'tarmac', 'snapshots');
+  assert.equal(installedSnapshotsDir(paths(home)), from, 'inside `.claude`, and not where the legacy purge looks');
+  litter(from);
+  const settingsBefore = settingsOf(home);
+
+  const refused = run(plain);
+  assert.equal(refused.status, 1, 'the install is refused');
+  assert.match(refused.stderr, /^tarmac: .*--snapshots-dir/s);
+  assert.equal(fs.readdirSync(from).length, 4, 'and the payloads are where the wrapper still files them');
+  assert.equal(settingsOf(home), settingsBefore, 'nothing else was touched either');
+});
+
+test('the flag names the directory, and a move it asks for is made', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const to = path.join(tempDir('tarmac-to-'), 'snapshots');
+
+  const res = install({ home, snapshotsDir: to });
+
+  assert.equal(res.snapshots, to);
+  assert.equal(installedSnapshotsDir(paths(home)), to, 'and the wrapper says so, which is what the reader follows');
+});
+
+test('a move clears what it leaves behind, by the rule the legacy purge uses', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const from = paths(home).snapshots;
+  litter(from);
+
+  const { moving } = install({ home, snapshotsDir: path.join(tempDir('tarmac-to-'), 'snapshots') });
+
+  assert.equal(moving?.dir, from);
+  assert.equal(moving?.payloads, 4, 'two snapshots, a temp file and the prune marker');
+  assert.equal(moving?.kept, 0);
+  assert.equal(fs.existsSync(from), false, 'the directory goes with them — an orphan is what #11 is about');
+});
+
+// The same sentence as the legacy purge, one directory over: a name is not provenance, and one
+// file we cannot show we wrote is enough for the directory to stay.
+test('a file nothing here wrote keeps the directory a move leaves behind, and itself', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const from = paths(home).snapshots;
+  litter(from, { 'notes.txt': 'mine' });
+
+  const { moving } = install({ home, snapshotsDir: path.join(tempDir('tarmac-to-'), 'snapshots') });
+
+  assert.equal(moving?.kept, 1);
+  assert.deepEqual(fs.readdirSync(from).sort(), ['notes.txt']);
+});
+
+test('the plan names both directories, and what the move clears', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const from = paths(home).snapshots;
+  litter(from);
+  const to = path.join(tempDir('tarmac-to-'), 'snapshots');
+
+  const plan = planInstall({ home, snapshotsDir: to });
+  assert.equal(plan.moving?.dir, from);
+  assert.equal(plan.moving?.payloads, 4, 'counted before a byte is written');
+  const out = renderPlan(plan);
+  assert.match(out, new RegExp(escapeRe(from)), 'the directory being left');
+  assert.match(out, new RegExp(escapeRe(to)), 'and the one being taken');
+  assert.match(out, /mov(e|ing)/i);
+  assert.equal(fs.readdirSync(from).length, 4, 'and the plan is a dry run');
+});
+
+// A relocation that has nothing to clear is still a relocation: an install made minutes ago
+// has no payload in that directory yet, and the plan that fell silent for it would be silent
+// for exactly the move made before the first frame is drawn.
+test('a move is named even when the directory it leaves is empty or absent', () => {
   const home = fakeHome(MINE);
   const elsewhere = path.join(tempDir('tarmac-was-'), 'snapshots');
   install({ home });
   fs.writeFileSync(paths(home).wrapper, renderWrapper({ snapshotDir: elsewhere, chainCommand: 'echo MINE' }), { mode: 0o755 });
 
-  const plan = planInstall({ home });
-  assert.equal(plan.movingFrom, elsewhere);
-  const out = renderPlan(plan);
-  assert.match(out, new RegExp(escapeRe(elsewhere)), 'the directory being left');
-  assert.match(out, new RegExp(escapeRe(paths(home).snapshots)), 'and the one being taken');
-  assert.match(out, /mov(e|ing)/i);
+  const plan = planInstall({ home, snapshotsDir: paths(home).snapshots });
+  assert.equal(plan.moving?.dir, elsewhere);
+  assert.equal(plan.moving?.payloads, 0);
+  assert.match(renderPlan(plan), new RegExp(escapeRe(elsewhere)));
 });
 
-test('a plan that changes nothing about the directory says nothing about moving it', () => {
+test('an install that changes nothing about the directory says nothing about moving it', () => {
   const home = fakeHome(MINE);
   install({ home });
-  assert.equal(planInstall({ home }).movingFrom, null);
-  assert.equal(/moving/i.test(renderPlan(planInstall({ home }))), false);
+  for (const chosen of [undefined, paths(home).snapshots]) {
+    const plan = planInstall({ home, snapshotsDir: chosen });
+    assert.equal(plan.moving, null, String(chosen));
+    assert.equal(/moving/i.test(renderPlan(plan)), false);
+  }
+});
+
+// Identity, not spelling. A second path to the same directory moves nothing — a refusal there
+// would be one nobody could act on, and a purge there would empty the directory the wrapper is
+// about to write to while announcing it as the new home.
+test('a second spelling of the directory in use is not a relocation', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  litter(paths(home).snapshots);
+  const link = path.join(tempDir('tarmac-link-'), 'snaps');
+  fs.symlinkSync(paths(home).snapshots, link);
+
+  assert.equal(planInstall({ home, snapshotsDir: link }).moving, null);
+  assert.equal(install({ home, snapshotsDir: link }).moving, null);
+  assert.equal(fs.readdirSync(paths(home).snapshots).length, 4, 'and nothing was cleared from under the writer');
+});
+
+// The flag chooses a directory; it does not require there to be one to leave. A first install
+// is the plainest way out of the XDG default, and there is nothing to refuse or to clear.
+test('a first install takes the directory it is given, and moves nothing', () => {
+  const home = fakeHome(MINE);
+  const to = path.join(tempDir('tarmac-to-'), 'snapshots');
+  const res = install({ home, snapshotsDir: to });
+  assert.equal(res.moving, null);
+  assert.equal(installedSnapshotsDir(paths(home)), to);
+  assert.equal(fs.existsSync(paths(home).snapshots), false, 'the XDG default was never made');
+});
+
+// A relative path is resolved once, here: the wrapper carries it into a shell whose working
+// directory is wherever Claude Code was started, so `TARMAC_DIR=snaps` is a different
+// directory at every frame.
+test('the directory the flag names is frozen absolute', () => {
+  const home = fakeHome(MINE);
+  const res = install({ home, snapshotsDir: 'snaps' });
+  assert.equal(res.snapshots, path.resolve('snaps'));
+  assert.equal(installedSnapshotsDir(paths(home)), path.resolve('snaps'));
+  fs.rmSync(path.resolve('snaps'), { recursive: true, force: true });
+});
+
+// End to end, in the two shells #11 is written about: one that exports XDG_STATE_HOME and one
+// that does not. The refusal reaches the terminal as a line naming the flag, never as a stack
+// trace, and the flag gets the same install through.
+test('the CLI refuses a relocation nobody asked for, and makes the one that is asked for', () => {
+  const home = fakeHome('{}');
+  const state = tempDir('tarmac-state-');
+  const env: Record<string, string | undefined> = { ...process.env, HOME: home, XDG_STATE_HOME: state };
+  const plain: Record<string, string | undefined> = { ...process.env, HOME: home };
+  delete plain.XDG_STATE_HOME;
+  const run = (e: typeof env, ...extra: string[]) =>
+    spawnSync(process.execPath, [CLI, 'install', '--yes', ...extra], { env: e, encoding: 'utf8', timeout: 20000 });
+
+  const first = run(env);
+  assert.equal(first.status, 0, first.stderr);
+  const from = path.join(state, 'tarmac', 'snapshots');
+  litter(from);
+
+  const refused = run(plain);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /^tarmac: .*--snapshots-dir/s);
+  assert.equal(fs.readdirSync(from).length, 4, 'and the payloads are where the wrapper still files them');
+
+  const moved = run(plain, '--snapshots-dir', paths(home).snapshots);
+  assert.equal(moved.status, 0, moved.stderr);
+  assert.match(moved.stdout, new RegExp(`cleared 4 runtime payload\\(s\\) from ${escapeRe(from)}`));
+  assert.equal(fs.existsSync(from), false);
 });
 
 // N1 (review): a frame that resurrects the directory is now reported, but the `rmdir` was

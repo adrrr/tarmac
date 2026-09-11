@@ -90,7 +90,11 @@ const LISTS = new Set<OptionKey>(['trustHost']);
 const ACCEPTS: Record<Command, ReadonlySet<OptionKey>> = {
   list: new Set<OptionKey>(['staleAfter', 'snapshotsDir', 'home', 'claudeBin', 'json', 'watch', 'help', 'version']),
   serve: new Set<OptionKey>(['port', 'staleAfter', 'snapshotsDir', 'trustHost', 'historyDays', 'home', 'claudeBin', 'demo', 'help', 'version']),
-  install: new Set<OptionKey>(['home', 'yes', 'help', 'version']),
+  // `snapshotsDir` is a WRITER's setting here — the path the wrapper freezes, and the consent
+  // to move an installed one — where on `list` and `serve` it is a reader's lens. `uninstall`
+  // does not take it: it reads the directory out of the wrapper, which is the only file that
+  // knows, and a second answer there could only disagree with the first.
+  install: new Set<OptionKey>(['home', 'snapshotsDir', 'yes', 'help', 'version']),
   uninstall: new Set<OptionKey>(['home', 'yes', 'help', 'version']),
   help: new Set<OptionKey>(['help', 'version']),
 };

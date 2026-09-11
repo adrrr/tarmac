@@ -22,7 +22,7 @@ import { install, uninstall, paths, planInstall, planUninstall, installedSnapsho
 import { confirmTyped } from './prompt.ts';
 import { reapOrphanedTemps } from './reap.ts';
 import { acquireJournalLock, createHistoryStore, historyDirFor } from './history-store.ts';
-import { renderPlan, renderSettings, renderTable, restoreMeaning, servingLine } from './render.ts';
+import { clearedLine, renderPlan, renderSettings, renderTable, restoreMeaning, servingLine } from './render.ts';
 import { runWatch } from './watch.ts';
 
 const USAGE = `tarmac — fleet observability for Claude Code
@@ -34,7 +34,7 @@ const USAGE = `tarmac — fleet observability for Claude Code
                     [--claude-bin PATH] [--trust-host HOST] [--history-days N]
                     [--demo]
         local dashboard
-  tarmac install    [--home DIR] [--yes]
+  tarmac install    [--home DIR] [--yes] [--snapshots-dir DIR]
         chain the statusline
   tarmac uninstall  [--home DIR] [--yes]
         restore the statusline exactly
@@ -50,7 +50,11 @@ const USAGE = `tarmac — fleet observability for Claude Code
                    next free port, a port named here refuses instead)
   --snapshots-dir  where the chained statusline drops its payloads
                    (default: $XDG_STATE_HOME/tarmac/snapshots, or
-                   <home>/.local/state/tarmac/snapshots)
+                   <home>/.local/state/tarmac/snapshots). On \`install\` it is what the
+                   wrapper freezes, and the only way to move an installed one: an
+                   install that would land on another directory refuses instead, since
+                   nothing collects the one it would leave. On \`list\` and \`serve\` it
+                   is a reader's lens, and reads no wrapper
   --claude-bin     path to the claude CLI (default: claude)
   --trust-host     a Host the dashboard also answers to, besides loopback — repeat it
                    once per host (default: none). For a reverse proxy: give the name
@@ -68,11 +72,11 @@ const USAGE = `tarmac — fleet observability for Claude Code
                    --history-days says. The port and the trusted hosts are still resolved
                    as usual, and the page says on itself that it is a demo
 
-  Those five settings can also be set, in decreasing order of precedence, by the
-  environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR, TARMAC_TRUST_HOST,
-  TARMAC_HISTORY_DAYS) and by <home>/.claude/tarmac/config.json ({"staleAfterMs": …,
-  "port": …, "snapshotsDir": …, "trustHosts": […], "history": {"days": …}}). \`serve\`
-  prints which one won.
+  On \`list\` and \`serve\`, those five settings can also be set, in decreasing order of
+  precedence, by the environment (TARMAC_STALE_AFTER, TARMAC_PORT, TARMAC_SNAPSHOTS_DIR,
+  TARMAC_TRUST_HOST, TARMAC_HISTORY_DAYS) and by <home>/.claude/tarmac/config.json
+  ({"staleAfterMs": …, "port": …, "snapshotsDir": …, "trustHosts": […],
+  "history": {"days": …}}). \`serve\` prints which one won.
 `;
 
 /**
@@ -112,7 +116,8 @@ try {
     const home = args.home ?? os.homedir();
     // The plan is computed first and printed whole: every refusal this operation has in it
     // fires here, so the prompt never appears for something that was going to fail anyway.
-    const plan = args.command === 'install' ? planInstall({ home }) : planUninstall({ home });
+    const plan =
+      args.command === 'install' ? planInstall({ home, snapshotsDir: args.snapshotsDir }) : planUninstall({ home });
     process.stdout.write(renderPlan(plan));
 
     const confirmed = await confirmTyped({
@@ -127,19 +132,18 @@ try {
     if (!confirmed) throw new Error('not confirmed — nothing was changed');
 
     if (plan.action === 'install') {
-      const res = install({ home });
+      const res = install({ home, snapshotsDir: args.snapshotsDir });
       console.log(
         res.alreadyInstalled
           ? `install: already installed — wrapper regenerated, settings.json left alone`
           : `install: statusLine wrapped — undo with \`${plan.undo}\``,
       );
-      // What the plan promised, as it actually went: a frame of the OLD wrapper can land in
-      // that directory between the two, so the count is reported rather than assumed.
-      if (res.legacy !== null)
-        console.log(
-          `install: cleared ${res.legacy.payloads} runtime payload(s) from ${res.legacy.dir} — they belong in ${res.snapshots}` +
-            (res.legacy.kept > 0 ? ` (${res.legacy.kept} file(s) kept, so the directory stays)` : ''),
-        );
+      // What the plan promised, as it actually went, for each directory this install can
+      // clear: a frame of the OLD wrapper can land in either between the two, so the counts
+      // are reported rather than assumed.
+      for (const cleared of [res.legacy, res.moving]) {
+        if (cleared !== null) console.log(clearedLine(cleared, res.snapshots));
+      }
     } else {
       const { mode } = uninstall({ home });
       console.log(`uninstall: ${mode} — ${restoreMeaning(mode)}`);

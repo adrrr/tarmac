@@ -158,8 +158,10 @@ A status line you already had is wrapped, not replaced: its display stays byte-i
 `uninstall` names which of its four restore modes ran. Two files land under `~/.claude/`, the
 wrapper and the `backup.json` that undoes it, and neither changes at runtime. The snapshots go
 to `~/.local/state/tarmac/snapshots` (`$XDG_STATE_HOME` when set), because `~/.claude` is a
-directory people commit. The plan, the restore modes and the cleanup of the old layout that
-kept snapshots inside `.claude` are in
+directory people commit. That path is frozen into the wrapper, and moving it is something you
+ask for: an install that would land on a different directory — a second shell, a different
+environment — refuses, and names `--snapshots-dir`. The plan, the restore modes and the cleanup
+of the old layout that kept snapshots inside `.claude` are in
 [the manual](docs/MANUAL.md#installing-safely-the-full-contract).
 
 ## Why it does not break

@@ -11,6 +11,26 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The snapshots directory moves when you say so, and not when a shell does.** `install` derived
+  that path from its own environment and froze the result, so an install from a terminal that
+  exports `XDG_STATE_HOME` and one from a cron job that does not relocated the writer back and
+  forth. Both runs are legitimate; the aftermath was not, because nothing collects the directory
+  left behind — the wrapper's own sweep only touches the directory it is pointed at, the reaper
+  only the one the reader was given, and the purge only `<home>/.claude/tarmac/snapshots`. One
+  dead file per session per night, forever, a level up from the pruning that exists to stop it.
+  An install that would land on another directory now refuses and names `--snapshots-dir`, which
+  is a writer's setting on `install` where it is a reader's lens on `list` and `serve`: pass the
+  new directory to move there, or the installed one to keep writing where it writes today. What a
+  move clears is the runtime payloads this wrapper wrote in the directory it leaves, by the rule
+  the old purge already followed — only the names it files, only plain files, only that directory
+  and never a level below it, and one file it cannot show it wrote keeps the directory — and the
+  plan counts them before you confirm. The `history/` journal `serve` keeps beside that directory
+  is not among them: it stays where it was, so a `serve --range` after a move reads an empty one
+  (#140). The move out of `.claude` still needs no flag: it is the migration, and it was always
+  announced and collected.
+
 ### Fixed
 
 - **`tarmac list` keeps its width promise in every alphabet.** The four caps that bound a project,
