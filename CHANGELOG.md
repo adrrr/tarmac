@@ -66,6 +66,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   one. Everything the guard was written for stands — a frame, a `fetch`, a cross-site form and a
   navigation aimed at the JSON endpoints included — so no page can still make this port spawn
   `claude agents --json` behind your back.
+- **A stray mark in a name no longer pushes its row out of line.** A combining mark, a variation
+  selector or a skin tone that reached the renderer with nothing in front of it was measured as
+  if it had a character to modify: one column for the mark, two for the other two, U+FE0F being
+  read as a request about a character that is not there. A terminal draws none of them, so the
+  cell claimed up to two columns more than it painted and got that much less padding than its
+  column needed. A glyph that is nothing but what rides on a neighbour counts zero now, and the
+  selector still means two columns wherever it has a base whose presentation it can select.
 
 ## [0.10.0] - 2026-09-06
 
