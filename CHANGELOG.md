@@ -44,6 +44,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   where the emoji blocks are: `✅`, `⭐` and `⏳` are two columns and sit outside them, and U+1F321
   is one column and sits inside one. Ambiguous-width characters stay at one column, which is what
   a Western terminal draws and what no two terminals agree on.
+- **A flag in a name is no longer cut in half.** The cut falls between glyphs, and a flag's two
+  regional indicators were two of them — neither rides on the other the way an accent rides on a
+  letter — so a row of flags cut at the 20-column cap ended on a lone U+1F1EB, which a terminal
+  draws as the boxed letter F. Two consecutive indicators are one glyph now, paired from the left
+  as the standard reads them, so the cut drops a whole flag the way it already drops a wide glyph
+  astride the edge, and an odd run still ends in the boxed letter that is all it has. The pair
+  counts the two columns it paints, which the sum of two Neutral halves was only by accident.
 - **A control character in a name can no longer break the table it sits in.** A POSIX basename may
   hold anything but `/` and NUL and `waitingFor` is free text, so a `\n` in either broke one row
   into two physical lines that no cap measured and no padding aligned — and an ESC handed whatever
