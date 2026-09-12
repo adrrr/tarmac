@@ -446,12 +446,16 @@ const RIDES = /[\p{Mn}\p{Me}\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}]
  */
 const RIDES_ALONE = new RegExp(`^${RIDES.source}+$`, 'u');
 /**
- * One regional indicator, and the pair of them that is a country. Both anchored, and that is
- * what pairs from the left rather than swallowing a run: a glyph that is already a pair fails
- * the single-indicator test, so the third indicator of four starts the second flag.
+ * One regional indicator, anchored at both ends, and that is what pairs from the left rather
+ * than swallowing a run: a glyph that is already a pair fails the single-indicator test, so
+ * the third indicator of four starts the second flag.
+ *
+ * The pair below opens on the head alone, because the glyph it is asked about is a pair plus
+ * whatever rides on it — a mark, a skin tone, a joiner. Closed, it would answer no to a ridden
+ * flag and send two columns to a table that calls a lone indicator Neutral.
  */
 const HALF_FLAG = /^[\u{1F1E6}-\u{1F1FF}]$/u;
-const FLAG = /^[\u{1F1E6}-\u{1F1FF}]{2}$/u;
+const FLAG = /^[\u{1F1E6}-\u{1F1FF}]{2}/u;
 
 /**
  * One glyph's columns. U+FE0F is asked about first because it is a REQUEST: it selects the

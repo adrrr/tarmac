@@ -410,6 +410,23 @@ test('a flag paints two columns, not one per indicator', () => {
   assert.equal(padding(flags), padding(ascii), 'three flags are the six columns three pairs paint');
 });
 
+// A glyph is a pair plus whatever rides on it, so a flag followed by a mark or a skin tone is
+// still the two columns a terminal paints the pair in — the rider draws nothing of its own.
+// The measure has to recognise the pair at the head of the glyph rather than the whole of it,
+// or a ridden flag falls through to a table that calls a lone indicator Neutral and answers 1.
+test('a rider on a flag does not shrink the pair to one column', () => {
+  for (const [name, rider] of [
+    ['combining acute', '́'],
+    ['skin tone', '\u{1f3fb}'],
+  ] as const) {
+    const out = renderTable(
+      fleet([row({ project: '\u{1f1eb}\u{1f1f7}' + rider }), row({ sessionId: 's2', project: 'ab' })], { sessions: 2 }),
+    );
+    const [ridden, ascii] = out.split('\n').slice(1, 3);
+    assert.equal(padding(ridden), padding(ascii), `a flag carrying a ${name} still paints two columns`);
+  }
+});
+
 // U+FE0F is a request for the emoji presentation of a character the terminal would otherwise
 // draw in one column, and the terminals that honour it draw two. U+2764 is Neutral in the
 // standard and one column on its own, so the selector is the whole difference here.
