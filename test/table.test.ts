@@ -390,6 +390,26 @@ test('a mark with nothing to ride on paints no column', () => {
   }
 });
 
+// A flag is two regional indicators, and neither rides on the other the way a mark rides on a
+// letter: cut between them, the cell ends on a lone U+1F1EB, which a terminal draws as the
+// boxed letter F. Twelve flags are 24 columns and nine of them fill 18 of the 19 the cut
+// leaves; paired from the left, as the standard pairs them.
+test('never cuts a flag between its two regional indicators', () => {
+  const out = renderTable(fleet([row({ project: '\u{1f1eb}\u{1f1f7}'.repeat(12) })]));
+  assert.match(out.split('\n')[1], /^(?:\u{1f1eb}\u{1f1f7}){9}… {2}idle/u);
+});
+
+// The other half of that rule, and the one an uncut fleet shows: the two columns a terminal
+// draws a flag in belong to the pair, not one to each indicator. The sum was right by accident
+// while a pair was two glyphs of one column, and a pair measured as one glyph has to say 2.
+test('a flag paints two columns, not one per indicator', () => {
+  const out = renderTable(
+    fleet([row({ project: '\u{1f1eb}\u{1f1f7}'.repeat(3) }), row({ sessionId: 's2', project: 'a'.repeat(6) })], { sessions: 2 }),
+  );
+  const [flags, ascii] = out.split('\n').slice(1, 3);
+  assert.equal(padding(flags), padding(ascii), 'three flags are the six columns three pairs paint');
+});
+
 // U+FE0F is a request for the emoji presentation of a character the terminal would otherwise
 // draw in one column, and the terminals that honour it draw two. U+2764 is Neutral in the
 // standard and one column on its own, so the selector is the whole difference here.

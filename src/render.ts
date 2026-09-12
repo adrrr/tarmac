@@ -419,12 +419,18 @@ function cols(s: string): number {
  * of their own — they modify the glyph before them — so a cut between the two is the surrogate
  * pair bug in another alphabet: a name that comes back missing its accent, or a family emoji
  * ending in a joiner that binds to the ellipsis.
+ *
+ * A flag is the one glyph neither rule reaches: its two regional indicators are peers, and
+ * nothing rides on anything. They pair from the left, the way the standard reads them, so an
+ * odd run ends in an indicator with nobody left to pair with — a glyph of its own, and what a
+ * terminal draws as a boxed letter.
  */
 function glyphs(s: string): string[] {
   const out: string[] = [];
   for (const ch of s) {
     const prev = out.length - 1;
-    if (prev >= 0 && (RIDES.test(ch) || out[prev].endsWith(ZWJ))) out[prev] += ch;
+    if (prev >= 0 && (RIDES.test(ch) || out[prev].endsWith(ZWJ) || (HALF_FLAG.test(ch) && HALF_FLAG.test(out[prev]))))
+      out[prev] += ch;
     else out.push(ch);
   }
   return out;
@@ -439,6 +445,13 @@ const RIDES = /[\p{Mn}\p{Me}\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}]
  * above rather than beside it, because two lists of what rides would drift apart.
  */
 const RIDES_ALONE = new RegExp(`^${RIDES.source}+$`, 'u');
+/**
+ * One regional indicator, and the pair of them that is a country. Both anchored, and that is
+ * what pairs from the left rather than swallowing a run: a glyph that is already a pair fails
+ * the single-indicator test, so the third indicator of four starts the second flag.
+ */
+const HALF_FLAG = /^[\u{1F1E6}-\u{1F1FF}]$/u;
+const FLAG = /^[\u{1F1E6}-\u{1F1FF}]{2}$/u;
 
 /**
  * One glyph's columns. U+FE0F is asked about first because it is a REQUEST: it selects the
@@ -452,6 +465,10 @@ function widthOf(g: string): number {
   // short — the row comes apart to the left of where the stray character sits.
   if (RIDES_ALONE.test(g)) return 0;
   if (g.includes('\uFE0F')) return 2;
+  // A flag is two columns, and neither indicator is one of them: the standard calls an indicator
+  // Neutral, so the table below answers 1 for each and a pair added up to the right number only
+  // while it was two glyphs. Measured as the one glyph a terminal draws, it has to say so.
+  if (FLAG.test(g)) return 2;
   const cp = g.codePointAt(0)!;
   return WIDE.some(([lo, hi]) => cp >= lo && cp <= hi) ? 2 : 1;
 }
