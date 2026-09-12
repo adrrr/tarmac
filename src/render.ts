@@ -432,7 +432,13 @@ function glyphs(s: string): string[] {
 
 const ZWJ = '\u200D';
 /** Marks, joiners, variation selectors and skin tones: everything that belongs to a neighbour. */
-const RIDES = /\p{Mn}|\p{Me}|[\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}]/u;
+const RIDES = /[\p{Mn}\p{Me}\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}]/u;
+/**
+ * A glyph that is ONLY those: what rides on a neighbour, having arrived with no neighbour to
+ * ride on. `glyphs` had nowhere to put it and left it standing alone. Built out of the class
+ * above rather than beside it, because two lists of what rides would drift apart.
+ */
+const RIDES_ALONE = new RegExp(`^${RIDES.source}+$`, 'u');
 
 /**
  * One glyph's columns. U+FE0F is asked about first because it is a REQUEST: it selects the
@@ -440,6 +446,11 @@ const RIDES = /\p{Mn}|\p{Me}|[\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF
  * terminals that honour it draw two.
  */
 function widthOf(g: string): number {
+  // Asked before U+FE0F, because a selector standing on its own is not that request: there is
+  // no character in front of it whose presentation could be selected. A terminal draws nothing
+  // for a glyph with no base, and a cell measured wider than it paints is padded that much
+  // short — the row comes apart to the left of where the stray character sits.
+  if (RIDES_ALONE.test(g)) return 0;
   if (g.includes('\uFE0F')) return 2;
   const cp = g.codePointAt(0)!;
   return WIDE.some(([lo, hi]) => cp >= lo && cp <= hi) ? 2 : 1;

@@ -377,6 +377,19 @@ test('never cuts a combining mark away from the letter it rides on', () => {
   assert.match(out.split('\n')[1], /^(e\u0301){19}… {2}idle/);
 });
 
+// The other end of the same rule: a mark, a selector or a skin tone that arrives with nothing
+// before it has nothing to ride on, so `glyphs` leaves it standing as a glyph of its own — and
+// it was then measured as if it had a base, 1 for the accent and 2 for the other two, whose
+// U+FE0F rule is a request about a character that is not there. A terminal draws none of them,
+// so the cell claimed one or two columns more than it paints and was padded that much short.
+test('a mark with nothing to ride on paints no column', () => {
+  for (const stray of ['́', '️', '\u{1f3fb}']) {
+    const out = renderTable(fleet([row({ project: `${stray}abc` }), row({ sessionId: 's2', project: 'abc' })], { sessions: 2 }));
+    const [alone, ascii] = out.split('\n').slice(1, 3);
+    assert.equal(padding(alone), padding(ascii), `U+${stray.codePointAt(0)!.toString(16).toUpperCase()} paints no column`);
+  }
+});
+
 // U+FE0F is a request for the emoji presentation of a character the terminal would otherwise
 // draw in one column, and the terminals that honour it draw two. U+2764 is Neutral in the
 // standard and one column on its own, so the selector is the whole difference here.
