@@ -390,6 +390,19 @@ test('a mark with nothing to ride on paints no column', () => {
   }
 });
 
+// The half of that the stray glyph does not cover: a joiner with nothing before it has nothing
+// to join, so it stands as a glyph of its own and the NEXT character joins IT — the glyph has a
+// base, just not in front of it. Measured at its first code point, the width table was consulted
+// at U+200D and a wide character behind a stray joiner counted 1 where a terminal paints 2, which
+// is the misalignment the display-column arithmetic exists to prevent.
+test('a wide character behind a stray joiner still paints two columns', () => {
+  const out = renderTable(
+    fleet([row({ project: '\u200d項' }), row({ sessionId: 's2', project: 'aa' })], { sessions: 2 }),
+  );
+  const [joined, ascii] = out.split('\n').slice(1, 3);
+  assert.equal(padding(joined), padding(ascii), 'the joiner paints nothing and U+9805 its two columns');
+});
+
 // A flag is two regional indicators, and neither rides on the other the way a mark rides on a
 // letter: cut between them, the cell ends on a lone U+1F1EB, which a terminal draws as the
 // boxed letter F. Twelve flags are 24 columns and nine of them fill 18 of the 19 the cut
