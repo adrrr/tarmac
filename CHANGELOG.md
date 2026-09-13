@@ -33,6 +33,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A wide character behind a stray joiner no longer pushes its row out of line.** A zero-width
+  joiner that reached the renderer with nothing in front of it had nothing to join, so it stood as
+  a glyph of its own and the character behind it joined the joiner instead — a glyph with a base,
+  just not at its head. The width was read at that head, which paints nothing, so a CJK ideograph
+  or any other wide character sitting behind such a joiner counted one column where a terminal
+  paints two, and every cell after it in that row sat one place off the row below. The measure
+  asks about the base now rather than the first code point, and a glyph that is nothing but what
+  rides on a neighbour still counts zero.
 - **`tarmac list` keeps its width promise in every alphabet.** The four caps that bound a project,
   a state, a model and an effort counted code points, and the padding that lines the columns up
   counted them too — so a fleet whose names are written in CJK spent 102 points and painted 160
