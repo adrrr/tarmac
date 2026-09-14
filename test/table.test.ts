@@ -419,7 +419,7 @@ test('never cuts a flag between its two regional indicators', () => {
 // fixed. A stray joiner at the head of the cell costs the whole run its pairing, not one flag.
 test('a joiner in front of a flag does not let the cut fall between its indicators', () => {
   const cut = (project: string): string => renderTable(fleet([row({ project })])).split('\n')[1];
-  assert.match(cut('a'.repeat(19) + '‍\u{1f1eb}\u{1f1f7}b'), /^a{19}‍… {2}idle/u, 'the flag is dropped whole');
+  assert.match(cut('a'.repeat(19) + '‍\u{1f1eb}\u{1f1f7}b'), /^a{19}… {2}idle/u, 'the flag is dropped whole');
   assert.match(cut('‍' + '\u{1f1eb}\u{1f1f7}'.repeat(12)), /^‍(?:\u{1f1eb}\u{1f1f7}){9}… {2}idle/u, 'and the pairs behind it still pair');
 });
 

@@ -365,7 +365,8 @@ const CAPS: Array<number | null> = [20, 28, null, null, 16, 8, null, null];
  * One cell, made safe to print and cut to its column. The ellipsis is spent out of the cap
  * rather than added past it — a cap a cut cell can exceed is not a cap — and the cut is by
  * glyph, because half a surrogate pair is not a shorter name, it is a broken one, and neither
- * is a name whose accent was left behind by the cut before it.
+ * is a name whose accent was left behind by the cut before it. A joiner the cut leaves
+ * pending is dropped with it: the ellipsis is not the glyph it was reaching for.
  */
 function clip(cell: string, i: number): string {
   const cap = CAPS[i];
@@ -381,7 +382,7 @@ function clip(cell: string, i: number): string {
     cut += g;
     n += width;
   }
-  return cut + '…';
+  return cut.replace(/\u200D+$/u, '') + '…';
 }
 
 /**
