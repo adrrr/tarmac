@@ -365,7 +365,8 @@ const CAPS: Array<number | null> = [20, 28, null, null, 16, 8, null, null];
  * One cell, made safe to print and cut to its column. The ellipsis is spent out of the cap
  * rather than added past it — a cap a cut cell can exceed is not a cap — and the cut is by
  * glyph, because half a surrogate pair is not a shorter name, it is a broken one, and neither
- * is a name whose accent was left behind by the cut before it.
+ * is a name whose accent was left behind by the cut before it. A joiner the cut leaves
+ * pending is dropped with it: the ellipsis is not the glyph it was reaching for.
  */
 function clip(cell: string, i: number): string {
   const cap = CAPS[i];
@@ -381,7 +382,7 @@ function clip(cell: string, i: number): string {
     cut += g;
     n += width;
   }
-  return cut + '…';
+  return cut.replace(/\u200D+$/u, '') + '…';
 }
 
 /**
@@ -429,7 +430,13 @@ function glyphs(s: string): string[] {
   const out: string[] = [];
   for (const ch of s) {
     const prev = out.length - 1;
-    if (prev >= 0 && (RIDES.test(ch) || out[prev].endsWith(ZWJ) || (HALF_FLAG.test(ch) && HALF_FLAG.test(out[prev]))))
+    const indicator = HALF_FLAG.test(ch);
+    // An indicator is the one character a trailing joiner does not take: it pairs with the
+    // indicator before it, and no emoji sequence joins a flag to anything. Swallowed, it would
+    // leave a glyph that is no longer the half-flag its partner tests for, so the partner would
+    // start a glyph of its own and the cut could fall between the two — one lone indicator, and
+    // every pair behind it shifted by one. That is the #183 state, reached by a stray joiner.
+    if (prev >= 0 && (RIDES.test(ch) || (out[prev].endsWith(ZWJ) && !indicator) || (indicator && HALF_FLAG.test(out[prev]))))
       out[prev] += ch;
     else out.push(ch);
   }

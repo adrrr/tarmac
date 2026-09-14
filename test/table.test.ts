@@ -412,6 +412,17 @@ test('never cuts a flag between its two regional indicators', () => {
   assert.match(out.split('\n')[1], /^(?:\u{1f1eb}\u{1f1f7}){9}… {2}idle/u);
 });
 
+// A joiner takes the character behind it into its own glyph, and an indicator is the one
+// character that must not go: swallowed, the glyph is no longer the half-flag its partner pairs
+// with, the partner starts a glyph of its own, and the cut can fall between the two — the cell
+// ends on the lone U+1F1EB a terminal draws as the boxed letter F, which is the state #183
+// fixed. A stray joiner at the head of the cell costs the whole run its pairing, not one flag.
+test('a joiner in front of a flag does not let the cut fall between its indicators', () => {
+  const cut = (project: string): string => renderTable(fleet([row({ project })])).split('\n')[1];
+  assert.match(cut('a'.repeat(19) + '‍\u{1f1eb}\u{1f1f7}b'), /^a{19}… {2}idle/u, 'the flag is dropped whole');
+  assert.match(cut('‍' + '\u{1f1eb}\u{1f1f7}'.repeat(12)), /^‍(?:\u{1f1eb}\u{1f1f7}){9}… {2}idle/u, 'and the pairs behind it still pair');
+});
+
 // The other half of that rule, and the one an uncut fleet shows: the two columns a terminal
 // draws a flag in belong to the pair, not one to each indicator. The sum was right by accident
 // while a pair was two glyphs of one column, and a pair measured as one glyph has to say 2.
