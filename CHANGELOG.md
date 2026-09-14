@@ -39,7 +39,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   partner started a glyph of its own, and a name cut at the 20-column cap could end on the boxed
   letter F again. A stray joiner at the head of a cell cost more than one flag: every pair behind
   it was shifted by one. An indicator never joins a joiner now — no emoji sequence asks a joiner
-  to hold one — and pairs with the indicator before it, joiner or no joiner.
+  to hold one — and pairs with the indicator before it, joiner or no joiner. A cut that ends on a
+  joiner is what that made reachable, and the ellipsis bound to it as the glyph it was reaching
+  for: the cell measured a column short of what it paints. A pending joiner is dropped with the
+  cut now.
 - **A wide character behind a stray joiner no longer pushes its row out of line.** A zero-width
   joiner that reached the renderer with nothing in front of it had nothing to join, so it stood as
   a glyph of its own and the character behind it joined the joiner instead — a glyph with a base,
