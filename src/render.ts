@@ -429,7 +429,13 @@ function glyphs(s: string): string[] {
   const out: string[] = [];
   for (const ch of s) {
     const prev = out.length - 1;
-    if (prev >= 0 && (RIDES.test(ch) || out[prev].endsWith(ZWJ) || (HALF_FLAG.test(ch) && HALF_FLAG.test(out[prev]))))
+    const indicator = HALF_FLAG.test(ch);
+    // An indicator is the one character a trailing joiner does not take: it pairs with the
+    // indicator before it, and no emoji sequence joins a flag to anything. Swallowed, it would
+    // leave a glyph that is no longer the half-flag its partner tests for, so the partner would
+    // start a glyph of its own and the cut could fall between the two — one lone indicator, and
+    // every pair behind it shifted by one. That is the #183 state, reached by a stray joiner.
+    if (prev >= 0 && (RIDES.test(ch) || (out[prev].endsWith(ZWJ) && !indicator) || (indicator && HALF_FLAG.test(out[prev]))))
       out[prev] += ch;
     else out.push(ch);
   }

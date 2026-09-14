@@ -33,6 +33,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A joiner in front of a flag no longer lets the cut fall between its two indicators.** A
+  zero-width joiner takes the character behind it into its own glyph, and a regional indicator
+  went the same way — so the glyph was no longer the lone indicator its partner looks for, the
+  partner started a glyph of its own, and a name cut at the 20-column cap could end on the boxed
+  letter F again. A stray joiner at the head of a cell cost more than one flag: every pair behind
+  it was shifted by one. An indicator never joins a joiner now — no emoji sequence asks a joiner
+  to hold one — and pairs with the indicator before it, joiner or no joiner.
 - **A wide character behind a stray joiner no longer pushes its row out of line.** A zero-width
   joiner that reached the renderer with nothing in front of it had nothing to join, so it stood as
   a glyph of its own and the character behind it joined the joiner instead — a glyph with a base,
