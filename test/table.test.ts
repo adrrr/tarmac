@@ -434,6 +434,21 @@ test('a flag paints two columns, not one per indicator', () => {
   assert.equal(padding(flags), padding(ascii), 'three flags are the six columns three pairs paint');
 });
 
+// The other flag the standard spells, and the one neither rule above reaches: a black flag and
+// a run of tag characters naming a subdivision. The tags are not marks and not indicators, so
+// each stood as a glyph of its own — a sequence measured 8 columns for the 2 a terminal paints,
+// and the cut fell inside it the way it fell between two indicators before #183.
+test('a tag sequence is one flag of two columns, and the cut drops it whole', () => {
+  const scot = '\u{1f3f4}\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f}';
+  const out = renderTable(
+    fleet([row({ project: scot }), row({ sessionId: 's2', project: 'ab' })], { sessions: 2 }),
+  );
+  const [flag, ascii] = out.split('\n').slice(1, 3);
+  assert.equal(padding(flag), padding(ascii), 'the six tags paint nothing and the black flag its two columns');
+  const cut = renderTable(fleet([row({ project: scot.repeat(12) })])).split('\n')[1];
+  assert.match(cut, new RegExp(`^(?:${scot}){9}… {2}idle`, 'u'), 'and nine whole sequences fill the cap');
+});
+
 // A glyph is a pair plus whatever rides on it, so a flag followed by a mark or a skin tone is
 // still the two columns a terminal paints the pair in — the rider draws nothing of its own.
 // The measure has to recognise the pair at the head of the glyph rather than the whole of it,
