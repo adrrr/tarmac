@@ -33,6 +33,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A named pipe at settings.json no longer freezes `install` and `uninstall`.** Both opened that
+  file without asking what was there, and a read of a FIFO waits for a writer that need never
+  come — so the plan never printed, the prompt never came and there was nothing to press, on the
+  one file every run reads before anything else. The kind is asked before the open now, and a
+  settings.json that is not a regular file stops the run by naming the file, the way the config
+  reader has since #165 and the snapshot reader since #160. `stat`, not `lstat`: a settings.json
+  symlinked out of a dotfiles repository is a setup to honour, and a link to a pipe is refused
+  either way (#190).
 - **A joiner in front of a flag no longer lets the cut fall between its two indicators.** A
   zero-width joiner takes the character behind it into its own glyph, and a regional indicator
   went the same way — so the glyph was no longer the lone indicator its partner looks for, the

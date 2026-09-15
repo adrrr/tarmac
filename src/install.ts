@@ -302,9 +302,38 @@ function requireHome(home: string): string {
   return root;
 }
 
+/**
+ * settings.json as it stands, or null where there is none.
+ *
+ * The kind is asked BEFORE the open, and only a regular file is opened: `readFileSync` on a
+ * FIFO waits for a writer that need never come, and this is the first file `install` and
+ * `uninstall` both read — one named pipe here and the plan never prints, the prompt never
+ * comes and there is nothing to press (#190). `readConfigFile` asks the same question for the
+ * same reason (#165), and the snapshot reader before it (#160).
+ *
+ * `stat` rather than `lstat`, for the reason that reader's comment gives: a settings.json
+ * symlinked out of a dotfiles repository is a setup to honour, and `stat` refuses a link to a
+ * pipe exactly as `lstat` does.
+ *
+ * Absent stays absent however the stat fails, which is what `existsSync` answered here before:
+ * this file not being there is the ordinary case — the install that creates it.
+ *
+ * @throws if the path holds something that is not a regular file
+ */
+function readSettingsText(file: string): string | null {
+  try {
+    if (fs.statSync(file).isFile()) return fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  throw new Error(
+    `${file} is not a regular file — a directory, a socket or a named pipe cannot carry settings, and reading one can wait for ever`,
+  );
+}
+
 /** @throws if settings.json exists and is not JSON — the one file we must never mangle. */
 function readSettings(p: TarmacPaths): { text: string | null; settings: Settings } {
-  const text = fs.existsSync(p.settings) ? fs.readFileSync(p.settings, 'utf8') : null;
+  const text = readSettingsText(p.settings);
   let settings: Settings = {};
   if (text !== null && text.trim() !== '') {
     try {
@@ -1031,7 +1060,7 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
   // XDG_STATE_HOME, and the marker is the only file in that directory uninstall owns.
   const snapshots = installedSnapshotsDir(p);
 
-  const currentText = fs.existsSync(p.settings) ? fs.readFileSync(p.settings, 'utf8') : null;
+  const currentText = readSettingsText(p.settings);
   let mode: UninstallMode;
 
   if (currentText === backup.installedText) {
