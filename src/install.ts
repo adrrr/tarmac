@@ -315,20 +315,29 @@ function requireHome(home: string): string {
  * symlinked out of a dotfiles repository is a setup to honour, and `stat` refuses a link to a
  * pipe exactly as `lstat` does.
  *
- * Absent stays absent however the stat fails, which is what `existsSync` answered here before:
- * this file not being there is the ordinary case — the install that creates it.
+ * Absent is only what `ENOENT` says: this file not being there is the ordinary case — the
+ * install that creates it. Any other failure of the stat, and any failure of the read, is
+ * refused rather than read as absent, because absent is the one answer that lets `install --yes`
+ * write a fresh file over whatever is there, and a settings.json we cannot read is exactly the
+ * one we must never overwrite. `existsSync` answered false only to a missing file in practice,
+ * and the read after it refused on its own; this keeps both.
  *
- * @throws if the path holds something that is not a regular file
+ * @throws if the path holds something that is not a regular file, or if it cannot be read
  */
 function readSettingsText(file: string): string | null {
+  let isFile: boolean;
   try {
-    if (fs.statSync(file).isFile()) return fs.readFileSync(file, 'utf8');
-  } catch {
-    return null;
+    isFile = fs.statSync(file).isFile();
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw new Error(`could not read ${file}: ${(e as Error).message}`);
   }
-  throw new Error(
-    `${file} is not a regular file — a directory, a socket or a named pipe cannot carry settings, and reading one can wait for ever`,
-  );
+  if (!isFile) {
+    throw new Error(
+      `${file} is not a regular file — a directory, a socket or a named pipe cannot carry settings, and reading one can wait for ever`,
+    );
+  }
+  return fs.readFileSync(file, 'utf8');
 }
 
 /** @throws if settings.json exists and is not JSON — the one file we must never mangle. */

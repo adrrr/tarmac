@@ -520,6 +520,25 @@ test('the second read of settings.json refuses what cannot carry settings, by na
   assert.throws(() => uninstall({ home }), /settings\.json is not a regular file/);
 });
 
+// A settings.json that exists but cannot be read is not absent, and absent is the one answer
+// that lets `install --yes` write a fresh file over it. The guard above asks the kind before the
+// open; it must not turn a refused read into that answer. Refused stays refused, and the file
+// stays as it was.
+test('an unreadable settings.json is refused, not read as absent and overwritten', (t) => {
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: 0000 does not deny anything, the case cannot be built here');
+    return;
+  }
+  const original = '{"statusLine":{"type":"command","command":"/bin/true"}}';
+  const home = fakeHome(original);
+  fs.chmodSync(paths(home).settings, 0o000);
+  const run = tarmac(['install', '--yes', '--home', home], home);
+  fs.chmodSync(paths(home).settings, 0o600);
+  assert.notEqual(run.status, 0, 'refused');
+  assert.match(run.stderr, /settings\.json/, 'naming the file');
+  assert.equal(fs.readFileSync(paths(home).settings, 'utf8'), original, 'and left it as it was');
+});
+
 // Told with a spelling of our own path, since with the canonical one "announces a change"
 // and "announces nothing" are the same string, and a plan that cannot be caught lying is
 // not being checked.
