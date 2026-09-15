@@ -446,8 +446,8 @@ function glyphs(s: string): string[] {
 const ZWJ = '\u200D';
 /**
  * Marks, joiners, variation selectors, skin tones and tags: everything that belongs to a
- * neighbour. The tags are the subdivision flags \u2014 a black flag and the letters of a region
- * spelled in U+E0020..U+E007F \u2014 and they ride for the same reason a skin tone does: a terminal
+ * neighbour. The tags are the subdivision flags — a black flag and the letters of a region
+ * spelled in U+E0020..U+E007F — and they ride for the same reason a skin tone does: a terminal
  * paints the sequence as the one flag its base stands for, never a column per tag.
  */
 const RIDES = /[\p{Mn}\p{Me}\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}]/u;
