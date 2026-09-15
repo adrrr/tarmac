@@ -41,6 +41,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   reader has since #165 and the snapshot reader since #160. `stat`, not `lstat`: a settings.json
   symlinked out of a dotfiles repository is a setup to honour, and a link to a pipe is refused
   either way (#190).
+- **A subdivision flag is measured as the one flag a terminal paints, not as seven glyphs.** The
+  flags that name a region spell it in tag characters behind a black flag, and tags are neither a
+  mark nor a regional indicator — so each stood as a glyph of its own and the sequence claimed 8
+  columns for the 2 it paints. A project name carrying one padded six columns short, which is the
+  misalignment the display-column arithmetic exists to prevent, and a name cut at the 20-column
+  cap could end mid-sequence, on a black flag with one letter of its region still on it. Tags ride
+  on the glyph in front of them now, the way a skin tone does (#189).
 - **A joiner in front of a flag no longer lets the cut fall between its two indicators.** A
   zero-width joiner takes the character behind it into its own glyph, and a regional indicator
   went the same way — so the glyph was no longer the lone indicator its partner looks for, the
