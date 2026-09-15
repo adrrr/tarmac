@@ -495,6 +495,50 @@ test('a statusLine pointing at a FIFO does not hang the plan', () => {
   assert.match(run.stderr, /--yes/, 'and got as far as asking');
 });
 
+// The FIFO above sits at a path read OUT of settings.json. settings.json ITSELF is the first
+// file both commands open, and it was opened with no question about its kind — so a named pipe
+// there and the plan never printed, the prompt never came and there was nothing to press: the
+// freeze of #160 and #165 on the one file every run starts from.
+test('a settings.json that is not a regular file stops the run rather than hanging it', () => {
+  const home = fakeHome();
+  execFileSync('mkfifo', [paths(home).settings]);
+  const run = tarmac(['install', '--home', home], home);
+  assert.notEqual(run.status, null, 'install finished rather than hanging');
+  assert.notEqual(run.status, 0, 'and refused');
+  assert.match(run.stderr, new RegExp(escapeForTest(paths(home).settings)), 'naming the file');
+});
+
+// `uninstall` reads settings.json a second time, after the plan that already read it — so the
+// CLI cannot reach this read with a pipe in place, and an embedder calling the exported
+// function goes straight to it. A directory rather than a FIFO, for the half of the guard that
+// can be asked without a writer: unguarded it is a raw EISDIR that names nothing to act on.
+test('the second read of settings.json refuses what cannot carry settings, by name', () => {
+  const home = fakeHome();
+  install({ home });
+  fs.rmSync(paths(home).settings);
+  fs.mkdirSync(paths(home).settings);
+  assert.throws(() => uninstall({ home }), /settings\.json is not a regular file/);
+});
+
+// A settings.json that exists but cannot be read is not absent, and absent is the one answer
+// that lets `install --yes` write a fresh file over it. The guard above asks the kind before the
+// open; it must not turn a refused read into that answer. Refused stays refused, and the file
+// stays as it was.
+test('an unreadable settings.json is refused, not read as absent and overwritten', (t) => {
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: 0000 does not deny anything, the case cannot be built here');
+    return;
+  }
+  const original = '{"statusLine":{"type":"command","command":"/bin/true"}}';
+  const home = fakeHome(original);
+  fs.chmodSync(paths(home).settings, 0o000);
+  const run = tarmac(['install', '--yes', '--home', home], home);
+  fs.chmodSync(paths(home).settings, 0o600);
+  assert.notEqual(run.status, 0, 'refused');
+  assert.match(run.stderr, /settings\.json/, 'naming the file');
+  assert.equal(fs.readFileSync(paths(home).settings, 'utf8'), original, 'and left it as it was');
+});
+
 // Told with a spelling of our own path, since with the canonical one "announces a change"
 // and "announces nothing" are the same string, and a plan that cannot be caught lying is
 // not being checked.

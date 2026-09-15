@@ -33,6 +33,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A named pipe at settings.json no longer freezes `install` and `uninstall`.** Both opened that
+  file without asking what was there, and a read of a FIFO waits for a writer that need never
+  come — so the plan never printed, the prompt never came and there was nothing to press, on the
+  one file every run reads before anything else. The kind is asked before the open now, and a
+  settings.json that is not a regular file stops the run by naming the file, the way the config
+  reader has since #165 and the snapshot reader since #160. `stat`, not `lstat`: a settings.json
+  symlinked out of a dotfiles repository is a setup to honour, and a link to a pipe is refused
+  either way (#190).
 - **A subdivision flag is measured as the one flag a terminal paints, not as seven glyphs.** The
   flags that name a region spell it in tag characters behind a black flag, and tags are neither a
   mark nor a regional indicator — so each stood as a glyph of its own and the sequence claimed 8
