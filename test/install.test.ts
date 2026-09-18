@@ -520,6 +520,31 @@ test('the second read of settings.json refuses what cannot carry settings, by na
   assert.throws(() => uninstall({ home }), /settings\.json is not a regular file/);
 });
 
+// backup.json is the other file both commands read before they print anything, and it was read
+// with no question about its kind at all — so a named pipe there froze `install` exactly as one
+// at settings.json did, with no output and nothing to press (#193).
+test('a backup.json that is not a regular file stops the run rather than hanging it', () => {
+  const home = fakeHome(MINE);
+  fs.mkdirSync(paths(home).dir, { recursive: true });
+  execFileSync('mkfifo', [paths(home).backup]);
+  const run = tarmac(['install', '--home', home], home);
+  assert.notEqual(run.status, null, 'install finished rather than hanging');
+  assert.notEqual(run.status, 0, 'and refused');
+  assert.match(run.stderr, new RegExp(escapeForTest(paths(home).backup)), 'naming the file');
+});
+
+// `uninstall` reads the backup on its own, before the settings read that would refuse first.
+// A directory rather than a FIFO, for the half of the guard that can be asked without a
+// writer: unguarded it is read as "no backup at all", which is the answer that hides what is
+// really there behind "no tarmac install found".
+test('the uninstall read of backup.json refuses what cannot carry a backup, by name', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.rmSync(paths(home).backup);
+  fs.mkdirSync(paths(home).backup);
+  assert.throws(() => uninstall({ home }), /backup\.json is not a regular file/);
+});
+
 // A settings.json that exists but cannot be read is not absent, and absent is the one answer
 // that lets `install --yes` write a fresh file over it. The guard above asks the kind before the
 // open; it must not turn a refused read into that answer. Refused stays refused, and the file

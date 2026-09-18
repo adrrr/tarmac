@@ -33,6 +33,16 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A named pipe at backup.json no longer freezes the reads of `install` and `uninstall`.** The
+  fix above covered settings.json; the backup beside it was still read with no question about its
+  kind, and it is the other file both commands read before they print anything — so one FIFO
+  there and the run froze exactly as before, with no output and nothing to press. The kind is
+  asked before the open now, and a backup.json that is not a regular file stops the run by naming
+  the file. A missing or corrupt backup still reads as "no usable install", as it always did: that
+  answer lets a fresh install write over what is there, and a file we never opened must not wear
+  it. Not covered yet: a fresh install whose wrapper already carries the marker never reads the
+  backup and still writes it blind, so a FIFO there can hold that one path (#193, follow-up in
+  #195).
 - **A named pipe at settings.json no longer freezes `install` and `uninstall`.** Both opened that
   file without asking what was there, and a read of a FIFO waits for a writer that need never
   come — so the plan never printed, the prompt never came and there was nothing to press, on the
