@@ -852,6 +852,10 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
     fs.mkdirSync(p.snapshots, { recursive: true });
     writeWrapper(p, previous?.command ?? null, root);
 
+    // Nothing on this path has read backup.json — the marker answered for it — so the kind is
+    // asked here, before the open, and inside the try: a refusal that lands after the wrapper
+    // is written must unwind it like any other.
+    refuseNonRegularBackup(p);
     // Order matters: the backup is the only way back, so it must be on disk BEFORE
     // settings.json sends Claude Code to the wrapper. Crashing between the two otherwise
     // locks the user out of install (backup missing) and uninstall (no install found) at once.
@@ -1109,10 +1113,9 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
 /**
  * The backup as it stands, or null where there is none to read.
  *
- * The kind is asked BEFORE the open, for the reason `readSettingsText` gives: `readFileSync` on
- * a FIFO waits for a writer that need never come, and this is the other file `install` and
- * `uninstall` both read before they print anything (#193). `stat` rather than `lstat`, as there:
- * a backup symlinked into place is a setup to honour, and `stat` refuses a link to a pipe too.
+ * The kind is asked BEFORE the open, by the guard below and for the reason `readSettingsText`
+ * gives: `readFileSync` on a FIFO waits for a writer that need never come, and this is the other
+ * file `install` and `uninstall` both read before they print anything (#193).
  *
  * That one refusal throws, where every other failure here is null. The difference is what null
  * MEANS to the callers: no usable install — the answer that lets `install` write a fresh backup
@@ -1123,20 +1126,39 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
  * @throws if the path holds something that is not a regular file
  */
 function readBackup(p: TarmacPaths): unknown {
+  refuseNonRegularBackup(p);
+  try {
+    return JSON.parse(fs.readFileSync(p.backup, 'utf8'));
+  } catch {
+    return null; // absent, unreadable or shapeless: all three are "no usable install"
+  }
+}
+
+/**
+ * The question both sides of backup.json ask before they open it, and the one place it is
+ * worded. The write asks it too because the read is not always reached: on a fresh install
+ * `tarmacWasInstalledHere` stops at the wrapper's marker, and the branch that follows used to
+ * write the backup blind. Opening a FIFO for writing waits for a reader that need never come,
+ * and the reader that does attach carries off the only record of the way back (#195).
+ *
+ * `stat` rather than `lstat`, as everywhere else here: a backup symlinked into place is a setup
+ * to honour, and both `readFileSync` and `writeFileSync` follow the link exactly as `stat` does.
+ *
+ * Silent when there is nothing there — absent is the ordinary case on both sides, the one the
+ * caller above reads as "no usable install" and the fresh install creates.
+ *
+ * @throws if the path holds something that is not a regular file
+ */
+function refuseNonRegularBackup(p: TarmacPaths): void {
   let isFile: boolean;
   try {
     isFile = fs.statSync(p.backup).isFile();
   } catch {
-    return null; // absent, and unstattable reads as absent exactly as `existsSync` did
+    return; // absent, and unstattable reads as absent exactly as `existsSync` did
   }
   if (!isFile) {
     throw new Error(
-      `${p.backup} is not a regular file — a directory, a socket or a named pipe cannot carry a backup, and reading one can wait for ever`,
+      `${p.backup} is not a regular file — a directory, a socket or a named pipe cannot carry a backup, and opening one can wait for ever`,
     );
-  }
-  try {
-    return JSON.parse(fs.readFileSync(p.backup, 'utf8'));
-  } catch {
-    return null;
   }
 }

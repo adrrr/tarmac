@@ -545,6 +545,35 @@ test('the uninstall read of backup.json refuses what cannot carry a backup, by n
   assert.throws(() => uninstall({ home }), /backup\.json is not a regular file/);
 });
 
+// The read guard above never runs on the path that WRITES the backup. A wrapper carrying our
+// marker whose settings.json no longer points at it takes the fresh-install branch, and that
+// branch wrote backup.json with no question about its kind — an open of a FIFO for writing
+// waits for a reader that need never come, and the reader that does attach takes the only
+// record of the way back into a pipe (#195).
+test('a fresh install refuses to write over a backup.json that is not a regular file', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, MINE); // the marker stays, the link to it is lost
+  fs.rmSync(paths(home).backup);
+  execFileSync('mkfifo', [paths(home).backup]);
+  const run = tarmac(['install', '--yes', '--home', home], home);
+  assert.notEqual(run.status, null, 'install finished rather than hanging');
+  assert.notEqual(run.status, 0, 'and refused');
+  assert.match(run.stderr, new RegExp(escapeForTest(paths(home).backup)), 'naming the file');
+  assert.equal(jsonOf(home).statusLine.command, 'echo MINE', 'and their statusline is untouched');
+});
+
+// The half of that guard a test can ask without a writer, through the exported function an
+// embedder calls: unguarded it is a raw EISDIR from the write, which names no way out.
+test('the fresh-install write refuses what cannot carry a backup, by name', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, MINE);
+  fs.rmSync(paths(home).backup);
+  fs.mkdirSync(paths(home).backup);
+  assert.throws(() => install({ home }), /backup\.json is not a regular file/);
+});
+
 // A settings.json that exists but cannot be read is not absent, and absent is the one answer
 // that lets `install --yes` write a fresh file over it. The guard above asks the kind before the
 // open; it must not turn a refused read into that answer. Refused stays refused, and the file
