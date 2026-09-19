@@ -33,16 +33,22 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A fresh install no longer writes backup.json without asking what is there.** The read side
+  asks since the fix below, but a wrapper still carrying our marker whose settings.json no longer
+  points at it takes the fresh-install branch, which never reads the backup at all — so a named
+  pipe there froze the write instead of the read, after the plan had printed and the wrapper was
+  on disk. Worse than the freeze: with a reader attached the install finished, settings.json
+  pointed at the wrapper and the backup, the only record of the way back, went into the pipe, so
+  the `uninstall` the CLI had just announced refused. The kind is asked on both sides now, in one
+  place, and a refusal on this path unwinds what the run had already written (#195).
 - **A named pipe at backup.json no longer freezes the reads of `install` and `uninstall`.** The
-  fix above covered settings.json; the backup beside it was still read with no question about its
+  fix below covered settings.json; the backup beside it was still read with no question about its
   kind, and it is the other file both commands read before they print anything — so one FIFO
   there and the run froze exactly as before, with no output and nothing to press. The kind is
   asked before the open now, and a backup.json that is not a regular file stops the run by naming
   the file. A missing or corrupt backup still reads as "no usable install", as it always did: that
   answer lets a fresh install write over what is there, and a file we never opened must not wear
-  it. Not covered yet: a fresh install whose wrapper already carries the marker never reads the
-  backup and still writes it blind, so a FIFO there can hold that one path (#193, follow-up in
-  #195).
+  it. The write on the path that never reaches this read is the entry above (#193).
 - **A named pipe at settings.json no longer freezes `install` and `uninstall`.** Both opened that
   file without asking what was there, and a read of a FIFO waits for a writer that need never
   come — so the plan never printed, the prompt never came and there was nothing to press, on the
