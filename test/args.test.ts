@@ -32,6 +32,14 @@ test('every command the matrix names is one the parser accepts', () => {
 // `Object.prototype` is a command.
 test('a name the matrix does not carry is refused, whatever follows it', () => {
   for (const name of ['doctor', 'List', 'lists', 'toString', 'constructor']) {
+    // The names are written out, and a written-out list goes stale: the day one of them is
+    // added to the matrix, the throw below stops happening for the right reason and this test
+    // reports it as a parser that no longer says what it does not understand. Asked first, so
+    // what fails is the list, by name, with what to do about it.
+    assert.ok(
+      !(COMMAND_NAMES as readonly string[]).includes(name),
+      `\`${name}\` is a command now, so it is not one the parser must refuse — take it out of this list`,
+    );
     assert.throws(
       () => parseArgs([name, '--json']),
       new RegExp(`^Error: unknown command: ${name}$`),
