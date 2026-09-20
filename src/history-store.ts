@@ -91,6 +91,21 @@ export interface JournalLockResult {
 /** The pid a lock file names, or `null` for one that is gone or says something else. */
 const lockPid = (file: string): number | null => {
   try {
+    // The kind is asked BEFORE the open, as it is wherever this project reads a file it did not
+    // just write (#160, #165, #190): `readFileSync` on a FIFO waits for a writer that need never
+    // come, and this read stands between `serve` and `listen` — a named pipe called `.lock`
+    // printed the settings block and nothing after it (#197).
+    //
+    // A lock that is not a regular file reads as one with no pid in it, which the rules below
+    // already answer: fresh, it holds the directory; quiet for five minutes, it is reclaimed.
+    // Nothing here blocks and nothing is removed for being the wrong kind.
+    //
+    // `lstat`, where the guards on settings.json and backup.json stat: those two are a reader's
+    // own files, which a dotfiles repository may legitimately symlink into place. This one is
+    // never pointed anywhere — it is created `wx` in a directory this module owns — so a symlink
+    // wearing its name is not a setup to honour, and following it would let the lock name a file
+    // outside the directory it locks.
+    if (!fs.lstatSync(file).isFile()) return null;
     const text = fs.readFileSync(file, 'utf8').trim();
     return /^\d+$/.test(text) ? Number(text) : null;
   } catch {
