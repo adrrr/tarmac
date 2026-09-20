@@ -13,10 +13,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { acquireJournalLock, createHistoryStore, historyDirFor, HISTORY_MAX_BYTES } from '../src/history-store.ts';
 import type { HistorySample } from '../src/history.ts';
 import { tempDir } from './sandbox.ts';
+import { waitForOutput } from './bounded.ts';
 
 /** Noon on a named calendar day, local. Noon so no test sits within an hour of a DST shift. */
 const at = (y: number, m: number, d: number, h = 12): number => new Date(y, m - 1, d, h, 0, 0, 0).getTime();
@@ -594,6 +596,39 @@ test('an unreadable lock nobody has touched for five minutes is taken over', () 
 
   assert.ok(lock, 'a corrupted lock costs five minutes, not a journal');
   assert.equal(fs.readFileSync(lockFile(dir), 'utf8').trim(), String(process.pid));
+});
+
+// The family of #190, #193 and #195, on the file this module opens before any other: the lock
+// was read without asking what it was, and `readFileSync` on a FIFO waits for a writer that
+// need never come — one named pipe at `.lock` and `serve` printed its settings, listened on
+// nothing and left nothing to press (#197). An unreadable lock is what a pipe is worth here,
+// and the five-minute rule above is what then applies to it.
+//
+// Through the binary, where the spawn's wait is bounded: the read is synchronous, so a
+// regression reached from inside this process would hang the file rather than fail it (#165).
+test('a lock that is a named pipe is read as unreadable rather than waited on', async () => {
+  const root = tempDir('tarmac-lock-');
+  const snapshots = path.join(root, 'snapshots');
+  const dir = historyDirFor(snapshots);
+  fs.mkdirSync(snapshots, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const made = spawnSync('mkfifo', [lockFile(dir)]);
+  assert.equal(made.status, 0, `mkfifo ${lockFile(dir)}: ${made.error?.message ?? made.stderr}`);
+
+  const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
+  const child = spawn(
+    process.execPath,
+    [cli, 'serve', '--port', '0', '--home', root, '--snapshots-dir', snapshots, '--history-days', '1'],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  try {
+    const out = await waitForOutput(child, /tarmac serving/);
+    assert.match(out, /keeps no journal/, 'and it says the journal it was asked for is not being kept');
+  } finally {
+    // The child is the only thing that can be blocked on the pipe, and killing it is what
+    // releases the open — a failing run must leave nothing behind for the next file to wait on.
+    child.kill('SIGKILL');
+  }
 });
 
 // The startup sweep runs on `listening`, before the first tick, and it is the destructive half

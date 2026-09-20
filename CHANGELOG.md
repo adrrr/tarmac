@@ -33,6 +33,15 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A named pipe at `history/.lock` no longer stops `serve` before it listens.** The lock was read
+  with no question about its kind, and a read of a FIFO waits for a writer that need never come,
+  so a journal-keeping `serve` printed its settings block and then sat there: nothing listening,
+  no fleet served, and the one file in that directory tarmac writes for itself is what did it. The
+  kind is asked before the open now, and a lock that is not a regular file reads as a lock with no
+  pid in it — held while its heartbeat is fresh, reclaimed after the five minutes of silence that
+  frees any unreadable lock. `lstat` here, where settings.json and backup.json are stat'd: those
+  are a reader's files and may be symlinked into place, this one is created `wx` in a directory
+  tarmac owns and is never pointed anywhere (#197).
 - **A fresh install no longer writes backup.json without asking what is there.** The read side
   asks since the fix below, but a wrapper still carrying our marker whose settings.json no longer
   points at it takes the fresh-install branch, which never reads the backup at all — so a named
