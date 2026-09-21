@@ -574,6 +574,32 @@ test('the fresh-install write refuses what cannot carry a backup, by name', () =
   assert.throws(() => install({ home }), /backup\.json is not a regular file/);
 });
 
+// statusline.sh is the third file in this family, and the only one of the three the installer
+// WRITES before it reads anything else: both branches call `writeWrapper`, and it wrote blind.
+// A FIFO there and `writeFileSync` waits for a reader that need never come — the plan has
+// printed, the prompt has been answered, and the run stops with nothing left to press (#199).
+test('a fresh install refuses to write a wrapper over what is not a regular file', () => {
+  const home = fakeHome(MINE);
+  fs.mkdirSync(paths(home).dir, { recursive: true });
+  execFileSync('mkfifo', [paths(home).wrapper]);
+  const run = tarmac(['install', '--yes', '--home', home], home);
+  assert.notEqual(run.status, null, 'install finished rather than hanging');
+  assert.notEqual(run.status, 0, 'and refused');
+  assert.match(run.stderr, new RegExp(escapeForTest(paths(home).wrapper)), 'naming the file');
+  assert.equal(jsonOf(home).statusLine.command, 'echo MINE', 'and their statusline is untouched');
+});
+
+// The re-install branch writes the wrapper too, and outside the try the fresh one unwinds from
+// — so it needs the guard on its own account. A directory rather than a FIFO, for the half that
+// can be asked without a reader: unguarded it is a raw EISDIR, which names no way out.
+test('a re-install refuses to write a wrapper over what is not a regular file, by name', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.rmSync(paths(home).wrapper);
+  fs.mkdirSync(paths(home).wrapper);
+  assert.throws(() => install({ home }), /statusline\.sh is not a regular file/);
+});
+
 // A settings.json that exists but cannot be read is not absent, and absent is the one answer
 // that lets `install --yes` write a fresh file over it. The guard above asks the kind before the
 // open; it must not turn a refused read into that answer. Refused stays refused, and the file

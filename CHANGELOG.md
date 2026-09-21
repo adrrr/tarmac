@@ -33,6 +33,16 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An install no longer writes the statusline wrapper without asking what is there.**
+  `~/.claude/tarmac/statusline.sh` was written blind, on both branches: a write to a FIFO waits
+  for a reader that need never come, so a named pipe there froze the run after the plan had
+  printed and the prompt had been answered, with nothing to press and settings.json left as it
+  was. With a reader attached it was worse — the install reported success, the wrapper went into
+  the pipe, and settings.json was pointed at a named pipe. The kind is asked before the write
+  now, by the guard backup.json already uses rather than a third copy of it beside it,
+  and a wrapper path that is not a regular file stops the run by naming the file. On the
+  re-install branch as well as the fresh one, which unwinds the directories it had just made
+  (#199).
 - **A named pipe at `history/.lock` no longer stops `serve` before it listens.** The lock was read
   with no question about its kind, and a read of a FIFO waits for a writer that need never come,
   so a journal-keeping `serve` printed its settings block and then sat there: nothing listening,
