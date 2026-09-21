@@ -855,7 +855,7 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
     // Nothing on this path has read backup.json — the marker answered for it — so the kind is
     // asked here, before the open, and inside the try: a refusal that lands after the wrapper
     // is written must unwind it like any other.
-    refuseNonRegularBackup(p);
+    refuseNonRegular(p.backup, 'a backup');
     // Order matters: the backup is the only way back, so it must be on disk BEFORE
     // settings.json sends Claude Code to the wrapper. Crashing between the two otherwise
     // locks the user out of install (backup missing) and uninstall (no install found) at once.
@@ -958,11 +958,17 @@ function unwind(p: TarmacPaths, before: Map<string, Buffer | null>): void {
   drop(p.dir, (d) => fs.rmdirSync(d));
 }
 
-/** Never let the wrapper chain to itself, whatever spelling the caller used. */
+/**
+ * Never let the wrapper chain to itself, whatever spelling the caller used — and never write it
+ * over something that is not a regular file. Both refusals live here because both install
+ * branches come through here: the fresh one inside the try that unwinds what it wrote, the
+ * re-install outside it with nothing yet written to take back.
+ */
 function writeWrapper(p: TarmacPaths, chainCommand: string | null, home: string): void {
   if (chainCommand && isWrapperCommand(chainCommand, home, p.wrapper)) {
     throw new Error(`refusing to chain the tarmac wrapper to itself (${chainCommand})`);
   }
+  refuseNonRegular(p.wrapper, 'a statusline wrapper');
   fs.writeFileSync(p.wrapper, renderWrapper({ snapshotDir: p.snapshots, chainCommand }), { mode: 0o755 });
 }
 
@@ -1126,7 +1132,7 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
  * @throws if the path holds something that is not a regular file
  */
 function readBackup(p: TarmacPaths): unknown {
-  refuseNonRegularBackup(p);
+  refuseNonRegular(p.backup, 'a backup');
   try {
     return JSON.parse(fs.readFileSync(p.backup, 'utf8'));
   } catch {
@@ -1135,30 +1141,37 @@ function readBackup(p: TarmacPaths): unknown {
 }
 
 /**
- * The question both sides of backup.json ask before they open it, and the one place it is
- * worded. The write asks it too because the read is not always reached: on a fresh install
+ * The question asked before a file under `~/.claude/tarmac` is opened, and the one place it is
+ * worded for both of them. One function rather than a copy per file: the sentence the user
+ * reads is then the same whichever file it is about, and a new caller costs a line.
+ *
+ * Both sides of backup.json ask it, because the read is not always reached: on a fresh install
  * `tarmacWasInstalledHere` stops at the wrapper's marker, and the branch that follows used to
  * write the backup blind. Opening a FIFO for writing waits for a reader that need never come,
  * and the reader that does attach carries off the only record of the way back (#195).
+ * `writeWrapper` asks it having never read its file at all, for the same half of that reason:
+ * both install branches write statusline.sh, and a pipe there hung the run after the plan had
+ * printed and the prompt had been answered — or, with a reader attached, sent the wrapper into
+ * the pipe and pointed settings.json at it (#199).
  *
- * `stat` rather than `lstat`, as everywhere else here: a backup symlinked into place is a setup
- * to honour, and both `readFileSync` and `writeFileSync` follow the link exactly as `stat` does.
+ * `stat` rather than `lstat`, as everywhere else here: a file symlinked into place is a setup to
+ * honour, and both `readFileSync` and `writeFileSync` follow the link exactly as `stat` does.
  *
- * Silent when there is nothing there — absent is the ordinary case on both sides, the one the
- * caller above reads as "no usable install" and the fresh install creates.
+ * Silent when there is nothing there — absent is the ordinary case for every caller: the backup
+ * reader above takes it as "no usable install", and a fresh install creates both files.
  *
  * @throws if the path holds something that is not a regular file
  */
-function refuseNonRegularBackup(p: TarmacPaths): void {
+function refuseNonRegular(file: string, carries: string): void {
   let isFile: boolean;
   try {
-    isFile = fs.statSync(p.backup).isFile();
+    isFile = fs.statSync(file).isFile();
   } catch {
     return; // absent, and unstattable reads as absent exactly as `existsSync` did
   }
   if (!isFile) {
     throw new Error(
-      `${p.backup} is not a regular file — a directory, a socket or a named pipe cannot carry a backup, and opening one can wait for ever`,
+      `${file} is not a regular file — a directory, a socket or a named pipe cannot carry ${carries}, and opening one can wait for ever`,
     );
   }
 }
