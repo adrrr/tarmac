@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CHECKED_VERSIONS, guardVersions, schemaNoteParts, schemaNotice } from '../src/schema.ts';
-import { extractTelemetry } from '../src/snapshots.ts';
+import { extractTelemetry, type CtxState } from '../src/snapshots.ts';
 import { parseAgents } from '../src/sessions.ts';
 import { tempDir } from './sandbox.ts';
 
@@ -57,7 +57,7 @@ const agentsVersion = (file: string): string | null => AGENTS_FIXTURE.exec(file)
  * Not a word a human picked for what the file shows: `scripts/capture-fixtures.ts` names the
  * file after the state `extractTelemetry` reached, and these are the three states it reaches.
  */
-const CTX_STATE_BY_TAG: Record<string, string> = { live: 'ok', fresh: 'fresh', drift: 'drift' };
+const CTX_STATE_BY_TAG: Record<string, CtxState> = { live: 'ok', fresh: 'fresh', drift: 'drift' };
 
 /**
  * The statusline family, where the tag is mandatory and sits behind a SINGLE dash — so the
