@@ -827,8 +827,19 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
 
   if (alreadyInstalled) {
     const backup = backupOrRefuse(p);
-    fs.mkdirSync(p.snapshots, { recursive: true });
-    writeWrapper(p, backup.previous?.command ?? null, root);
+    // The same rule the fresh branch states below, for the same reason: `writeWrapper` can
+    // refuse (a FIFO at the wrapper path, #199) AFTER the directory above it was made, and a
+    // run that wrote nothing must leave nothing. The list is the fresh branch's list, not the
+    // two paths this branch touches: `unwind` removes every target it was not told about, and
+    // backup.json is the only way back from the install this one is updating.
+    const before = whatIsThere([p.dir, p.stateDir, p.snapshots, p.wrapper, p.backup]);
+    try {
+      fs.mkdirSync(p.snapshots, { recursive: true });
+      writeWrapper(p, backup.previous?.command ?? null, root);
+    } catch (failure) {
+      unwind(p, before);
+      throw failure;
+    }
     // After the wrapper, always: this is the update path, and until that write lands the
     // frames are still filing into the directory being cleared.
     return {
@@ -961,8 +972,7 @@ function unwind(p: TarmacPaths, before: Map<string, Buffer | null>): void {
 /**
  * Never let the wrapper chain to itself, whatever spelling the caller used — and never write it
  * over something that is not a regular file. Both refusals live here because both install
- * branches come through here: the fresh one inside the try that unwinds what it wrote, the
- * re-install outside it with nothing yet written to take back.
+ * branches come through here, each inside the try that unwinds what its run put on disk.
  */
 function writeWrapper(p: TarmacPaths, chainCommand: string | null, home: string): void {
   if (chainCommand && isWrapperCommand(chainCommand, home, p.wrapper)) {

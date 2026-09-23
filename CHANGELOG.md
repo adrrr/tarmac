@@ -33,6 +33,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A re-install that refuses no longer leaves the directory it had just made.** Updating an
+  install created the snapshots directory and then wrote the wrapper, with nothing between the
+  two to take the first one back: when the wrapper write refused — a named pipe at that path,
+  the guard below — the run ended having created a directory and having recorded nothing else.
+  The fresh branch reads what is on disk before it writes and unwinds exactly what it added; the
+  re-install branch does the same now, so a refused update leaves the tree as it found it (#205).
+
 - **An install no longer writes the statusline wrapper without asking what is there.**
   `~/.claude/tarmac/statusline.sh` was written blind, on both branches: a write to a FIFO waits
   for a reader that need never come, so a named pipe there froze the run after the plan had
