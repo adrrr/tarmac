@@ -589,15 +589,33 @@ test('a fresh install refuses to write a wrapper over what is not a regular file
   assert.equal(jsonOf(home).statusLine.command, 'echo MINE', 'and their statusline is untouched');
 });
 
-// The re-install branch writes the wrapper too, and outside the try the fresh one unwinds from
-// — so it needs the guard on its own account. A directory rather than a FIFO, for the half that
-// can be asked without a reader: unguarded it is a raw EISDIR, which names no way out.
+// The re-install branch writes the wrapper too, so it needs the guard on its own account. A
+// directory rather than a FIFO, for the half that can be asked without a reader: unguarded it
+// is a raw EISDIR, which names no way out.
 test('a re-install refuses to write a wrapper over what is not a regular file, by name', () => {
   const home = fakeHome(MINE);
   install({ home });
   fs.rmSync(paths(home).wrapper);
   fs.mkdirSync(paths(home).wrapper);
   assert.throws(() => install({ home }), /statusline\.sh is not a regular file/);
+});
+
+// The same branch creates `snapshots/` a line before that refusal, and had nothing to take it
+// back with: the directory this run made outlived the run that made it. Read what is there,
+// unwind what this run added — the rule the fresh branch already followed.
+test('a re-install that refuses leaves behind no directory it made', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.rmSync(paths(home).snapshots, { recursive: true });
+  fs.rmSync(paths(home).wrapper);
+  fs.mkdirSync(paths(home).wrapper);
+  const backupBefore = fs.readFileSync(paths(home).backup);
+  assert.throws(() => install({ home }), /statusline\.sh is not a regular file/);
+  assert.equal(fs.existsSync(paths(home).snapshots), false, 'the snapshots directory it created is gone');
+  // And only that: the list `unwind` reads is the fresh branch's, so a shorter one would take
+  // back backup.json and the state directory, neither of which this run made.
+  assert.deepEqual(fs.readFileSync(paths(home).backup), backupBefore, 'backup.json keeps the bytes it had');
+  assert.equal(fs.existsSync(paths(home).stateDir), true, 'the state directory that was there before still is');
 });
 
 // A settings.json that exists but cannot be read is not absent, and absent is the one answer
