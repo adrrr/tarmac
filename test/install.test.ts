@@ -609,8 +609,13 @@ test('a re-install that refuses leaves behind no directory it made', () => {
   fs.rmSync(paths(home).snapshots, { recursive: true });
   fs.rmSync(paths(home).wrapper);
   fs.mkdirSync(paths(home).wrapper);
+  const backupBefore = fs.readFileSync(paths(home).backup);
   assert.throws(() => install({ home }), /statusline\.sh is not a regular file/);
   assert.equal(fs.existsSync(paths(home).snapshots), false, 'the snapshots directory it created is gone');
+  // And only that: the list `unwind` reads is the fresh branch's, so a shorter one would take
+  // back backup.json and the state directory, neither of which this run made.
+  assert.deepEqual(fs.readFileSync(paths(home).backup), backupBefore, 'backup.json keeps the bytes it had');
+  assert.equal(fs.existsSync(paths(home).stateDir), true, 'the state directory that was there before still is');
 });
 
 // A settings.json that exists but cannot be read is not absent, and absent is the one answer
