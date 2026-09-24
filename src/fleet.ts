@@ -15,7 +15,7 @@ import path from 'node:path';
 import { DEFAULT_STALE_AFTER_MS } from './config.ts';
 import { measured, windowsApart } from './limits.ts';
 import { guardVersions } from './schema.ts';
-import { anchoredOnKind, isBackgroundAgent, isWaiting } from './sessions.ts';
+import { anchoredOnKind, isBackgroundAgent, isUnknownStatus, isWaiting } from './sessions.ts';
 import { SID_NAME } from './wrapper.ts';
 import type { SchemaGuard } from './schema.ts';
 import type { DiscoveryHealth, Session } from './sessions.ts';
@@ -197,10 +197,10 @@ export function buildFleet({
       // Tested tolerance from the fleet: `fresh` never counts, or a recycled fleet would
       // raise this every single night.
       schemaBroken: covered > 0 && drift === covered,
-      // Recomputed from the rows rather than taken from `discovery`, which may be null — so
-      // the exemption the reader grants a waiting session has to be granted again here, or
-      // the banner accuses a session both surfaces are drawing as waiting.
-      unknownStatus: rows.filter((r) => r.busy === null && !isWaiting(r)).length,
+      // Recomputed from the rows rather than taken from `discovery`, which may be null — and
+      // through the reader's own predicate, so the exemption it grants a waiting session is
+      // the same one here rather than a second copy of it.
+      unknownStatus: rows.filter(isUnknownStatus).length,
       busy: rows.filter((r) => r.busy === true).length,
       // A sum over 3 of 7 sessions is not the fleet's cost. Same rule as `sumUsage` one
       // layer down: add only what is really a number, and count those — a payload with no

@@ -79,6 +79,21 @@ const WAITING = 'waiting';
 export const isWaiting = (s: { status: string | null }): boolean => s.status === WAITING;
 
 /**
+ * Whether this reading is a word we failed to recognise — the count behind "N session(s)
+ * report a status tarmac does not know". Two questions, and only this one is a blind spot:
+ * `busy` is null for every word the boolean cannot answer for, and `waiting` is one of those
+ * while being a word this tool knows by name and draws as a state of its own.
+ *
+ * It lives here, exported, because three counters ask it — discovery below, the fleet's
+ * health, and the demo's stand-in discovery — and the exemption list is the kind that grows.
+ * A second word excused here has to be excused in all three at once, or the banner accuses a
+ * session the page is drawing as known. The page itself answers the question once more, inline,
+ * in `stateOf` (map.ts): test/unknown-status.test.ts holds that copy to this rule.
+ */
+export const isUnknownStatus = (s: { status: string | null; busy: boolean | null }): boolean =>
+  s.busy === null && !isWaiting(s);
+
+/**
  * The kind a terminal calls itself, and the anchor the two rules below reason from. A
  * background entry has since been seen beside them — `kind: 'background'`, no `pid`, its word
  * under `state` rather than `status` — so the two are no longer a reading of that CLI's help.
@@ -147,11 +162,7 @@ export function parseAgents(text: string): ParsedAgents {
     const status =
       typeof entry.status === 'string' ? entry.status : typeof entry.state === 'string' ? entry.state : null;
     const busy = KNOWN_STATUS.has(status) ? (KNOWN_STATUS.get(status) as boolean) : null;
-    // Two different questions, and only the second one is a blind spot: `busy` is null here
-    // for a word we cannot answer the boolean with, and `waiting` is one of those — while
-    // being a word this tool knows by name. Counting it would put "reports a status tarmac
-    // does not know" on the banner over a session tarmac is drawing, captioned, as waiting.
-    if (busy === null && status !== WAITING) health.unknownStatus += 1;
+    if (isUnknownStatus({ status, busy })) health.unknownStatus += 1;
 
     sessions.push({
       sessionId,
