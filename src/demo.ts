@@ -27,6 +27,7 @@ import { buildFleet } from './fleet.ts';
 import { createHistory, HISTORY_CADENCE_MS, HISTORY_SLOTS } from './history.ts';
 import type { FleetHistory } from './history.ts';
 import type { Fleet } from './fleet.ts';
+import { isUnknownStatus } from './sessions.ts';
 import type { DiscoveryHealth, Session } from './sessions.ts';
 import type { Snapshot } from './snapshots.ts';
 
@@ -400,7 +401,7 @@ export function demoFleetAt(minute: number, dayStart: number, now: number = dayS
   const discovery: DiscoveryHealth = {
     seen: sessions.length,
     noSessionId: 0,
-    unknownStatus: sessions.filter((s) => s.busy === null && s.status !== 'waiting').length,
+    unknownStatus: sessions.filter(isUnknownStatus).length,
   };
 
   const fleet = buildFleet({ sessions, snapshots, now, staleAfterMs, discovery });
