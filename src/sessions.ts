@@ -87,7 +87,8 @@ export const isWaiting = (s: { status: string | null }): boolean => s.status ===
  * It lives here, exported, because three counters ask it — discovery below, the fleet's
  * health, and the demo's stand-in discovery — and the exemption list is the kind that grows.
  * A second word excused here has to be excused in all three at once, or the banner accuses a
- * session the page is drawing as known.
+ * session the page is drawing as known. The page itself answers the question once more, inline,
+ * in `stateOf` (map.ts): test/unknown-status.test.ts holds that copy to this rule.
  */
 export const isUnknownStatus = (s: { status: string | null; busy: boolean | null }): boolean =>
   s.busy === null && !isWaiting(s);

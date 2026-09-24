@@ -6,13 +6,16 @@
 // not know" over a session the page draws, captioned, as known.
 //
 // So the rule is `isUnknownStatus` in sessions.ts and the three call it. This file feeds one
-// set of sessions to the counters that surface a number and expects the same answer from each.
-// The demo's copy surfaces none of its own — `buildFleet` recomputes the count from the rows —
-// so what holds it is that it is now the same call, with no rule left in it to drift.
+// set of sessions to the reader and to fleet health and expects the same count from each, then
+// asks the page's own `stateOf` the same question: the banner counts through the rule, the page
+// draws through `stateOf`, and the two have to agree on every word. Only fleet health surfaces
+// its number (`buildFleet` recomputes it from the rows), so the reader's and the demo's copies
+// are held by being the same call, with no rule left in them to drift.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildFleet } from '../src/fleet.ts';
+import { stateOf } from '../src/map.ts';
 import { isUnknownStatus, parseAgents } from '../src/sessions.ts';
 
 const NOW = 1786240000000;
@@ -41,10 +44,10 @@ test('the rule names the words tarmac does not know, one session at a time', () 
   }
 });
 
-test('discovery and fleet health count the same sessions as the rule', () => {
+test('discovery, fleet health and the page agree on which sessions are unknown', () => {
   const { sessions, health } = parseAgents(JSON.stringify(CASES.map((c) => c.entry)));
-  const { health: fleetHealth } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
+  const { health: fleetHealth, rows } = buildFleet({ sessions, snapshots: new Map(), now: NOW });
   assert.equal(health.unknownStatus, UNKNOWN, 'the reader');
   assert.equal(fleetHealth.unknownStatus, UNKNOWN, 'the fleet');
-  assert.equal(sessions.filter(isUnknownStatus).length, UNKNOWN, 'the rule the demo counts with');
+  assert.equal(rows.filter((r) => stateOf(r) === 'unknown').length, UNKNOWN, 'the page');
 });
