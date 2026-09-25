@@ -112,6 +112,18 @@ export interface PlanOptions extends HomeOptions {
   realHome?: string;
 }
 
+export interface UninstallOptions extends HomeOptions {
+  /**
+   * settings.json as the plan read it — `UninstallPlan.currentText`, passed straight through.
+   * The restore is then made against the very bytes that were consented to, or refused.
+   *
+   * Left out, nothing is compared: an `uninstall` nobody was shown a plan for has no earlier
+   * read to hold itself to. `null` is not that — it is a plan that found no settings.json,
+   * and a file that has appeared since is a change like any other.
+   */
+  expect?: string | null;
+}
+
 /**
  * A dry run, in the user's words: which file changes, what it says now, what it will say,
  * and how to undo it. Computed by reading only, so the confirmation prompt can never
@@ -168,6 +180,12 @@ export interface UninstallPlan extends PlanBase {
   action: 'uninstall';
   /** Which restore will run — the same four modes `uninstall` reports afterwards. */
   mode: UninstallMode;
+  /**
+   * settings.json verbatim as this plan read it, `null` where there was no file. Not for
+   * display: it is what `uninstall` compares its own read against, so the restore the user
+   * confirmed and the one that runs cannot be about two different files.
+   */
+  currentText: string | null;
   /**
    * Where the payloads this uninstall leaves behind really are — read from the installed
    * wrapper, which is the only thing that knows.
@@ -1059,6 +1077,7 @@ export function planUninstall({ home, realHome = os.homedir() }: PlanOptions): U
     before: commandOf(current.statusLine),
     after,
     mode,
+    currentText,
     // Where they REALLY are: `uninstall` leaves them behind, so the path it prints has to be
     // the wrapper's own, not one recomputed from this shell's environment — and when the
     // wrapper cannot answer, neither can the plan. The same `null` `uninstall` acts on.
@@ -1080,7 +1099,7 @@ function removePruneMarker(snapshots: string | null): void {
   if (isPlainFile(marker)) fs.rmSync(marker, { force: true });
 }
 
-export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
+export function uninstall({ home, expect }: UninstallOptions): { mode: UninstallMode } {
   const root = requireHome(home);
   const p = paths(root);
   const backup = installedBackupOrRefuse(p);
@@ -1090,6 +1109,13 @@ export function uninstall({ home }: HomeOptions): { mode: UninstallMode } {
   const snapshots = installedSnapshotsDir(p);
 
   const currentText = readSettingsText(p.settings);
+  // Before the first write, and before the mode is even chosen: the file can change between
+  // the plan and the typed word — another install, an editor save, Claude Code rewriting its
+  // settings — and every branch below would then restore something nobody was shown. Refusing
+  // is the only answer that keeps the plan a promise; the next run plans against the new file.
+  if (expect !== undefined && currentText !== expect) {
+    throw new Error(`${p.settings} changed since the plan — nothing was written, run uninstall again`);
+  }
   let mode: UninstallMode;
 
   if (currentText === backup.installedText) {

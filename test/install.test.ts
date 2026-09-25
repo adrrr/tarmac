@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, uninstall, paths, planInstall, planUninstall, countLegacySnapshots, purgeLegacySnapshots, installedSnapshotsDir, wrapperIsOurs } from '../src/install.ts';
 import type { UninstallMode } from '../src/install.ts';
 import { renderPlan } from '../src/render.ts';
@@ -228,6 +228,50 @@ test('the way back from an uninstall is the install that undoes it', () => {
   assert.equal(planUninstall({ home }).undo, `tarmac install --home ${home}`);
 });
 
+// The plan is read, printed and confirmed; `uninstall` then reads settings.json a second
+// time and acts on THAT. Between the two an editor, another install or Claude Code itself
+// can rewrite the file, and what is restored is no longer what was consented to. So the
+// plan carries the bytes it read, and an uninstall handed them refuses to act on any others.
+test('uninstall refuses when settings.json changed since the plan', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const plan = planUninstall({ home });
+  // The statusLine stays on the wrapper: an uninstall that did not compare would take the
+  // surgical branch, rewrite the file and remove wrapper and backup. A foreign statusLine
+  // would write nothing on its own, and prove nothing about the refusal.
+  const edited = JSON.stringify({ ...jsonOf(home), model: 'set while the prompt waited' }, null, 2) + '\n';
+  fs.writeFileSync(paths(home).settings, edited);
+
+  assert.throws(() => uninstall({ home, expect: plan.currentText }), /changed since the plan/);
+  assert.equal(settingsOf(home), edited, 'and the refusal wrote nothing');
+  assert.equal(fs.existsSync(paths(home).wrapper), true, 'nor removed the wrapper the surgical branch takes');
+  assert.equal(fs.existsSync(paths(home).backup), true, 'and the backup the next run needs is still there');
+});
+
+// `null` is a plan that found no file, not a plan that was never shown: a settings.json that
+// has appeared since is a change like any other.
+test('uninstall refuses when settings.json appeared since a plan that found none', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const installed = settingsOf(home);
+  fs.rmSync(paths(home).settings);
+  const plan = planUninstall({ home });
+  assert.equal(plan.currentText, null);
+  fs.writeFileSync(paths(home).settings, installed);
+
+  assert.throws(() => uninstall({ home, expect: plan.currentText }), /changed since the plan/);
+  assert.equal(settingsOf(home), installed, 'the file that appeared is left as it is');
+  assert.equal(fs.existsSync(paths(home).wrapper), true);
+});
+
+test('uninstall restores as planned when settings.json is the file the plan read', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const plan = planUninstall({ home });
+  assert.equal(uninstall({ home, expect: plan.currentText }).mode, plan.mode);
+  assert.equal(settingsOf(home), MINE, 'the original bytes, back');
+});
+
 // ── the plan, in words ────────────────────────────────────────────────────────────────
 // What the user reads is the only thing they can consent to, so the three facts the
 // confirmation rests on have to be IN it: the file, the command, and the way back.
@@ -355,13 +399,17 @@ const escapeForTest = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\
 // the suite can exercise the default target without the real one ever being reachable.
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
 
-function tarmac(argv: string[], home: string): { status: number | null; stdout: string; stderr: string } {
+function tarmac(
+  argv: string[],
+  home: string,
+  extraEnv: Record<string, string> = {},
+): { status: number | null; stdout: string; stderr: string } {
   // HOME is replaced, so `os.homedir()` returns the throwaway one and the runs below exercise
   // the default target. XDG_STATE_HOME is REMOVED for the same reason it is removed in
   // `cli-config.test.ts`: with $HOME faked, the two anchors coincide and the guard in
   // `stateRoot` reads true — a variable in the developer's shell would otherwise send this
   // suite's snapshots into their real state directory, quietly, while every assertion passed.
-  const env: Record<string, string | undefined> = { ...process.env, HOME: home };
+  const env: Record<string, string | undefined> = { ...process.env, HOME: home, ...extraEnv };
   delete env.XDG_STATE_HOME;
   const r = spawnSync(process.execPath, [CLI, ...argv], { env, encoding: 'utf8', timeout: 20000 });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
@@ -680,6 +728,22 @@ test('uninstall --yes is symmetrical, and says which restore ran', () => {
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /bytes/);
   assert.deepEqual(jsonOf(home).statusLine, { type: 'command', command: 'echo MINE' });
+});
+
+// The fix reaches the user through one line of cli.ts, the plan's bytes handed to `uninstall`.
+// Pin that wiring end to end: a preload rewrites settings.json right after the plan's read, as
+// an editor save during the prompt would, and the CLI has to refuse.
+const REWRITE_BETWEEN_READS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rewrite-settings-between-reads.mjs');
+
+test('uninstall --yes refuses when settings.json changed between the plan and the restore', () => {
+  const home = fakeHome(MINE);
+  tarmac(['install', '--yes'], home);
+  const installed = settingsOf(home);
+  const run = tarmac(['uninstall', '--yes'], home, { NODE_OPTIONS: `--import=${pathToFileURL(REWRITE_BETWEEN_READS).href}` });
+  assert.equal(run.status, 1, run.stdout);
+  assert.match(run.stderr, /changed since the plan/);
+  assert.notEqual(settingsOf(home), installed, 'the preload did rewrite the file between the two reads');
+  assert.equal(fs.existsSync(paths(home).wrapper), true, 'and nothing was uninstalled');
 });
 
 test('--home still chooses the target, and no longer means "a sandbox"', () => {
