@@ -145,7 +145,8 @@ try {
         if (cleared !== null) console.log(clearedLine(cleared, res.snapshots));
       }
     } else {
-      const { mode } = uninstall({ home });
+      // The bytes the plan read, so the restore that runs is the one that was confirmed.
+      const { mode } = uninstall({ home, expect: plan.currentText });
       console.log(`uninstall: ${mode} — ${restoreMeaning(mode)}`);
     }
   } else {

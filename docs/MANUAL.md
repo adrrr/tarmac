@@ -93,6 +93,11 @@ and surgically (statusLine key only) when you have. If someone else has taken ov
 line in the meantime, tarmac leaves it alone and tells you it restored nothing. It names which
 of its four restore modes ran. `bytes`, the usual one, puts the original file back exactly.
 
+The plan and the restore are about the same file. `uninstall` compares `settings.json` against
+the bytes the plan read, and when something rewrote it while the prompt was waiting — an editor,
+a second install, Claude Code itself — it writes nothing and says so. Run it again, and the plan
+you confirm is of the file as it now stands.
+
 The write re-serialises `settings.json`, so a version-controlled one shows a formatting diff,
 not a one-line diff.
 

@@ -33,6 +33,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`uninstall` no longer restores a settings.json the plan never saw.** The plan read the file,
+  printed what it would restore and waited for the typed word; `uninstall` then read the file a
+  second time and acted on that one. Anything that wrote settings.json in between — an editor, a
+  second install, Claude Code itself — left the restore and the plan about two different files,
+  with nothing said. The plan now carries the bytes it read, and an uninstall handed them refuses
+  and names the file when its own read differs. Plan again and the new file is the one you
+  confirm (#209).
+
 - **A re-install that refuses no longer leaves the directory it had just made.** Updating an
   install created the snapshots directory and then wrote the wrapper, with nothing between the
   two to take the first one back: when the wrapper write refused (a named pipe at that path,

@@ -228,6 +228,30 @@ test('the way back from an uninstall is the install that undoes it', () => {
   assert.equal(planUninstall({ home }).undo, `tarmac install --home ${home}`);
 });
 
+// The plan is read, printed and confirmed; `uninstall` then reads settings.json a second
+// time and acts on THAT. Between the two an editor, another install or Claude Code itself
+// can rewrite the file, and what is restored is no longer what was consented to. So the
+// plan carries the bytes it read, and an uninstall handed them refuses to act on any others.
+test('uninstall refuses when settings.json changed since the plan', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const plan = planUninstall({ home });
+  const edited = JSON.stringify({ statusLine: { type: 'command', command: 'other.sh' } });
+  fs.writeFileSync(paths(home).settings, edited);
+
+  assert.throws(() => uninstall({ home, expect: plan.currentText }), /changed since the plan/);
+  assert.equal(settingsOf(home), edited, 'and the refusal wrote nothing');
+  assert.equal(fs.existsSync(paths(home).wrapper), true, 'nor removed the wrapper it would have taken');
+});
+
+test('uninstall restores as planned when settings.json is the file the plan read', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const plan = planUninstall({ home });
+  assert.equal(uninstall({ home, expect: plan.currentText }).mode, plan.mode);
+  assert.equal(settingsOf(home), MINE, 'the original bytes, back');
+});
+
 // ── the plan, in words ────────────────────────────────────────────────────────────────
 // What the user reads is the only thing they can consent to, so the three facts the
 // confirmation rests on have to be IN it: the file, the command, and the way back.
