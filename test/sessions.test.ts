@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAgents } from '../src/sessions.ts';
+import { isBackgroundAgent, parseAgents } from '../src/sessions.ts';
 
 // Fixture shape captured from the real machine, CC 2.1.226 (see fixtures/agents-2.1.226.json).
 const ONE = JSON.stringify([
@@ -185,6 +185,36 @@ test('an empty sessionId is no id at all, and does not travel as one', () => {
   const { sessions, health } = parseAgents(JSON.stringify([{ sessionId: '', status: 'idle' }]));
   assert.equal(sessions[0].sessionId, null);
   assert.equal(health.noSessionId, 1);
+});
+
+// The same rule for the other fields that carry a word (#211). `''` is a `string`, so the type
+// check alone let it through, and each reader downstream had to neutralise it again — an empty
+// `cwd` is not a project path, and it renders as a row about nowhere.
+test('an empty cwd is absent, not a path', () => {
+  const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', cwd: '', status: 'idle' }]));
+  assert.equal(sessions[0].cwd, null);
+});
+
+test('an empty name is absent, not a name', () => {
+  const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', name: '', status: 'idle' }]));
+  assert.equal(sessions[0].name, null);
+});
+
+// On `kind` it changed a verdict rather than a caption. `isBackgroundAgent` reads
+// `kind !== null && kind !== INTERACTIVE`, so `kind: ''` counted as a background agent: the
+// expensive direction of that mistake, someone's open terminal dropped out of every count
+// that is about them.
+test('an empty kind is absent, and does not make a session a background agent', () => {
+  const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', kind: '', status: 'idle' }]));
+  assert.equal(sessions[0].kind, null);
+  assert.equal(isBackgroundAgent(sessions[0], true), false);
+});
+
+// Absent here means "the entry gave no reason", which a waiting session is entitled to do.
+// `''` said the same thing in a shape that prints as an empty caption beside the state.
+test('an empty waitingFor is no reason given', () => {
+  const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', status: 'waiting', waitingFor: '' }]));
+  assert.equal(sessions[0].waitingFor, null);
 });
 
 test('an empty fleet is a valid answer, not an error', () => {

@@ -151,8 +151,8 @@ export function parseAgents(text: string): ParsedAgents {
     // through: counted as missing here, then carried as `''` to every reader and written to
     // the journal as `sid: ''`. Each reader neutralises that value its own way (#137) —
     // normalising at the source says it once, and stops counting the same nameless entry
-    // both here and as unfilable downstream. Absent reads `null` like every field here;
-    // sessionId alone also folds `''` into absent, an empty id being no id at all.
+    // both here and as unfilable downstream. Every field below that carries a word reads the
+    // empty string the same way, for the same reason: absent is `null` here.
     const sessionId = typeof entry.sessionId === 'string' && entry.sessionId !== '' ? entry.sessionId : null;
     if (sessionId === null) health.noSessionId += 1;
 
@@ -164,15 +164,20 @@ export function parseAgents(text: string): ParsedAgents {
     const busy = KNOWN_STATUS.has(status) ? (KNOWN_STATUS.get(status) as boolean) : null;
     if (isUnknownStatus({ status, busy })) health.unknownStatus += 1;
 
+    // The empty string is a value in none of these: an empty `cwd` is not a project path, and
+    // on `kind` it decided a verdict rather than a caption — `isBackgroundAgent` reads
+    // `kind !== null`, so `kind: ''` counted a terminal as a background agent (#211). `status`
+    // above is the exception, and stays one: a word tarmac does not recognise reaches the
+    // reader as it came, and `''` is such a word rather than a field the entry left out.
     sessions.push({
       sessionId,
       pid: typeof entry.pid === 'number' ? entry.pid : null,
-      cwd: typeof entry.cwd === 'string' ? entry.cwd : null,
-      name: typeof entry.name === 'string' ? entry.name : null,
-      kind: typeof entry.kind === 'string' ? entry.kind : null,
+      cwd: typeof entry.cwd === 'string' && entry.cwd !== '' ? entry.cwd : null,
+      name: typeof entry.name === 'string' && entry.name !== '' ? entry.name : null,
+      kind: typeof entry.kind === 'string' && entry.kind !== '' ? entry.kind : null,
       startedAt: typeof entry.startedAt === 'number' ? entry.startedAt : null,
       status,
-      waitingFor: typeof entry.waitingFor === 'string' ? entry.waitingFor : null,
+      waitingFor: typeof entry.waitingFor === 'string' && entry.waitingFor !== '' ? entry.waitingFor : null,
       busy,
     });
   }

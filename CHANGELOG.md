@@ -33,6 +33,15 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An empty `cwd`, `name`, `kind` or `waitingFor` now reads as absent, like an empty `sessionId`.**
+  Discovery folded `''` into `null` for the session id alone; the other four fields carried the
+  empty string on to every reader, where it renders as a row about nowhere, a session with a blank
+  name, and a caption beside a state with nothing in it. On `kind` it decided a verdict rather
+  than a caption: the background-agent rule asks only that a kind be present and not
+  `interactive`, so a terminal calling itself `''` was read as an agent and dropped out of every
+  count that is about open sessions. `status` keeps its own rule — a word tarmac does not
+  recognise still reaches the reader as it came, and `''` is such a word (#211).
+
 - **`uninstall` no longer restores a settings.json the plan never saw.** The plan read the file,
   printed what it would restore and waited for the typed word; `uninstall` then read the file a
   second time and acted on that one. Anything that wrote settings.json in between — an editor, a
