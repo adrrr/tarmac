@@ -33,6 +33,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An empty `kind` is no longer read as a background agent.** Once one session in the fleet calls
+  itself `interactive`, every other kind counts as an agent, and `''` counted too: that terminal
+  was drawn as an agent and left out of the statusline coverage count. Discovery now reads an
+  empty `kind`, `cwd`, `name` or `waitingFor` as absent, as it already did for `sessionId`. For
+  the last three nothing on screen changes, the renderers already treated `''` as absent, and
+  `list --json` and `/api/fleet` print `null` where they printed `""`. `status` keeps its own
+  rule, a word tarmac does not recognise reaches the reader as it came (#211).
+
 - **`uninstall` no longer restores a settings.json the plan never saw.** The plan read the file,
   printed what it would restore and waited for the typed word; `uninstall` then read the file a
   second time and acted on that one. Anything that wrote settings.json in between — an editor, a
