@@ -152,7 +152,8 @@ export function parseAgents(text: string): ParsedAgents {
     // the journal as `sid: ''`. Each reader neutralises that value its own way (#137) —
     // normalising at the source says it once, and stops counting the same nameless entry
     // both here and as unfilable downstream. Every field below that carries a word reads the
-    // empty string the same way, for the same reason: absent is `null` here.
+    // empty string the same way, for the same reason, except `status` (see below): absent is
+    // `null` here.
     const sessionId = typeof entry.sessionId === 'string' && entry.sessionId !== '' ? entry.sessionId : null;
     if (sessionId === null) health.noSessionId += 1;
 

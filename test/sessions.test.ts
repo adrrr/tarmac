@@ -188,8 +188,8 @@ test('an empty sessionId is no id at all, and does not travel as one', () => {
 });
 
 // The same rule for the other fields that carry a word (#211). `''` is a `string`, so the type
-// check alone let it through, and each reader downstream had to neutralise it again — an empty
-// `cwd` is not a project path, and it renders as a row about nowhere.
+// check alone let it through, and each reader downstream neutralised it on its own. Folding it
+// here says it once, at the source. The readers keep their guards.
 test('an empty cwd is absent, not a path', () => {
   const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', cwd: '', status: 'idle' }]));
   assert.equal(sessions[0].cwd, null);
@@ -211,7 +211,7 @@ test('an empty kind is absent, and does not make a session a background agent', 
 });
 
 // Absent here means "the entry gave no reason", which a waiting session is entitled to do.
-// `''` said the same thing in a shape that prints as an empty caption beside the state.
+// `''` said the same thing in another shape, and the map already drew no caption for it.
 test('an empty waitingFor is no reason given', () => {
   const { sessions } = parseAgents(JSON.stringify([{ sessionId: 'a', status: 'waiting', waitingFor: '' }]));
   assert.equal(sessions[0].waitingFor, null);
