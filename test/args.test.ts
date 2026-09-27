@@ -13,6 +13,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { COMMAND_NAMES, parseArgs } from '../src/args.ts';
 
 // The direction a new command breaks: added to the matrix, to `--help` and to the docs, and
@@ -44,6 +45,28 @@ test('a name the matrix does not carry is refused, whatever follows it', () => {
       () => parseArgs([name, '--json']),
       new RegExp(`^Error: unknown command: ${name}$`),
       `\`tarmac ${name}\` is not a command and the parser did not say so`,
+    );
+  }
+});
+
+// The third list, and the one #149 left standing: `cli.ts` dispatched on `args.command` with
+// an if/else chain whose last branch was a bare `else`, so nothing in it named `list`. A
+// command added to the matrix and forgotten there did not fail, it printed the fleet table
+// (#213). The `never` in that chain's default is the real guard — it fails the typecheck, and
+// this suite runs one — but a guard whose only witness is a compiler is a guard a cleanup can
+// delete in silence, and the deletion reads as tidying. So the cheap half is pinned here: every
+// command the matrix carries is one `cli.ts` decides about by name.
+//
+// Both spellings of that decision count. The chain could become a `switch` tomorrow, which is
+// the shape the exhaustive dispatch wants anyway, and a test that then failed would be
+// reporting its own regex.
+test('every command the matrix names is one cli.ts dispatches on by name', () => {
+  const source = fs.readFileSync(new URL('../src/cli.ts', import.meta.url), 'utf8');
+  for (const command of COMMAND_NAMES) {
+    assert.match(
+      source,
+      new RegExp(`args\\.command === '${command}'|case '${command}'`),
+      `\`${command}\` is a command and src/cli.ts never names it — it falls through to whatever the dispatch ends in`,
     );
   }
 });

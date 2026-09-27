@@ -289,7 +289,7 @@ try {
       // "No fleet", not "nothing": the settings this serve is running on were resolved the
       // ordinary way, config file included. What was never opened is the fleet.
       if (demoDay !== null) console.log('tarmac: demo data — an invented fleet. No fleet on this machine was read.');
-    } else {
+    } else if (args.command === 'list') {
       const collect = (): Promise<Fleet> =>
         collectFleet({ claudeBin: args.claudeBin, snapshotsDir, staleAfterMs, snapshotsDirSource: config.snapshotsDir.source, installed: frozen !== null });
 
@@ -325,6 +325,17 @@ try {
         const fleet = await collect();
         process.stdout.write(args.json ? JSON.stringify(fleet, null, 2) + '\n' : renderTable(fleet));
       }
+    } else {
+      // Unreachable, and the assignment is the point: every branch above names the command it
+      // handles, so `args.command` is `never` here and a name this chain forgot fails the
+      // typecheck instead of arriving. The chain used to end in a bare `else` that nothing tied
+      // to `list` — a sixth command added to the matrix printed the fleet table, silently, which
+      // is the parser half of #149 over again one file along (#213).
+      //
+      // The throw is not dead weight either: `tsc` is what guards a build of this repository,
+      // and a `dist` someone compiled past the error still has to refuse rather than list.
+      const unhandled: never = args.command;
+      throw new Error(`unhandled command: ${String(unhandled)}`);
     }
   }
 } catch (e) {
