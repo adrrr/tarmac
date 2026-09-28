@@ -30,3 +30,5 @@ most of them, so a PR that breaks one does not merge, however good the rest of i
   Defaults are the product.
 - English throughout, maintainer's voice: precise, plain, no marketing. Nothing in this
   repo links to private infrastructure or carries a tool-session URL.
+- `.claude/settings.json` turns off the attribution Claude Code adds to commits and pull
+  requests. A PR body carries no tool attribution and no session link.
