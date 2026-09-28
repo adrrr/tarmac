@@ -358,18 +358,29 @@ function readSettingsText(file: string): string | null {
   return fs.readFileSync(file, 'utf8');
 }
 
+/**
+ * settings.json parsed, or the empty object where there is nothing in it to parse.
+ *
+ * Its own function because `uninstall` parses the text a second time, after the plan, and did
+ * it inline: a caller that omits `expect` got a bare parser position naming no file, and a
+ * whitespace-only file threw where the plan had read it as `{}` (#215). One rule, so the two
+ * reads of the same file cannot answer differently.
+ *
+ * @throws if the text is not JSON — the one file we must never mangle.
+ */
+function parseSettings(file: string, text: string | null): Settings {
+  if (text === null || text.trim() === '') return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${file} is not valid JSON — refusing to touch it`);
+  }
+}
+
 /** @throws if settings.json exists and is not JSON — the one file we must never mangle. */
 function readSettings(p: TarmacPaths): { text: string | null; settings: Settings } {
   const text = readSettingsText(p.settings);
-  let settings: Settings = {};
-  if (text !== null && text.trim() !== '') {
-    try {
-      settings = JSON.parse(text);
-    } catch {
-      throw new Error(`${p.settings} is not valid JSON — refusing to touch it`);
-    }
-  }
-  return { text, settings };
+  return { text, settings: parseSettings(p.settings, text) };
 }
 
 /**
@@ -1128,7 +1139,7 @@ export function uninstall({ home, expect }: UninstallOptions): { mode: Uninstall
       mode = 'bytes';
     }
   } else {
-    const current = currentText ? JSON.parse(currentText) : {};
+    const current = parseSettings(p.settings, currentText);
     const { settings, restored } = unchainStatusLine(current, backup.previous, p.wrapper, {
       isSameCommand: (command, wrapper) => isOurWrapperPath(command, root, wrapper),
     });

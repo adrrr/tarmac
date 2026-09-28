@@ -33,6 +33,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`tarmac uninstall` no longer fails on a whitespace-only settings.json.** The plan reads such a
+  file as an empty object and announces `foreign`. `uninstall` then read the file a second time
+  and parsed the text itself, so the confirmed run stopped on `Unexpected end of JSON input`.
+  Both reads follow one rule now, and the run ends in `foreign` as planned, with nothing restored
+  and nothing deleted. A caller of `uninstall` that passes no `expect` also gets the plan's error
+  for a file that is not JSON, with the file named (#215).
+
 - **An empty `kind` is no longer read as a background agent.** Once one session in the fleet calls
   itself `interactive`, every other kind counts as an agent, and `''` counted too: that terminal
   was drawn as an agent and left out of the statusline coverage count. Discovery now reads an

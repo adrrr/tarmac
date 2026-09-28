@@ -146,7 +146,10 @@ test('uninstall names the file that is not JSON instead of leaking a parser erro
   const home = fakeHome(MINE);
   install({ home });
   fs.writeFileSync(paths(home).settings, '{ this is not json ');
-  assert.throws(() => planUninstall({ home }), /not valid JSON/);
+  assert.throws(
+    () => planUninstall({ home }),
+    new RegExp(`${escapeForTest(paths(home).settings)} is not valid JSON`),
+  );
 });
 
 // With a symlinked settings.json the bytes land somewhere else than the path the plan
@@ -566,6 +569,42 @@ test('the second read of settings.json refuses what cannot carry settings, by na
   fs.rmSync(paths(home).settings);
   fs.mkdirSync(paths(home).settings);
   assert.throws(() => uninstall({ home }), /settings\.json is not a regular file/);
+});
+
+// The same second read, the other half of the question: the plan parses through `readSettings`
+// and names the file, `uninstall` parsed the text itself. The CLI always plans first and passes
+// `expect`, so only a caller that omits it reaches this parse with a file that is not JSON, and
+// it used to get a raw parser position with nothing in it to act on.
+test('the second read of settings.json names the file that is not JSON, without expect', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, '{ this is not json ');
+  assert.throws(
+    () => uninstall({ home }),
+    new RegExp(`${escapeForTest(paths(home).settings)} is not valid JSON`),
+  );
+});
+
+// And the empty-file rule with it: `readSettings` reads whitespace-only as `{}`, the bare parse
+// threw on it. The plan promised `foreign` and uninstall could not even get there. The CLI
+// reaches this one too, its `expect` matches the whitespace it planned against.
+test('a whitespace-only settings.json is the empty object for the plan and for uninstall alike', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, '\n  \n');
+  const plan = planUninstall({ home });
+  assert.equal(plan.mode, 'foreign', 'no statusLine left to recognise as ours');
+  assert.equal(uninstall({ home }).mode, plan.mode);
+});
+
+// The comparison with `expect` runs on the raw text, ahead of the parse. A file that turned
+// into something that is not JSON after the plan is first a file that changed.
+test('a settings.json that stopped being JSON after the plan is refused as changed', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const plan = planUninstall({ home });
+  fs.writeFileSync(paths(home).settings, '{ this is not json ');
+  assert.throws(() => uninstall({ home, expect: plan.currentText }), /changed since the plan/);
 });
 
 // backup.json is the other file both commands read before they print anything, and it was read
