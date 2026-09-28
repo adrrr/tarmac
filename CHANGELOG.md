@@ -33,12 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **`uninstall` names a settings.json it cannot parse, as the plan already does.** `planUninstall`
-  reads the file through the reader that names it; `uninstall` reads it a second time and parsed
-  that text itself, so a caller reaching it without the plan's bytes got a bare parser position
-  with no file in it — and a whitespace-only file, which the plan reads as an empty object, threw
-  there instead of restoring. Both reads follow one rule now. The CLI plans first and always hands
-  over the bytes it read, so nothing changes for anyone typing `tarmac uninstall` (#215).
+- **`tarmac uninstall` no longer fails on a whitespace-only settings.json.** The plan reads such a
+  file as an empty object and announces `foreign`. `uninstall` then read the file a second time
+  and parsed the text itself, so the confirmed run stopped on `Unexpected end of JSON input`.
+  Both reads follow one rule now, and the run ends in `foreign` as planned, with nothing restored
+  and nothing deleted. A caller of `uninstall` that passes no `expect` also gets the plan's error
+  for a file that is not JSON, with the file named (#215).
 
 - **An empty `kind` is no longer read as a background agent.** Once one session in the fleet calls
   itself `interactive`, every other kind counts as an agent, and `''` counted too: that terminal
