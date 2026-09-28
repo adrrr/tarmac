@@ -568,6 +568,31 @@ test('the second read of settings.json refuses what cannot carry settings, by na
   assert.throws(() => uninstall({ home }), /settings\.json is not a regular file/);
 });
 
+// The same second read, the other half of the question: the plan parses through `readSettings`
+// and names the file, `uninstall` parsed the text itself. The CLI always plans first and passes
+// `expect`, so only a caller that omits it reaches this parse — and it used to get a raw parser
+// position with nothing in it to act on.
+test('the second read of settings.json names the file that is not JSON, without expect', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, '{ this is not json ');
+  assert.throws(
+    () => uninstall({ home }),
+    new RegExp(`${escapeForTest(paths(home).settings)} is not valid JSON`),
+  );
+});
+
+// And the empty-file rule with it: `readSettings` reads whitespace-only as `{}`, the bare parse
+// threw on it. The plan promised `foreign`; uninstall could not even get there.
+test('a whitespace-only settings.json is the empty object for the plan and for uninstall alike', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, '\n  \n');
+  const plan = planUninstall({ home });
+  assert.equal(plan.mode, 'foreign', 'no statusLine left to recognise as ours');
+  assert.equal(uninstall({ home }).mode, plan.mode);
+});
+
 // backup.json is the other file both commands read before they print anything, and it was read
 // with no question about its kind at all — so a named pipe there froze `install` exactly as one
 // at settings.json did, with no output and nothing to press (#193).
