@@ -300,6 +300,25 @@ test('every statusline fixture is the build and the state its name claims', () =
   }
 });
 
+// The test above only reads the entries some fixture wears, and fixtures/ has no `-drift`
+// capture: the map could claim anything for `drift` and stay green (#217). So every entry is
+// pinned here on an inline payload instead, and a tag with no payload is a failure, not a skip.
+test('every tag of CTX_STATE_BY_TAG is the verdict the reader reaches', () => {
+  const PAYLOAD_BY_TAG: Record<string, unknown> = {
+    live: { context_window: { used_percentage: 12 } },
+    fresh: { context_window: { used_percentage: null } },
+    drift: {},
+  };
+  assert.deepEqual(
+    Object.keys(PAYLOAD_BY_TAG).sort(),
+    Object.keys(CTX_STATE_BY_TAG).sort(),
+    'a tag of CTX_STATE_BY_TAG has no payload here, or a payload has no tag',
+  );
+  for (const [tag, state] of Object.entries(CTX_STATE_BY_TAG)) {
+    assert.equal(extractTelemetry(PAYLOAD_BY_TAG[tag]).ctxState, state, `${tag}: not the verdict the reader reaches`);
+  }
+});
+
 // And the coverage claim itself: a `-live` capture is the one that shows every field this tool
 // reads carrying a real value. A fixture where half of them come back null would freeze a
 // version as "checked" on a payload that never demonstrated the shape.
