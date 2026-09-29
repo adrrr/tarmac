@@ -239,6 +239,7 @@ and what would have worked. Spellings, edge cases and the two health fields
 ## Development
 
 ```bash
+git fetch --tags               # a clone with no tags fails the changelog guards
 npm test                       # typecheck (src + test + scripts), then run the suite
 npm run build                  # flat JavaScript into dist/
 node scripts/demo-fleet.ts     # a second invented fleet, served on a port

@@ -33,7 +33,9 @@ the checklist below is done **first**, not after.
 - [ ] **`npm version <patch|minor|major>`** on a clean tree (it tags the commit). Between the
       changelog step above and this one, `npm test` is red by design: the dated section has no
       tag yet, and the changelog guard says so. Finishing the release clears it.
-- [ ] **CI is green on the commit being published.** The matrix is what stands behind
+- [ ] **CI is green on the commit being published.** `git push --follow-tags` sends the
+      commit and its tag. CI runs on the push to `main`, a tag alone triggers nothing.
+      The matrix is what stands behind
       `engines: node >=20` and the POSIX claim. See `.github/workflows/ci.yml`.
 - [ ] **`npm pack --dry-run` lists `dist/*.js` plus `README.md`, `LICENSE` and `package.json`,
       and nothing else.** CI asserts both directions of this on every push. A one-sided
@@ -47,8 +49,8 @@ abandoned and squatted. The command is `tarmac` either way, and the README insta
 ## After it lands
 
 ```bash
-npx @adrrr/tarmac@0.1.0 --help      # from the real registry, not from disk
-npx @adrrr/tarmac@0.1.0 list        # against the machine's own fleet
+npx @adrrr/tarmac@latest --help     # from the real registry, not from disk
+npx @adrrr/tarmac@latest list       # against the machine's own fleet
 ```
 
 Then check the README's install block against what the registry actually serves. The package

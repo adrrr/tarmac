@@ -7,7 +7,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderSettings, renderTable } from '../src/render.ts';
+import { cols as measure, glyphs, renderSettings, renderTable, widthOf } from '../src/render.ts';
 import { guardVersions } from '../src/schema.ts';
 import { health, row, NOW } from './fleet-fixtures.ts';
 import type { Fleet, FleetHealth, FleetRow } from '../src/fleet.ts';
@@ -475,6 +475,31 @@ test('a variation selector asking for the emoji presentation is two columns', ()
   );
   const [emoji, ascii] = out.split('\n').slice(1, 3);
   assert.equal(padding(emoji), padding(ascii), 'U+2764 U+FE0F paints the two columns U+2764 alone would not');
+});
+
+// The same facts asked of the measure itself (#219). Through `renderTable` a wrong width shows
+// up as a padding mismatch, which says a row came apart, not which glyph or by how much.
+test('the width helpers answer the columns a terminal paints, glyph by glyph', () => {
+  for (const [cp, expected] of EAW_POINTS) {
+    assert.equal(widthOf(String.fromCodePoint(cp)), expected, `U+${cp.toString(16).toUpperCase()}`);
+  }
+  const flag = '\u{1f1eb}\u{1f1f7}';
+  const scot = '\u{1f3f4}\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f}';
+  const cases: Array<[string, string, string[], number]> = [
+    ['ascii', 'ab', ['a', 'b'], 2],
+    ['a combining mark rides on its letter', 'éx', ['é', 'x'], 2],
+    ['a mark with nothing before it paints nothing', '́a', ['́', 'a'], 1],
+    ['a stray selector paints nothing', '️a', ['️', 'a'], 1],
+    ['a joiner takes the wide character behind it', '‍項', ['‍項'], 2],
+    ['the emoji presentation is two columns', '❤️', ['❤️'], 2],
+    ['indicators pair from the left, and the odd one stands alone', flag + '\u{1f1eb}', [flag, '\u{1f1eb}'], 3],
+    ['a rider on a flag keeps the pair at two', flag + '\u{1f3fb}', [flag + '\u{1f3fb}'], 2],
+    ['a tag sequence is one flag', scot, [scot], 2],
+  ];
+  for (const [name, s, split, width] of cases) {
+    assert.deepEqual(glyphs(s), split, `${name}: glyphs`);
+    assert.equal(measure(s), width, `${name}: columns`);
+  }
 });
 
 // A cell is made safe to print before the cap is consulted, and that order is the point: four
