@@ -407,7 +407,7 @@ const sanitise = (cell: string): string => cell.replace(/\p{Cc}/gu, '\uFFFD');
  * on either: the East Asian Ambiguous class, whose width depends on the font the reader
  * chose. Those stay at one, which is what a Western terminal draws.
  */
-function cols(s: string): number {
+export function cols(s: string): number {
   let n = 0;
   for (const g of glyphs(s)) n += widthOf(g);
   return n;
@@ -426,7 +426,7 @@ function cols(s: string): number {
  * odd run ends in an indicator with nobody left to pair with — a glyph of its own, and what a
  * terminal draws as a boxed letter.
  */
-function glyphs(s: string): string[] {
+export function glyphs(s: string): string[] {
   const out: string[] = [];
   for (const ch of s) {
     const prev = out.length - 1;
@@ -475,7 +475,7 @@ const FLAG = /^[\u{1F1E6}-\u{1F1FF}]{2}/u;
  * emoji presentation of a character a terminal would otherwise draw in one column, and the
  * terminals that honour it draw two.
  */
-function widthOf(g: string): number {
+export function widthOf(g: string): number {
   // The columns are the base's, and the base is not always the first code point: a joiner that
   // arrived with nothing before it stands as a glyph until the next character joins IT, and the
   // glyph then leads with a code point that paints nothing. Everything below asks about the base,
