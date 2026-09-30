@@ -173,9 +173,12 @@ const child = (script: string): ChildProcess =>
   spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });
 
 test('a line that never comes is a rejection carrying what did arrive', async () => {
-  // Printed on a loop, so the deadline cannot fire before the child has said anything.
-  const c = child('setInterval(() => console.log("listening on 4477"), 50)');
+  const c = child('console.log("listening on 4477"); setInterval(() => {}, 1000)');
   try {
+    // The line is left in the pipe, unread, before the clock starts: a child still booting
+    // when the deadline fires has printed nothing to quote (#222). The listener is gone by the
+    // time `waitForOutput` attaches its own, so it reads the buffered line first.
+    await waitForSettled(once(c.stdout!, 'readable'), 'the child\'s first line');
     await assert.rejects(
       () => waitForOutput(c, /tarmac serving/, 2000),
       (e: Error) => {
