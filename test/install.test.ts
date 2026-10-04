@@ -597,10 +597,10 @@ test('a whitespace-only settings.json is the empty object for the plan and for u
   assert.equal(uninstall({ home }).mode, plan.mode);
 });
 
-// JSON is not enough: `null` threw a TypeError in both plans, a number or a string threw in
-// `install` on the property it tried to set, `[]` let `install` write a wrapper that settings.json
-// never pointed at, and `uninstall` without `expect` answered `foreign` for all four.
-for (const text of ['null', '42', '"x"', '[]']) {
+// JSON is not enough: `null` threw a TypeError in both plans, a number, a string or a boolean
+// threw in `install` on the property it tried to set, `[]` let `install` write a wrapper that
+// settings.json never pointed at, and `uninstall` without `expect` answered `foreign` for all five.
+for (const text of ['null', '42', '"x"', 'true', '[]']) {
   test(`install refuses a settings.json that is ${text}, by name, and touches nothing`, () => {
     const home = fakeHome(text);
     const named = new RegExp(`${escapeForTest(paths(home).settings)} is not a JSON object`);
@@ -621,6 +621,23 @@ for (const text of ['null', '42', '"x"', '[]']) {
     assert.equal(fs.existsSync(paths(home).backup), true, 'the way back kept');
   });
 }
+
+// An earlier version installed over `[]` and left `[]` in place. The undo it printed must still work.
+test('an install an earlier version made over [] still undoes, byte for byte', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  fs.writeFileSync(paths(home).settings, '[]\n');
+  const backup = JSON.parse(fs.readFileSync(paths(home).backup, 'utf8'));
+  fs.writeFileSync(
+    paths(home).backup,
+    JSON.stringify({ ...backup, originalText: '[]', installedText: '[]\n', previous: null }),
+  );
+  const plan = planUninstall({ home });
+  assert.equal(plan.mode, 'bytes');
+  assert.equal(uninstall({ home, expect: plan.currentText }).mode, 'bytes');
+  assert.equal(settingsOf(home), '[]');
+  assert.equal(fs.existsSync(paths(home).backup), false);
+});
 
 // The comparison with `expect` runs on the raw text, ahead of the parse. A file that turned
 // into something that is not JSON after the plan is first a file that changed.

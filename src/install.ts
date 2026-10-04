@@ -1062,9 +1062,15 @@ export function planUninstall({ home, realHome = os.homedir() }: PlanOptions): U
   const root = requireHome(home);
   const p = paths(root);
   const backup = installedBackupOrRefuse(p);
-  // Through `readSettings`, so a settings.json that stopped being JSON since install is
+  // The raw text first, as `uninstall` asks it: a file that still holds the bytes install wrote
+  // goes back byte for byte, whatever an earlier version wrote there (`[]` stayed `[]`). Only a
+  // file that changed since is parsed by the rule, so one that stopped being a JSON object is
   // named, not reported as a raw parser position nobody can act on.
-  const { text: currentText, settings: current } = readSettings(p);
+  const currentText = readSettingsText(p.settings);
+  const current: Settings =
+    currentText === backup.installedText
+      ? ((JSON.parse(currentText ?? 'null') ?? {}) as Settings)
+      : parseSettings(p.settings, currentText);
 
   // Predicted by asking the same two questions `uninstall` asks, in the same order. The
   // surgical branch is a pure function, so the prediction runs it and throws the result away.

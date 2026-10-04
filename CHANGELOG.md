@@ -38,6 +38,8 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   `install` on the property it tried to set, and `[]` let `install` write a wrapper that
   settings.json never pointed at. `uninstall` without `expect` answered `foreign` for all four.
   `install`, `uninstall` and their plans now refuse such a file, name it, and touch nothing (#224).
+  An install made by an earlier version over `[]` can still be undone. The uninstall plan
+  compares the raw text first, as `uninstall` does, and the original bytes go back.
 
 - **`tarmac uninstall` no longer fails on a whitespace-only settings.json.** The plan reads such a
   file as an empty object and announces `foreign`. `uninstall` then read the file a second time
