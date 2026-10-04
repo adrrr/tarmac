@@ -597,6 +597,31 @@ test('a whitespace-only settings.json is the empty object for the plan and for u
   assert.equal(uninstall({ home }).mode, plan.mode);
 });
 
+// JSON is not enough: `null` threw a TypeError in both plans, a number or a string threw in
+// `install` on the property it tried to set, `[]` let `install` write a wrapper that settings.json
+// never pointed at, and `uninstall` without `expect` answered `foreign` for all four.
+for (const text of ['null', '42', '"x"', '[]']) {
+  test(`install refuses a settings.json that is ${text}, by name, and touches nothing`, () => {
+    const home = fakeHome(text);
+    const named = new RegExp(`${escapeForTest(paths(home).settings)} is not a JSON object`);
+    assert.throws(() => planInstall({ home }), named);
+    assert.throws(() => install({ home }), named);
+    assert.equal(settingsOf(home), text, 'file untouched');
+    assert.equal(fs.existsSync(paths(home).wrapper), false, 'no wrapper written either');
+  });
+
+  test(`uninstall refuses a settings.json that is ${text}, by name, and touches nothing`, () => {
+    const home = fakeHome(MINE);
+    install({ home });
+    fs.writeFileSync(paths(home).settings, text);
+    const named = new RegExp(`${escapeForTest(paths(home).settings)} is not a JSON object`);
+    assert.throws(() => planUninstall({ home }), named);
+    assert.throws(() => uninstall({ home }), named);
+    assert.equal(settingsOf(home), text, 'file untouched');
+    assert.equal(fs.existsSync(paths(home).backup), true, 'the way back kept');
+  });
+}
+
 // The comparison with `expect` runs on the raw text, ahead of the parse. A file that turned
 // into something that is not JSON after the plan is first a file that changed.
 test('a settings.json that stopped being JSON after the plan is refused as changed', () => {

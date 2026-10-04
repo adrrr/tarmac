@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A settings.json that is JSON but not an object is refused by name.** Only the parse was
+  checked, so `null` stopped both plans on a bare `TypeError`, a number or a string stopped
+  `install` on the property it tried to set, and `[]` let `install` write a wrapper that
+  settings.json never pointed at. `uninstall` without `expect` answered `foreign` for all four.
+  `install`, `uninstall` and their plans now refuse such a file, name it, and touch nothing (#224).
+
 - **`tarmac uninstall` no longer fails on a whitespace-only settings.json.** The plan reads such a
   file as an empty object and announces `foreign`. `uninstall` then read the file a second time
   and parsed the text itself, so the confirmed run stopped on `Unexpected end of JSON input`.
