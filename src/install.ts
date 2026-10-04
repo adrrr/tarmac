@@ -366,18 +366,23 @@ function readSettingsText(file: string): string | null {
  * whitespace-only file threw where the plan had read it as `{}` (#215). One rule, so the two
  * reads of the same file cannot answer differently.
  *
- * @throws if the text is not JSON — the one file we must never mangle.
+ * @throws if the text is not JSON, or is JSON but not an object — the one file we must never mangle.
  */
 function parseSettings(file: string, text: string | null): Settings {
   if (text === null || text.trim() === '') return {};
+  let parsed: unknown;
   try {
-    return JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch {
     throw new Error(`${file} is not valid JSON — refusing to touch it`);
   }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${file} is not a JSON object — refusing to touch it`);
+  }
+  return parsed as Settings;
 }
 
-/** @throws if settings.json exists and is not JSON — the one file we must never mangle. */
+/** @throws if settings.json exists and is not a JSON object — the one file we must never mangle. */
 function readSettings(p: TarmacPaths): { text: string | null; settings: Settings } {
   const text = readSettingsText(p.settings);
   return { text, settings: parseSettings(p.settings, text) };
@@ -1057,9 +1062,15 @@ export function planUninstall({ home, realHome = os.homedir() }: PlanOptions): U
   const root = requireHome(home);
   const p = paths(root);
   const backup = installedBackupOrRefuse(p);
-  // Through `readSettings`, so a settings.json that stopped being JSON since install is
+  // The raw text first, as `uninstall` asks it: a file that still holds the bytes install wrote
+  // goes back byte for byte, whatever an earlier version wrote there (`[]` stayed `[]`). Only a
+  // file that changed since is parsed by the rule, so one that stopped being a JSON object is
   // named, not reported as a raw parser position nobody can act on.
-  const { text: currentText, settings: current } = readSettings(p);
+  const currentText = readSettingsText(p.settings);
+  const current: Settings =
+    currentText === backup.installedText
+      ? ((JSON.parse(currentText ?? 'null') ?? {}) as Settings)
+      : parseSettings(p.settings, currentText);
 
   // Predicted by asking the same two questions `uninstall` asks, in the same order. The
   // surgical branch is a pure function, so the prediction runs it and throws the result away.
