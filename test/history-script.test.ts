@@ -180,7 +180,15 @@ test('a redraw between asking for a range and being answered does not take the v
   // goes back to naming the range it is now holding.
   m.p.el('ctx-now').fire('click');
   await settle(m);
-  assert.match(m.p.el('ctx-sub').textContent, /hour max · 30d/);
+  assert.match(m.p.el('ctx-sub').textContent, /per project · hour max · 30d/);
+});
+
+test('a long range with no readings still names the chart it would draw: one band per project', async () => {
+  const m = mount(true, (u) => (u === '/api/history' ? ring() : { ...(journal(u.slice(-2)) as object), hours: [], days: [] }));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+  assert.match(m.p.el('ctx-sub').textContent, /per project · hour max · 7d/);
 });
 
 test('while a range is in flight the view claims nothing about what it holds', async () => {

@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The 7d and 30d context chart says per project, as it draws.** Its subtitle read `per session ·
+  hour max`, over one band per project that keeps the highest reading of any of the project's
+  sessions each hour. It now reads `per project · hour max · <range>`, drawn or empty. The 24h
+  subtitle stays `per session`, since that chart is one line per session (#226).
+
 - **A settings.json that is JSON but not an object is refused by name.** Only the parse was
   checked, so `null` stopped both plans on a bare `TypeError`, a number or a string stopped
   `install` on the property it tried to set, and `[]` let `install` write a wrapper that
