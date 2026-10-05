@@ -1164,7 +1164,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   function drawCtx() {
     var d = state.data, r = roster(), live = state.range === '24h';
     var series = live ? ctxLines(d.samples, d.cadence || MIN, r) : ctxRows(d.hours, r, d.from, d.to);
-    if (series.length === 0) return blank('ctx', live ? 'per session · 24h' : 'per session · hour max · ' + state.range);
+    if (series.length === 0) return blank('ctx', live ? 'per session · 24h' : 'per project · hour max · ' + state.range);
     var g = setup(el('ctx-canvas'), height(live ? 'ctx24' : 'ctxRows')), b = plotBox(g);
     // The long ranges close at the end of the WINDOW, not at the last hour that has a slot: the
     // grid is the range's, so the last slot is an hour wide like the ones before it.
@@ -1234,7 +1234,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       // sentence, and the sentence is what explains the space those baselines cross.
       startNote(g, b, t0, t1, recordFrom());
       if (idx !== null) { var x2 = xOf(b, cur); hair(g, x2, b.t, x2, b.b, g.fg, .5); }
-      head('ctx', idx === null ? 'per session · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + hhmm(t0 + idx * HOUR),
+      head('ctx', idx === null ? 'per project · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + hhmm(t0 + idx * HOUR),
            climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
       el('ctx-legend').hidden = true;
     }
