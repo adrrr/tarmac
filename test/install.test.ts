@@ -607,6 +607,17 @@ for (const [what, text] of [['a BOM alone', '﻿'], ['a BOM then {}', '﻿{}']])
   });
 }
 
+// Both fixtures above hold `{}`, which a refusal would also read as. This one pins that the
+// settings behind the BOM are the ones read, and that they survive the install.
+test('a settings.json that holds a BOM then real settings is read, BOM dropped', () => {
+  const home = fakeHome('\uFEFF' + JSON.stringify({ model: 'm', statusLine: { type: 'command', command: 'echo old' } }));
+  const plan = planInstall({ home });
+  assert.equal(plan.before, 'echo old');
+  assert.equal(plan.chained, 'echo old');
+  install({ home });
+  assert.equal(jsonOf(home).model, 'm', 'the keys behind the BOM survive the install');
+});
+
 // JSON is not enough: `null` threw a TypeError in both plans, a number, a string or a boolean
 // threw in `install` on the property it tried to set, `[]` let `install` write a wrapper that
 // settings.json never pointed at, and `uninstall` without `expect` answered `foreign` for all five.
