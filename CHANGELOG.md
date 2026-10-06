@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A settings.json or config file saved with a UTF-8 BOM is read.** A settings.json that held
+  only a BOM read as an empty object, but a BOM followed by `{}` was refused as not valid JSON,
+  and a config file with a BOM was refused the same way. A leading BOM is now stripped once
+  before either file is parsed (#228).
+
 - **The 7d and 30d context chart says per project, as it draws.** Its subtitle read `per session ·
   hour max`, over one band per project that keeps the highest reading of any of the project's
   sessions each hour. It now reads `per project · hour max · <range>`, drawn or empty. The 24h

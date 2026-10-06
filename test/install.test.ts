@@ -597,6 +597,27 @@ test('a whitespace-only settings.json is the empty object for the plan and for u
   assert.equal(uninstall({ home }).mode, plan.mode);
 });
 
+// `trim()` drops a UTF-8 BOM and `JSON.parse` does not, so a BOM alone read as `{}` while a BOM
+// then `{}` was refused as not JSON (#228). The two files hold the same settings.
+for (const [what, text] of [['a BOM alone', '﻿'], ['a BOM then {}', '﻿{}']]) {
+  test(`a settings.json that holds ${what} is the empty object`, () => {
+    const plan = planInstall({ home: fakeHome(text) });
+    assert.equal(plan.before, null);
+    assert.equal(plan.chained, null);
+  });
+}
+
+// Both fixtures above hold `{}`, which a refusal would also read as. This one pins that the
+// settings behind the BOM are the ones read, and that they survive the install.
+test('a settings.json that holds a BOM then real settings is read, BOM dropped', () => {
+  const home = fakeHome('\uFEFF' + JSON.stringify({ model: 'm', statusLine: { type: 'command', command: 'echo old' } }));
+  const plan = planInstall({ home });
+  assert.equal(plan.before, 'echo old');
+  assert.equal(plan.chained, 'echo old');
+  install({ home });
+  assert.equal(jsonOf(home).model, 'm', 'the keys behind the BOM survive the install');
+});
+
 // JSON is not enough: `null` threw a TypeError in both plans, a number, a string or a boolean
 // threw in `install` on the property it tried to set, `[]` let `install` write a wrapper that
 // settings.json never pointed at, and `uninstall` without `expect` answered `foreign` for all five.

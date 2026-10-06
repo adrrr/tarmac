@@ -142,6 +142,12 @@ test('a config file that is not JSON is reported, with its path', () => {
   assert.throws(() => readConfigFile(file), new RegExp(escape(file)));
 });
 
+test('a config file saved with a UTF-8 BOM is read', () => {
+  const file = path.join(tmpdir(), 'config.json');
+  fs.writeFileSync(file, '﻿{ "port": 8080 }\n');
+  assert.deepEqual(readConfigFile(file), { port: 8080 });
+});
+
 test('a config file that is JSON but not an object is reported', () => {
   const file = path.join(tmpdir(), 'config.json');
   fs.writeFileSync(file, '[1, 2, 3]\n');

@@ -369,10 +369,13 @@ function readSettingsText(file: string): string | null {
  * @throws if the text is not JSON, or is JSON but not an object — the one file we must never mangle.
  */
 function parseSettings(file: string, text: string | null): Settings {
-  if (text === null || text.trim() === '') return {};
+  if (text === null) return {};
+  // `trim()` drops a leading BOM and `JSON.parse` does not: stripped once, both see the same text (#228).
+  const body = text.replace(/^\uFEFF/, '');
+  if (body.trim() === '') return {};
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(body);
   } catch {
     throw new Error(`${file} is not valid JSON — refusing to touch it`);
   }
