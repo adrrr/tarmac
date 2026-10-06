@@ -197,7 +197,8 @@ export function readConfigFile(file: string): FileConfig {
 
   let raw: unknown;
   try {
-    raw = JSON.parse(text);
+    // A leading BOM is what some editors save, and `JSON.parse` refuses it (#228).
+    raw = JSON.parse(text.replace(/^\uFEFF/, ''));
   } catch (e) {
     throw new Error(`${file} is not valid JSON: ${(e as Error).message}`);
   }
