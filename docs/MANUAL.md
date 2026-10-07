@@ -781,10 +781,11 @@ scrubber's `REPLAY`, which is written above it at every width and not only on a 
 ## The curves
 
 The third tab, on `/history`, is the one view here that is not about now. It draws what moved:
-context per session, cost per project, and the account's two windows, over 24h out of the ring or
-7 and 30 days out of [the journal](#the-journal-on-disk). One fetch a range, everything after it
-local, and the drawing is `<canvas>` and the page's own script. Eight lines of 1440 points is
-eleven thousand nodes as SVG, and this package has no runtime dependency to hand that to.
+context per session at 24h and per project at 7d and 30d, cost per project, and the account's two
+windows, over 24h out of the ring or 7 and 30 days out of [the journal](#the-journal-on-disk).
+One fetch a range, everything after it local, and the drawing is `<canvas>` and the page's own
+script. Eight lines of 1440 points is eleven thousand nodes as SVG, and this package has no
+runtime dependency to hand that to.
 
 The range pills sit at the top on a laptop and at the foot of the screen on a phone. `24h` is
 always live, because the ring is always there. `7d` and `30d` need `history.days` set: without it

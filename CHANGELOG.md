@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The README and the manual say context per project at 7d and 30d.** Both described the curves
+  tab as context per session at every range, which holds at 24h only: the long ranges draw one
+  band per project, as the subtitle has said since #226. They now name both (#230).
+
 - **A settings.json or config file saved with a UTF-8 BOM is read.** A settings.json that held
   only a BOM read as an empty object, but a BOM followed by `{}` was refused as not valid JSON,
   and a config file with a BOM was refused the same way. A leading BOM is now stripped once
