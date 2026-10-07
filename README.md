@@ -124,9 +124,10 @@ are in [the manual](docs/MANUAL.md#the-map).
 
 ## The curves
 
-The third tab draws what moved rather than what is: context per session, cost per project, and
-the account's two windows, over the last 24 hours out of the ring or over 7 and 30 days out of
-the journal, if you keep one. `<canvas>` and the page's own script, no library.
+The third tab draws what moved rather than what is: context per session at 24h and per project
+at 7d and 30d, cost per project, and the account's two windows, over the last 24 hours out of
+the ring or over 7 and 30 days out of the journal, if you keep one. `<canvas>` and the page's
+own script, no library.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/curves-dark.png">
