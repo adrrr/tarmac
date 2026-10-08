@@ -620,14 +620,31 @@ test('a settings.json that holds a BOM then real settings is read, BOM dropped',
 
 // Emptiness is JSON whitespace only. `trim()` also drops a second BOM, a no-break space and a
 // line separator, which `JSON.parse` refuses: each read as `{}` alone, and was refused before `{}` (#231).
+// All four entries share the rule: the plan and the real thing, install and uninstall, refuse the
+// same file by name and touch nothing (the #215 class: two readers of one file with two rules).
 for (const [what, text] of [
   ['two BOMs', '\uFEFF\uFEFF'],
   ['two BOMs then {}', '\uFEFF\uFEFF{}'],
   ['a no-break space', '\u00A0'],
   ['a line separator', '\u2028'],
 ]) {
-  test(`install refuses a settings.json that holds ${what}`, () => {
-    assert.throws(() => planInstall({ home: fakeHome(text) }), /not valid JSON/);
+  test(`install refuses a settings.json that holds ${what}, by name, and touches nothing`, () => {
+    const home = fakeHome(text);
+    const named = new RegExp(`${escapeForTest(paths(home).settings)} is not valid JSON`);
+    assert.throws(() => planInstall({ home }), named);
+    assert.throws(() => install({ home }), named);
+    assert.equal(settingsOf(home), text, 'file untouched');
+    assert.equal(fs.existsSync(paths(home).wrapper), false, 'no wrapper written either');
+  });
+  test(`uninstall refuses a settings.json that holds ${what}, by name, and touches nothing`, () => {
+    const home = fakeHome(MINE);
+    install({ home });
+    fs.writeFileSync(paths(home).settings, text);
+    const named = new RegExp(`${escapeForTest(paths(home).settings)} is not valid JSON`);
+    assert.throws(() => planUninstall({ home }), named);
+    assert.throws(() => uninstall({ home }), named);
+    assert.equal(settingsOf(home), text, 'file untouched');
+    assert.equal(fs.existsSync(paths(home).backup), true, 'the way back kept');
   });
 }
 
