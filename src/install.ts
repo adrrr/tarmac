@@ -370,9 +370,10 @@ function readSettingsText(file: string): string | null {
  */
 function parseSettings(file: string, text: string | null): Settings {
   if (text === null) return {};
-  // `trim()` drops a leading BOM and `JSON.parse` does not: stripped once, both see the same text (#228).
+  // `JSON.parse` refuses a leading BOM: stripped once (#228). Empty means JSON whitespace only,
+  // not `trim()`, which also drops a second BOM or a no-break space that the parse refuses (#231).
   const body = text.replace(/^\uFEFF/, '');
-  if (body.trim() === '') return {};
+  if (!/[^\t\n\r ]/.test(body)) return {};
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
