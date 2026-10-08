@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A settings.json that is not JSON whitespace is not read as empty.** The emptiness test used
+  `trim()`, which also drops a second BOM, a no-break space and a line separator, all of which
+  `JSON.parse` refuses: a file holding only those read as an empty object, and was refused as not
+  valid JSON once `{}` followed them. Only tabs, newlines, carriage returns and spaces now count as
+  empty, so both are refused (#231).
+
 - **The README and the manual say context per project at 7d and 30d.** Both described the curves
   tab as context per session at every range, which holds at 24h only: the long ranges draw one
   band per project, as the subtitle has said since #226. They now name both (#230).

@@ -618,6 +618,19 @@ test('a settings.json that holds a BOM then real settings is read, BOM dropped',
   assert.equal(jsonOf(home).model, 'm', 'the keys behind the BOM survive the install');
 });
 
+// Emptiness is JSON whitespace only. `trim()` also drops a second BOM, a no-break space and a
+// line separator, which `JSON.parse` refuses: each read as `{}` alone, and was refused before `{}` (#231).
+for (const [what, text] of [
+  ['two BOMs', '\uFEFF\uFEFF'],
+  ['two BOMs then {}', '\uFEFF\uFEFF{}'],
+  ['a no-break space', '\u00A0'],
+  ['a line separator', '\u2028'],
+]) {
+  test(`install refuses a settings.json that holds ${what}`, () => {
+    assert.throws(() => planInstall({ home: fakeHome(text) }), /not valid JSON/);
+  });
+}
+
 // JSON is not enough: `null` threw a TypeError in both plans, a number, a string or a boolean
 // threw in `install` on the property it tried to set, `[]` let `install` write a wrapper that
 // settings.json never pointed at, and `uninstall` without `expect` answered `foreign` for all five.
