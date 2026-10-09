@@ -33,7 +33,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **The hour a clock falls back through is two hours in a range.** The range reader dated an hour
+- **The hour a clock falls back through is two hours in the 7d and 30d ranges.** The range reader dated an hour
   by setting the wall clock to its start, which resolves the repeated hour of the autumn DST change
   to its first occurrence: both hours shared one bucket, its reading count doubled and the second
   hour's cost replaced the first. The start of the hour is now taken off the instant, so each

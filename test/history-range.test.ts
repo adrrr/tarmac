@@ -24,11 +24,10 @@ import { tempDir } from './sandbox.ts';
 const at = (y: number, m: number, d: number, h = 12, min = 0): number =>
   new Date(y, m - 1, d, h, min, 0, 0).getTime();
 
-/** The start of the local hour a moment falls in, which is what an hour bucket is dated by. */
+/** The start of the local hour a moment falls in, the same formula as the range reader's. */
 function hourOf(t: number): number {
   const d = new Date(t);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
+  return d.getTime() - (d.getMinutes() * 60_000 + d.getSeconds() * 1000 + d.getMilliseconds());
 }
 
 interface SessionFields {
@@ -717,6 +716,22 @@ test('the hour a clock falls back through twice is two hours, not one (#233)', a
     if (tz === undefined) delete process.env.TZ;
     else process.env.TZ = tz;
   }
+});
+
+test('a fractional clock still lands in the whole hour (#233)', async () => {
+  const t = at(2026, 8, 7, 10);
+  const dir = journal();
+  day(dir, '2026-08-07', [
+    rec(t + 0.5, [sess({ costUsd: 1 })]),
+    rec(t + 30 * 60_000 + 0.25, [sess({ costUsd: 2 })]),
+  ]);
+
+  const { hours } = await readRange({ dir, range: '7d', now: at(2026, 8, 7) });
+
+  assert.deepEqual(
+    hours.map((h) => [h.t, h.n]),
+    [[t, 2]],
+  );
 });
 
 // A reset is dated by the reading AFTER the fall, so a turnover that happened while the serve

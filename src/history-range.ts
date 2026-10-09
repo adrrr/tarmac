@@ -503,10 +503,11 @@ const dayOf = (t: number): string => {
  *
  * Subtracted from the instant rather than set on the wall clock: the night a clock falls back
  * repeats an hour, and `setMinutes` resolves both to the first one, folding them together (#233).
+ * Taken off `getTime()`, which is whole milliseconds, so a fractional clock keeps a whole key.
  */
 function hourOf(t: number): number {
   const d = new Date(t);
-  return t - (d.getMinutes() * 60_000 + d.getSeconds() * 1000 + d.getMilliseconds());
+  return d.getTime() - (d.getMinutes() * 60_000 + d.getSeconds() * 1000 + d.getMilliseconds());
 }
 
 /**
