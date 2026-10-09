@@ -498,11 +498,16 @@ const dayOf = (t: number): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-/** The start of the local hour a moment falls in. Local, so a bucket is an hour of someone's day. */
+/**
+ * The start of the local hour a moment falls in. Local, so a bucket is an hour of someone's day.
+ *
+ * Subtracted from the instant rather than set on the wall clock: the night a clock falls back
+ * repeats an hour, and `setMinutes` resolves both to the first one, folding them together (#233).
+ * Taken off `getTime()`, which is whole milliseconds, so a fractional clock keeps a whole key.
+ */
 function hourOf(t: number): number {
   const d = new Date(t);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
+  return d.getTime() - (d.getMinutes() * 60_000 + d.getSeconds() * 1000 + d.getMilliseconds());
 }
 
 /**
