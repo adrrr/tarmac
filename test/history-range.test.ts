@@ -691,6 +691,34 @@ test('an hour says how many readings it was built from', async () => {
   );
 });
 
+test('the hour a clock falls back through twice is two hours, not one (#233)', async () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    // 25 October 2026, Paris: 02:30 happens at 00:30 UTC and again at 01:30 UTC.
+    const first = Date.UTC(2026, 9, 25, 0, 30);
+    const second = Date.UTC(2026, 9, 25, 1, 30);
+    const dir = journal();
+    day(dir, '2026-10-25', [
+      rec(first, [sess({ costUsd: 1 })]),
+      rec(second, [sess({ costUsd: 2 })]),
+    ]);
+
+    const { hours } = await readRange({ dir, range: '7d', now: at(2026, 10, 25) });
+
+    assert.deepEqual(
+      hours.map((h) => [h.t, h.n, h.sessions[0].costUsd]),
+      [
+        [Date.UTC(2026, 9, 25, 0), 1, 1],
+        [Date.UTC(2026, 9, 25, 1), 1, 2],
+      ],
+    );
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
+
 // A reset is dated by the reading AFTER the fall, so a turnover that happened while the serve
 // was off is dated at the moment it came back. The gap says which of the two this is.
 test('a reset says how long since the reading it fell from', async () => {
