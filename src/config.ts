@@ -195,10 +195,13 @@ export function readConfigFile(file: string): FileConfig {
     throw new Error(`could not read ${file}: ${(e as Error).message}`);
   }
 
+  // A leading BOM is what some editors save, and `JSON.parse` refuses it (#228). Empty means
+  // JSON whitespace only, the rule settings.json is read by (#231): no settings, not an error (#235).
+  const json = text.replace(/^\uFEFF/, '');
+  if (!/[^\t\n\r ]/.test(json)) return {};
   let raw: unknown;
   try {
-    // A leading BOM is what some editors save, and `JSON.parse` refuses it (#228).
-    raw = JSON.parse(text.replace(/^\uFEFF/, ''));
+    raw = JSON.parse(json);
   } catch (e) {
     throw new Error(`${file} is not valid JSON: ${(e as Error).message}`);
   }

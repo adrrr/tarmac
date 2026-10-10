@@ -148,6 +148,23 @@ test('a config file saved with a UTF-8 BOM is read', () => {
   assert.deepEqual(readConfigFile(file), { port: 8080 });
 });
 
+test('an empty config file reads as no settings, the way an empty settings.json does', () => {
+  for (const body of ['', '\n', ' \t\r\n', '\uFEFF', '\uFEFF\n']) {
+    const file = path.join(tmpdir(), 'config.json');
+    fs.writeFileSync(file, body);
+    assert.deepEqual(readConfigFile(file), {}, JSON.stringify(body));
+  }
+});
+
+test('a config file of whitespace JSON does not accept is reported, not read as empty', () => {
+  // `trim()` would drop these; `JSON.parse` refuses them once `{}` follows (#231).
+  for (const body of ['\u00A0', '\uFEFF\uFEFF', '\u2028']) {
+    const file = path.join(tmpdir(), 'config.json');
+    fs.writeFileSync(file, body);
+    assert.throws(() => readConfigFile(file), /not valid JSON/, JSON.stringify(body));
+  }
+});
+
 test('a config file that is JSON but not an object is reported', () => {
   const file = path.join(tmpdir(), 'config.json');
   fs.writeFileSync(file, '[1, 2, 3]\n');
