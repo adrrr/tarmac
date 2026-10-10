@@ -323,11 +323,15 @@ export function ctxRows(hours: any[], roster: Slot[], from: number, to: number):
   return kept;
 }
 
-/** The start of the local hour a moment falls in. */
+/**
+ * The start of the local hour a moment falls in.
+ *
+ * Subtracted from the instant rather than set on the wall clock, as in history-range.ts: the
+ * night a clock falls back repeats an hour, and `setMinutes` resolves both to the first (#237).
+ */
 export function hourOf(t: number): number {
   var d = new Date(t);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
+  return d.getTime() - (d.getMinutes() * MIN + d.getSeconds() * 1000 + d.getMilliseconds());
 }
 
 /**
