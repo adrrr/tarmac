@@ -38,6 +38,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   `settings.json` has always read as `{}`. It now reads the same way, by the same rule: a no-break
   space or a second BOM is still refused as not valid JSON (#235).
 
+- **The hour a clock falls back through is two columns in the 24h view.** The page dated an hour
+  the way the range reader did before #233, by setting the wall clock to its start: on the night
+  of the autumn DST change both repeated hours landed in one cost bar, and the second had no
+  column. The start of the hour is now taken off the instant there too (#237).
+
 - **The hour a clock falls back through is two hours in the 7d and 30d ranges.** The range reader dated an hour
   by setting the wall clock to its start, which resolves the repeated hour of the autumn DST change
   to its first occurrence: both hours shared one bucket, its reading count doubled and the second

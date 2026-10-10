@@ -416,6 +416,31 @@ test('every hour of the span gets a column, so the axis never closes a gap up', 
   );
 });
 
+test('the hour a clock falls back through is two columns at 24h, each with its own reading', () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    // 25 October 2026, Paris: 02:30 happens at 00:30 UTC and again at 01:30 UTC.
+    const first = Date.UTC(2026, 9, 25, 0, 30);
+    const c = costHourly(
+      [sample(first, [{ costUsd: 1 }]), sample(first + HOUR, [{ costUsd: 3 }])],
+      rosterOf(['alpha']),
+    );
+    assert.equal(c.buckets.length, 2, `the night is ${c.buckets.length} columns long`);
+    assert.deepEqual(
+      c.buckets.map((b) => b.t),
+      [Date.UTC(2026, 9, 25, 0), Date.UTC(2026, 9, 25, 1)],
+    );
+    assert.deepEqual(
+      c.buckets.map((b) => b.n),
+      [1, 1],
+    );
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
+
 // ── cost ─────────────────────────────────────────────────────────────────────────────────
 
 test('the ring carries a running total, so an hour is the difference between its ends', () => {
