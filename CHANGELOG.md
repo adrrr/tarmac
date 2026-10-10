@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An empty config.json reads as no settings.** A `config.json` holding nothing, or only JSON
+  whitespace past a leading BOM, stopped every command as not valid JSON, where an empty
+  `settings.json` has always read as `{}`. It now reads the same way, by the same rule: a no-break
+  space or a second BOM is still refused as not valid JSON (#235).
+
 - **The hour a clock falls back through is two hours in the 7d and 30d ranges.** The range reader dated an hour
   by setting the wall clock to its start, which resolves the repeated hour of the autumn DST change
   to its first occurrence: both hours shared one bucket, its reading count doubled and the second
