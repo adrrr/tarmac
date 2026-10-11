@@ -129,12 +129,15 @@ function section(changelog: string, version: string): string | null {
   return lines.slice(start, end).join('\n').trimEnd();
 }
 
-/** Every version that owns a dated section, in the order the file gives them. */
+/**
+ * Every version that owns a dated section, in the order the file gives them. Both separators
+ * the file has used are read: `0.9.0` and `0.10.0` were dated with ` - `, the rest with ` — `.
+ */
 function datedVersions(changelog: string): string[] {
   const { lines, isHeading } = scan(changelog);
   return lines
     .filter((_, i) => isHeading[i])
-    .map((l) => /^## \[(\d+\.\d+\.\d+)\]/.exec(l)?.[1])
+    .map((l) => /^## \[(\d+\.\d+\.\d+)\] [—-] \d{4}-\d{2}-\d{2}/.exec(l)?.[1])
     .filter((v): v is string => v !== undefined);
 }
 
@@ -173,8 +176,7 @@ function taggedReleases(): { tag: string; version: string }[] {
  * section at all and says so — "no dated sections in the CHANGELOG" about a file full of them.
  * The guard is what makes either failure name the fence instead.
  */
-function currentChangelog(): string {
-  const current = read('CHANGELOG.md');
+function currentChangelog(current = read('CHANGELOG.md')): string {
   assert.ok(
     !scan(current).fenceLeftOpen,
     'the CHANGELOG leaves a code fence open: every heading after it stops being read as one, so the sections below would be reported as missing when they are plainly there',
@@ -393,4 +395,41 @@ test('the first difference names the line, and a section that stops early ends t
   assert.match(lost, /^line 3\n/);
   assert.match(lost, /current: \(section ends\)/);
   assert.match(firstDifference('## [9.9.9] — 2026-01-01\n- a bullet', tagged), /tagged: {2}\(section ends\)/);
+});
+
+// `scan()` exists so a `## [` quoted inside a fence is not a section, and `datedVersions()` is
+// the reader that counts on it: drop the `isHeading` filter and every fenced heading is counted.
+test('datedVersions skips a heading quoted inside a code fence', () => {
+  const quoted = [
+    '## [Unreleased]',
+    '',
+    '- an entry quoting a sample:',
+    '',
+    '```',
+    '## [8.8.8] — 2026-01-03',
+    '```',
+    '',
+    '## [9.9.9] — 2026-01-01',
+    '- a bullet',
+  ].join('\n');
+
+  assert.deepEqual(datedVersions(quoted), ['9.9.9']);
+});
+
+// The floor in the second test reads dated sections only: a version heading with no date is
+// not a release yet, and must not be asked for a tag.
+test('datedVersions skips a version heading that carries no date', () => {
+  const undated = ['## [Unreleased]', '', '## [9.9.9]', '- not released', '', '## [9.9.8] - 2025-12-31', '- older'].join(
+    '\n',
+  );
+
+  assert.deepEqual(datedVersions(undated), ['9.9.8']);
+});
+
+// The guard both tests above go through, fed a CHANGELOG whose fence never closes: without it
+// the second test reports "no dated sections" about a file full of them.
+test('a CHANGELOG with an open code fence is refused by name', () => {
+  const open = ['## [Unreleased]', '', '```', '- a sample left open', '', '## [9.9.9] — 2026-01-01', '- a bullet'].join('\n');
+
+  assert.throws(() => currentChangelog(open), /leaves a code fence open/);
 });
