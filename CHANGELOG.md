@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A cost of 0 no longer hides the first-run block.** The history view lowered it as soon as the
+  24h ring held one session cost, including a cost of 0, which the bars draw as nothing: a ring
+  of sessions that had spent nothing yet showed three empty charts and no word on why. A cost now
+  counts only above 0 (#241).
+
 - **An empty config.json reads as no settings.** A `config.json` holding nothing, or only JSON
   whitespace past a leading BOM, stopped every command as not valid JSON, where an empty
   `settings.json` has always read as `{}`. It now reads the same way, by the same rule: a no-break
