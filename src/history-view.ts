@@ -1442,7 +1442,8 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       for (k in lim) if (lim[k] && typeof lim[k].used_percentage === 'number') return true;
       ses = s[i].sessions || [];
       for (j = 0; j < ses.length; j++) {
-        if (typeof ses[j].ctxPct === 'number' || ses[j].costUsd > 0) return true;
+        if (typeof ses[j].ctxPct === 'number') return true;
+        if (typeof ses[j].costUsd === 'number' && ses[j].costUsd > 0) return true;
       }
     }
     return false;

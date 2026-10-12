@@ -808,12 +808,29 @@ test('a ring whose only readings are costs of 0 is still a first run', async () 
     missed: 0,
     samples: [0, 1, 2].map((i) => ({
       t: T0 + i * MIN,
-      sessions: [session({ ctxState: 'absent', ctxPct: null, costUsd: 0 })],
+      sessions: [session({ ctxState: 'fresh', ctxPct: null, costUsd: 0 })],
       rateLimits: { five_hour: { used_percentage: null } },
     })),
   }));
   await settle(m);
   assert.equal(m.p.el('hist-empty').hidden, false, 'a cost of 0 lowered the block over charts with nothing in them');
+});
+
+// The other side of the same rule: a cost that climbs is a bar to draw, with no context reading
+// and no window reading beside it.
+test('a ring whose only readings are costs above 0 is something to draw', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [0, 0.5, 1.2].map((costUsd, i) => ({
+      t: T0 + i * MIN,
+      sessions: [session({ ctxState: 'fresh', ctxPct: null, costUsd })],
+      rateLimits: null,
+    })),
+  }));
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, true, 'a climbing cost left the block up over a chart with a bar in it');
 });
 
 // And the converse, so none of this passes by refusing to ever lower the block: one window
