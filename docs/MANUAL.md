@@ -803,7 +803,7 @@ bars an hour at a time, and [`serve --demo`](#seeing-it-full-serve---demo) for a
 rather see the three of them full than wait.
 
 It goes when the record holds a number, which is the same question the charts ask: a context
-percentage, a cost, or a window reading. Sample count is deliberately not the test. A serve
+percentage, a cost above 0, or a window reading. Sample count is deliberately not the test. A serve
 running before `install`, or with no session open, records a sample a minute carrying nothing at
 all, and a page that lowered the block there would go back to explaining nothing sixty seconds
 in, on exactly the fresh machine it was written for.

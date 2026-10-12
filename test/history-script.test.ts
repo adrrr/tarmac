@@ -799,6 +799,40 @@ test('a ring of sessions nothing has measured yet is still a first run', async (
   assert.equal(m.p.el('hist-empty').hidden, false, 'a chained-less fleet lowered the block over three empty charts');
 });
 
+// A session that has spent nothing yet reports a cost of 0, and the bars draw nothing for it.
+// A ring of those is as empty as one with no numbers at all (#241).
+test('a ring whose only readings are costs of 0 is still a first run', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [0, 1, 2].map((i) => ({
+      t: T0 + i * MIN,
+      sessions: [session({ ctxState: 'fresh', ctxPct: null, costUsd: 0 })],
+      rateLimits: { five_hour: { used_percentage: null } },
+    })),
+  }));
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, false, 'a cost of 0 lowered the block over charts with nothing in them');
+});
+
+// The other side of the same rule: a cost that climbs is a bar to draw, with no context reading
+// and no window reading beside it.
+test('a ring whose only readings are costs above 0 is something to draw', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [0, 0.5, 1.2].map((costUsd, i) => ({
+      t: T0 + i * MIN,
+      sessions: [session({ ctxState: 'fresh', ctxPct: null, costUsd })],
+      rateLimits: null,
+    })),
+  }));
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, true, 'a climbing cost left the block up over a chart with a bar in it');
+});
+
 // And the converse, so none of this passes by refusing to ever lower the block: one window
 // reading, with no session telemetry at all, is a quota chart worth drawing.
 test('a single account reading is something to draw', async () => {

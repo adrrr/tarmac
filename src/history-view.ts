@@ -1423,7 +1423,8 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   /*
    * Is there a single number in the ring? The three charts plot exactly three things, and this
    * asks whether the record holds any of them: a context percentage, a cost, or a window
-   * reading. Nothing else counts as something to draw.
+   * reading. Nothing else counts as something to draw, and neither does a cost of 0, which the
+   * bars draw as nothing (#241).
    *
    * A first cut asked whether the ring held any SAMPLE, and those two part company sixty
    * seconds in, which is the worst possible moment. A serve started before the statusline is
@@ -1441,7 +1442,8 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       for (k in lim) if (lim[k] && typeof lim[k].used_percentage === 'number') return true;
       ses = s[i].sessions || [];
       for (j = 0; j < ses.length; j++) {
-        if (typeof ses[j].ctxPct === 'number' || typeof ses[j].costUsd === 'number') return true;
+        if (typeof ses[j].ctxPct === 'number') return true;
+        if (typeof ses[j].costUsd === 'number' && ses[j].costUsd > 0) return true;
       }
     }
     return false;
