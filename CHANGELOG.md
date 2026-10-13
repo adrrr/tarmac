@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An uninstall plan no longer says `(removed)` when there was no statusLine command to remove.**
+  When someone else's settings left the statusLine without a command, the plan printed
+  `statusLine next  (removed)` above "nothing is restored and nothing is deleted". With no command
+  now and none after, that row reads `(none)`, like the `statusLine now` row above it (#243).
+
 - **A cost of 0 no longer hides the first-run block.** The history view lowered it as soon as the
   24h ring held one session cost, including a cost of 0, which the bars draw as nothing: a ring
   of sessions that had spent nothing yet showed three empty charts and no word on why. A cost now

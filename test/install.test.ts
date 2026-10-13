@@ -318,6 +318,7 @@ test('the printed uninstall plan distinguishes snapshot files from the prune mar
   const text = renderPlan(planUninstall({ home }));
   assert.match(text, /snapshot files stay/i);
   assert.match(text, /prune marker is removed/i);
+  assert.match(text, /statusLine next +\(removed\)/, 'the wrapper was there, so it is removed');
   assert.doesNotMatch(text, /left exactly as they are/i);
 });
 
@@ -372,6 +373,23 @@ test('a foreign statusLine with no marker on disk says nothing about one', () =>
   assert.match(text, /foreign/, 'still the mode it is');
   assert.match(text, /no prune marker to remove/i);
   assert.doesNotMatch(text, /prune marker stays/i, 'nothing stays that was never there');
+});
+
+// In foreign mode `after` is the statusLine as it stands, so it is null when that key has no
+// command — and nothing is removed in that mode, so the row cannot say so.
+test('a foreign plan with no statusLine command says (none), not (removed)', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, '{}');
+  const plan = planUninstall({ home });
+  assert.equal(plan.mode, 'foreign');
+  assert.equal(plan.after, null, 'the state this is about');
+
+  const text = renderPlan(plan);
+  assert.match(text, /statusLine now +\(none\)/);
+  assert.match(text, /statusLine next +\(none\)/);
+  assert.doesNotMatch(text, /\(removed\)/);
+  assert.match(text, /nothing is restored and nothing is deleted/);
 });
 
 // `removePruneMarker` asks `isPlainFile`, so a symlink wearing the name is left alone BY
@@ -685,6 +703,7 @@ test('an install an earlier version made over [] still undoes, byte for byte', (
   );
   const plan = planUninstall({ home });
   assert.equal(plan.mode, 'bytes');
+  assert.match(renderPlan(plan), /statusLine next +\(none\)/, 'no command before, nothing to remove');
   assert.equal(uninstall({ home, expect: plan.currentText }).mode, 'bytes');
   assert.equal(settingsOf(home), '[]');
   assert.equal(fs.existsSync(paths(home).backup), false);
