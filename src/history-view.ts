@@ -335,6 +335,25 @@ export function hourOf(t: number): number {
 }
 
 /**
+ * The label of the local hour that starts at `t`, as `HH:MM–HH:MM`.
+ *
+ * When the UTC offset is not the same at both ends, the hour a clock changes in, each end carries
+ * it: the repeated autumn hour is two columns (#240), and in wall-clock time alone the first of
+ * them reads `02:00–02:00` (#245).
+ */
+export function hourSpan(t: number): string {
+  var two = function (n: number) { return (n < 10 ? '0' : '') + n; };
+  var clock = function (d: Date) { return two(d.getHours()) + ':' + two(d.getMinutes()); };
+  var offset = function (d: Date) {
+    var m = -d.getTimezoneOffset(), abs = Math.abs(m);
+    return (m < 0 ? '-' : '+') + two(Math.floor(abs / 60)) + (abs % 60 ? ':' + two(abs % 60) : '');
+  };
+  var a = new Date(t), b = new Date(t + HOUR);
+  if (a.getTimezoneOffset() === b.getTimezoneOffset()) return clock(a) + '–' + clock(b);
+  return clock(a) + ' ' + offset(a) + '–' + clock(b) + ' ' + offset(b);
+}
+
+/**
  * A moment the page may compute with.
  *
  * `typeof` and not `isFinite` alone, because `isFinite(null)` is true and `JSON.stringify(NaN)`
@@ -707,6 +726,7 @@ const PURE = [
   ctxLines,
   ctxRows,
   hourOf,
+  hourSpan,
   moment,
   startOfDay,
   nextDay,
@@ -1294,7 +1314,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     var read = sel === null || buckets[sel].n > 0;
     head('cost', sel === null
       ? 'per project · ' + (live ? 'hourly · 24h' : 'daily · ' + state.range)
-      : (live ? hhmm(bk2.t) + '–' + hhmm(bk2.t + HOUR) : dayWord(bk2.t)),
+      : (live ? hourSpan(bk2.t) : dayWord(bk2.t)),
       read ? money(sel === null ? total : totals[sel]) : 'no reading', sel !== null);
     legend('cost', keys.map(function (kk) {
       return { name: kk.name === null ? '—' : kk.name, line: false, color: slotColor(kk.slot),

@@ -28,6 +28,7 @@ import {
   fillAlpha,
   gridLen,
   historyScript,
+  hourSpan,
   legendByCost,
   quotaOfHours,
   quotaOfSamples,
@@ -435,6 +436,27 @@ test('the hour a clock falls back through is two columns at 24h, each with its o
       c.buckets.map((b) => b.n),
       [1, 1],
     );
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
+
+// The two columns above carry a label each, and a label in wall-clock time alone reads
+// `02:00–02:00` on the first: an hour that looks empty, and no way to tell the two 02:00s apart.
+test('an hour a clock changes in names the offset at both ends, and no other hour does', () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    assert.equal(hourSpan(Date.UTC(2026, 9, 25, 0)), '02:00 +02–02:00 +01');
+    assert.equal(hourSpan(Date.UTC(2026, 9, 25, 1)), '02:00–03:00');
+    assert.equal(hourSpan(Date.UTC(2026, 9, 24, 23)), '01:00–02:00');
+    // Spring: the hour that starts at 01:00 ends at 03:00.
+    assert.equal(hourSpan(Date.UTC(2027, 2, 28, 0)), '01:00 +01–03:00 +02');
+    assert.equal(hourSpan(Date.UTC(2027, 2, 28, 1)), '03:00–04:00');
+    process.env.TZ = 'Australia/Lord_Howe';
+    // 4 October 2026: 02:00 +10:30 becomes 02:30 +11, half an hour forward.
+    assert.equal(hourSpan(Date.UTC(2026, 9, 3, 15)), '01:30 +10:30–03:00 +11');
   } finally {
     if (tz === undefined) delete process.env.TZ;
     else process.env.TZ = tz;
