@@ -34,10 +34,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **The hour a clock changes in says so on the 24h cost chart.** A selected column was labelled in
-  wall-clock time alone, so the first of the two repeated autumn hours read `02:00–02:00` and the
-  spring hour `01:00–03:00`. When the UTC offset differs between the start and the end of the hour,
-  the label now names it on both sides, `02:00 +02–02:00 +01`; every other hour reads as before
-  (#245).
+  wall-clock time alone, so in Paris the first of the two repeated autumn hours read `02:00–02:00`
+  and the spring hour `01:00–03:00`. When the UTC offset differs between the start and the end of
+  the column, the label now names it on both sides, `02:00 +02–02:00 +01`. Every other hour reads
+  as before (#245).
 
 - **An uninstall plan no longer says `(removed)` when there was no statusLine command to remove.**
   When someone else's settings left the statusLine without a command, the plan printed

@@ -335,11 +335,14 @@ export function hourOf(t: number): number {
 }
 
 /**
- * The label of the local hour that starts at `t`, as `HH:MM–HH:MM`.
+ * The label of the column `hourOf` keys at `t`, as `HH:MM–HH:MM`.
  *
  * When the UTC offset is not the same at both ends, the hour a clock changes in, each end carries
  * it: the repeated autumn hour is two columns (#240), and in wall-clock time alone the first of
  * them reads `02:00–02:00` (#245).
+ *
+ * The ends are those of the minutes the column holds. That is the hour after `t`, except where a
+ * clock moves by half an hour: one column is then thirty minutes long.
  */
 export function hourSpan(t: number): string {
   var two = function (n: number) { return (n < 10 ? '0' : '') + n; };
@@ -348,7 +351,10 @@ export function hourSpan(t: number): string {
     var m = -d.getTimezoneOffset(), abs = Math.abs(m);
     return (m < 0 ? '-' : '+') + two(Math.floor(abs / 60)) + (abs % 60 ? ':' + two(abs % 60) : '');
   };
-  var a = new Date(t), b = new Date(t + HOUR);
+  var s = t, e = t + HOUR;
+  while (s < e - MIN && hourOf(s) !== t) s += MIN;
+  while (e > s + MIN && hourOf(e - MIN) !== t) e -= MIN;
+  var a = new Date(s), b = new Date(e);
   if (a.getTimezoneOffset() === b.getTimezoneOffset()) return clock(a) + '–' + clock(b);
   return clock(a) + ' ' + offset(a) + '–' + clock(b) + ' ' + offset(b);
 }

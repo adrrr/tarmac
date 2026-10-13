@@ -376,6 +376,33 @@ test('tapping an hour with no readings says so, rather than pricing it at zero',
   assert.equal(/\$0\.00/.test(m.p.el('cost-legend').innerHTML), false, 'nobody read it, so it did not cost nothing');
 });
 
+// The label under a tap is built in the page. `history-view` pins the function it calls, not the
+// call: with the old label back at the call site, every test of `hourSpan` stays green.
+test('a tap on the hour a clock falls back through names the offset at both ends', async () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    // 25 October 2026: one reading in each of the two 02:00 hours, so two columns.
+    const first = Date.UTC(2026, 9, 25, 0, 10);
+    const m = mount(true, () => ({
+      since: first,
+      cadence: MIN,
+      missed: 0,
+      samples: [0, 1].map((i) => ({ t: first + i * HOUR, sessions: [session({ costUsd: 1 + i })], rateLimits: null })),
+    }));
+    await settle(m);
+    m.p.el('cost-canvas').fire('pointerdown', { clientX: 60 });
+    await settle(m);
+    assert.equal(m.p.el('cost-sub').textContent, '02:00 +02–02:00 +01');
+    m.p.el('cost-canvas').fire('pointerdown', { clientX: 300 });
+    await settle(m);
+    assert.equal(m.p.el('cost-sub').textContent, '02:00–03:00');
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
+
 // The stack is built in the palette's order so a slab keeps its place in the column all week.
 // `history-view` pins that in the numbers `costDaily` hands over, which is a different claim
 // from the one made in paint: stacked in each day's own ranking instead, the data is identical
