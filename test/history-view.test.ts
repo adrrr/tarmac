@@ -28,6 +28,7 @@ import {
   fillAlpha,
   gridLen,
   historyScript,
+  hourSpan,
   legendByCost,
   quotaOfHours,
   quotaOfSamples,
@@ -435,6 +436,34 @@ test('the hour a clock falls back through is two columns at 24h, each with its o
       c.buckets.map((b) => b.n),
       [1, 1],
     );
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
+
+// The two columns above carry a label each, and a label in wall-clock time alone reads
+// `02:00–02:00` on the first: an hour that looks empty, and no way to tell the two 02:00s apart.
+test('an hour a clock changes in names the offset at both ends, and no other hour does', () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    assert.equal(hourSpan(Date.UTC(2026, 9, 25, 0)), '02:00 +02–02:00 +01');
+    assert.equal(hourSpan(Date.UTC(2026, 9, 25, 1)), '02:00–03:00');
+    assert.equal(hourSpan(Date.UTC(2026, 9, 24, 23)), '01:00–02:00');
+    // Spring: the hour that starts at 01:00 ends at 03:00.
+    assert.equal(hourSpan(Date.UTC(2027, 2, 28, 0)), '01:00 +01–03:00 +02');
+    assert.equal(hourSpan(Date.UTC(2027, 2, 28, 1)), '03:00–04:00');
+    process.env.TZ = 'Australia/Lord_Howe';
+    // 4 October 2026: 02:00 +10:30 becomes 02:30 +11. The column after the shift holds half an hour.
+    assert.equal(hourSpan(Date.UTC(2026, 9, 3, 14, 30)), '01:00 +10:30–02:30 +11');
+    assert.equal(hourSpan(Date.UTC(2026, 9, 3, 15)), '02:30–03:00');
+    // 4 April 2027: 02:00 +11 becomes 01:30 +10:30. Same thing on the way back.
+    assert.equal(hourSpan(Date.UTC(2027, 3, 3, 14)), '01:00 +11–01:30 +10:30');
+    assert.equal(hourSpan(Date.UTC(2027, 3, 3, 14, 30)), '01:30–02:00');
+    process.env.TZ = 'America/St_Johns';
+    // West of UTC, with minutes in the offset. 1 November 2026: 02:00 -02:30 becomes 01:00 -03:30.
+    assert.equal(hourSpan(Date.UTC(2026, 10, 1, 3, 30)), '01:00 -02:30–01:00 -03:30');
   } finally {
     if (tz === undefined) delete process.env.TZ;
     else process.env.TZ = tz;
