@@ -374,6 +374,23 @@ test('a foreign statusLine with no marker on disk says nothing about one', () =>
   assert.doesNotMatch(text, /prune marker stays/i, 'nothing stays that was never there');
 });
 
+// In foreign mode `after` is the statusLine as it stands, so it is null when that key has no
+// command — and nothing is removed in that mode, so the row cannot say so.
+test('a foreign plan with no statusLine command says (none), not (removed)', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.writeFileSync(paths(home).settings, '{}');
+  const plan = planUninstall({ home });
+  assert.equal(plan.mode, 'foreign');
+  assert.equal(plan.after, null, 'the state this is about');
+
+  const text = renderPlan(plan);
+  assert.match(text, /statusLine now +\(none\)/);
+  assert.match(text, /statusLine next +\(none\)/);
+  assert.doesNotMatch(text, /\(removed\)/);
+  assert.match(text, /nothing is restored and nothing is deleted/);
+});
+
 // `removePruneMarker` asks `isPlainFile`, so a symlink wearing the name is left alone BY
 // DESIGN (unlink would take the link, not the target — the deed is already tested below).
 // The plan asked nothing and promised the removal anyway.
