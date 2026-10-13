@@ -318,6 +318,7 @@ test('the printed uninstall plan distinguishes snapshot files from the prune mar
   const text = renderPlan(planUninstall({ home }));
   assert.match(text, /snapshot files stay/i);
   assert.match(text, /prune marker is removed/i);
+  assert.match(text, /statusLine next +\(removed\)/, 'the wrapper was there, so it is removed');
   assert.doesNotMatch(text, /left exactly as they are/i);
 });
 
@@ -702,6 +703,7 @@ test('an install an earlier version made over [] still undoes, byte for byte', (
   );
   const plan = planUninstall({ home });
   assert.equal(plan.mode, 'bytes');
+  assert.match(renderPlan(plan), /statusLine next +\(none\)/, 'no command before, nothing to remove');
   assert.equal(uninstall({ home, expect: plan.currentText }).mode, 'bytes');
   assert.equal(settingsOf(home), '[]');
   assert.equal(fs.existsSync(paths(home).backup), false);

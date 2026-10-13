@@ -41,8 +41,8 @@ export function renderPlan(plan: Plan): string {
     ['file', plan.settings],
     ...(plan.writes ? ([['↳ really', plan.writes]] as Array<[string, string]>) : []),
     ['statusLine now', plan.before ?? '(none)'],
-    // Foreign mode leaves the statusLine as it is: a null `after` there is nothing removed.
-    ['statusLine next', plan.after ?? (plan.action === 'uninstall' && plan.mode === 'foreign' ? '(none)' : '(removed)')],
+    // With no command before, a null `after` removes nothing.
+    ['statusLine next', plan.after ?? (plan.before === null ? '(none)' : '(removed)')],
   ];
 
   if (plan.action === 'install') {
