@@ -403,6 +403,41 @@ test('a tap on the hour a clock falls back through names the offset at both ends
   }
 });
 
+// Same seam as the cost chart's label above, on the two 24h charts that label a minute.
+test('a tap on a minute the clock repeats tells the two apart on the context and quota charts', async () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    // 25 October 2026, one reading a minute from 01:00 +02 to 03:00 +01: 241 points.
+    const first = Date.UTC(2026, 9, 24, 23);
+    const m = mount(true, () => ({
+      since: first,
+      cadence: MIN,
+      missed: 0,
+      samples: Array.from({ length: 241 }, (_, i) => ({
+        t: first + i * MIN,
+        sessions: [session({ ctxPct: 40 })],
+        rateLimits: { five_hour: 10, seven_day: 20 },
+      })),
+    }));
+    await settle(m);
+    const tap = async (id: string, idx: number): Promise<string> => {
+      m.p.el(id + '-canvas').fire('pointerdown', { clientX: PL + (idx / 240) * (PR - PL) });
+      await settle(m);
+      return m.p.el(id + '-sub').textContent;
+    };
+    for (const id of ['ctx', 'quota']) {
+      assert.equal(await tap(id, 90), '02:30 +02', id);
+      assert.equal(await tap(id, 150), '02:30 +01', id);
+      assert.equal(await tap(id, 30), '01:30', id);
+      assert.equal(await tap(id, 210), '03:30', id);
+    }
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
+
 // The stack is built in the palette's order so a slab keeps its place in the column all week.
 // `history-view` pins that in the numbers `costDaily` hands over, which is a different claim
 // from the one made in paint: stacked in each day's own ranking instead, the data is identical

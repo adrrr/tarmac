@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A minute the clock repeats says which one it is on the 24h context and quota charts.** A
+  tapped minute was labelled in wall-clock time alone, so on the night a clock falls back each
+  minute from `02:00` to `02:59` in Paris was printed for two different moments. Inside the
+  repeated hour the label now carries the UTC offset, `02:30 +02` then `02:30 +01`. Every other
+  minute reads as before, the spring night included (#249).
+
 - **The hour a clock changes in says so on the 24h cost chart.** A selected column was labelled in
   wall-clock time alone, so in Paris the first of the two repeated autumn hours read `02:00–02:00`
   and the spring hour `01:00–03:00`. When the UTC offset differs between the start and the end of
