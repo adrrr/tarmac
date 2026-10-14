@@ -759,9 +759,10 @@ test('a turnover against the right edge keeps its whole name on the chart', asyn
   assert.ok(anchor <= 312, `the name starts at ${anchor} on a plot that ends at 352`);
 });
 
-// `path.basename('/')` is the empty string, which `history-range` already notes it has to live
-// with. A key that is falsy isolates nothing while its own button reports itself pressed.
-test('a project with no name for a basename can still be isolated', async () => {
+// Neither the fleet nor the range reader sends a project named '' since #246, and the page does
+// not count on it: a key that is falsy isolates nothing while its own button reports itself
+// pressed.
+test('a key that is the empty string can still be isolated', async () => {
   const m = mount(true, () => ({
     since: T0,
     cadence: MIN,

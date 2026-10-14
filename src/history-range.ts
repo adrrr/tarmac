@@ -455,9 +455,9 @@ function byProject(spent: Map<string, DaySessionAcc>): RangeProjectCost[] {
   for (const { project, min, max } of spent.values()) {
     // Keyed on a string so a project nobody could name has a bucket of its own rather than
     // sharing one with the first project whose name happens to be missing too. NUL is the
-    // sentinel because it is the one string a project name cannot be: `path.basename('/')` is
-    // the empty string, so `''` would be a real bucket. Written as an escape, never as the byte
-    // itself, which turns this file and the `dist/` it compiles to into `file`-classified data.
+    // sentinel because it is the one string a project name cannot be. Written as an escape, never
+    // as the byte itself, which turns this file and the `dist/` it compiles to into
+    // `file`-classified data.
     const key = project ?? '\u0000';
     const held = totals.get(key) ?? { project, costUsd: 0 };
     held.costUsd += max - min;
@@ -549,7 +549,9 @@ function recordOf(line: string): Record_ | null {
       // The empty string is not an id. It is what a payload writes where a session had none,
       // and one bucket named `''` would fold every nameless reading into a single session.
       sid: typeof entry.sid === 'string' && entry.sid !== '' ? entry.sid : null,
-      project: typeof entry.project === 'string' ? entry.project : null,
+      // Nor is it a project: it is the basename of `/`, which a journal written before the fleet
+      // read it as no project may still carry.
+      project: typeof entry.project === 'string' && entry.project !== '' ? entry.project : null,
       kind: typeof entry.kind === 'string' ? entry.kind : null,
       ctxPct: number(entry.ctxPct),
       costUsd: number(entry.costUsd),

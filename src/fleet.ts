@@ -124,7 +124,8 @@ export function buildFleet({
     return {
       sessionId: s.sessionId,
       name: s.name,
-      project: s.cwd ? path.basename(s.cwd) : null,
+      // `path.basename('/')` is the empty string, and an empty string is not a name.
+      project: (s.cwd && path.basename(s.cwd)) || null,
       cwd: s.cwd,
       pid: s.pid,
       kind: s.kind,

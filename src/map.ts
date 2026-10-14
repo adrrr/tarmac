@@ -150,8 +150,8 @@ export function buildMap({ rows }: Fleet, { pulseWithinMs = PULSE_WITHIN_MS } = 
     if (berth === undefined) {
       // The project, the directory itself, then the words — and the middle one is not a page
       // that prints paths. `path.basename` answers the empty string for exactly one directory,
-      // the root, so a fleet with a session in `/` had a project of `''`: not the absent cwd
-      // above, and no name either. The fallback names it `/`, which is what was read.
+      // the root, so a session in `/` has no project: not the absent cwd above, and no name
+      // either. The fallback names it `/`, which is what was read.
       berth = { label: r.project || r.cwd || NO_DIRECTORY, sessions: [], agents: [] };
       berths.push(berth);
       if (r.cwd) byCwd.set(r.cwd, berth);

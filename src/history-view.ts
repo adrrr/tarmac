@@ -1027,9 +1027,9 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   var daysWord = covers.getAttribute('data-days') || 'days on disk';
   var state = { range: '24h', data: null, err: null, iso: {}, cursor: {}, loading: false, gen: 0 };
   // Which series a chart is isolated on, or null. Read through a function and compared against
-  // null rather than tested for truth: path.basename('/') is the empty string, so a project
-  // really can be named '', and a falsy key is a key that isolates nothing while its own button
-  // says it is pressed.
+  // null rather than tested for truth: a falsy key is a key that isolates nothing while its own
+  // button says it is pressed. No reader sends a project named '' since #246, and this does not
+  // count on it.
   var isoOf = function (id) { var v = state.iso[id]; return v === undefined ? null : v; };
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }

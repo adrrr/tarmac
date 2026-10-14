@@ -75,6 +75,14 @@ test('derives a short project name from the working directory', () => {
   assert.equal(rows[0].project, 'alpha');
 });
 
+// `path.basename('/')` is the empty string, which is no project name: the row says it has
+// none, and the directory it was read in is still there for whoever prints one.
+test('a session started from the root has no project name', () => {
+  const { rows } = buildFleet({ sessions: [session({ cwd: '/' })], snapshots: new Map(), now: NOW });
+  assert.equal(rows[0].project, null);
+  assert.equal(rows[0].cwd, '/');
+});
+
 test('computes uptime against the clock it is given, never Date.now()', () => {
   const { rows } = buildFleet({ sessions: [session()], snapshots: new Map(), now: NOW });
   assert.equal(rows[0].uptimeMs, 3600_000);
