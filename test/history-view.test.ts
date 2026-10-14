@@ -491,6 +491,10 @@ test('a minute that happens twice names its offset, and no other minute does', (
     assert.equal(minuteAt(Date.UTC(2027, 3, 3, 14, 45)), '01:45 +11');
     assert.equal(minuteAt(Date.UTC(2027, 3, 3, 15, 15)), '01:45 +10:30');
     assert.equal(minuteAt(Date.UTC(2027, 3, 3, 14, 15)), '01:15');
+    process.env.TZ = 'Antarctica/Troll';
+    // 25 October 2026: 03:00 +02 becomes 01:00 +00, two hours back, so 01:00 to 02:59 happen twice.
+    assert.equal(minuteAt(Date.UTC(2026, 9, 24, 23, 0)), '01:00 +02');
+    assert.equal(minuteAt(Date.UTC(2026, 9, 25, 2, 59)), '02:59 +00');
   } finally {
     if (tz === undefined) delete process.env.TZ;
     else process.env.TZ = tz;

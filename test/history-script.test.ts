@@ -1015,3 +1015,48 @@ test('a demo counts the days it invented, and a real serve counts the days on di
   await settle(real);
   assert.match(real.p.el('hist-covers').textContent, /7d from the journal · 1 of 7 days on disk/);
 });
+
+// The week and the month key that night by the hour, and two of their columns start at 02:00.
+test('a tap on an hour the clock repeats tells the two apart on the week\'s context and quota charts', async () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    // The week that closes at midnight on 26 October 2026, one journal hour from 00:00 +02 to 04:00 +01.
+    const from = Date.UTC(2026, 9, 18, 22);
+    const to = Date.UTC(2026, 9, 25, 23);
+    const first = Date.UTC(2026, 9, 24, 22);
+    const m = mount(true, (u) =>
+      u === '/api/history'
+        ? ring()
+        : {
+            ...(journal('7d') as Record<string, unknown>),
+            from,
+            to,
+            hours: Array.from({ length: 7 }, (_, i) => ({
+              t: first + i * HOUR,
+              n: 60,
+              sessions: [session()],
+              rateLimits: { five_hour: 40, seven_day: 20 },
+            })),
+            resets: [],
+          },
+    );
+    await settle(m);
+    m.p.el('range-7d').fire('click');
+    await settle(m);
+    const n = (to - from) / HOUR;
+    const tap = async (id: string, t: number): Promise<string> => {
+      m.p.el(id + '-canvas').fire('pointerdown', { clientX: PL + (((t - from) / HOUR + 0.5) / n) * (PR - PL) });
+      await settle(m);
+      return m.p.el(id + '-sub').textContent;
+    };
+    for (const id of ['ctx', 'quota']) {
+      assert.equal(await tap(id, Date.UTC(2026, 9, 25, 0)), 'Sun 25 02:00 +02', id);
+      assert.equal(await tap(id, Date.UTC(2026, 9, 25, 1)), 'Sun 25 02:00 +01', id);
+      assert.equal(await tap(id, Date.UTC(2026, 9, 25, 2)), 'Sun 25 03:00', id);
+    }
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});

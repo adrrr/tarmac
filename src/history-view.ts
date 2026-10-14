@@ -1288,7 +1288,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       // sentence, and the sentence is what explains the space those baselines cross.
       startNote(g, b, t0, t1, recordFrom());
       if (idx !== null) { var x2 = xOf(b, cur); hair(g, x2, b.t, x2, b.b, g.fg, .5); }
-      head('ctx', idx === null ? 'per project · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + hhmm(t0 + idx * HOUR),
+      head('ctx', idx === null ? 'per project · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + minuteAt(t0 + idx * HOUR),
            climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
       el('ctx-legend').hidden = true;
     }
@@ -1452,7 +1452,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     // saying 87 is one page disagreeing with itself about one minute.
     var say = function (v) { return v === null ? '—' : Math.floor(v) + '%'; };
     var at = idx === null ? null : t0 + idx * q.step;
-    head('quota', idx === null ? 'account · ' + state.range : (live ? minuteAt(at) : dayWord(at) + ' ' + hhmm(at)),
+    head('quota', idx === null ? 'account · ' + state.range : (live ? '' : dayWord(at) + ' ') + minuteAt(at),
          '5h ' + say(v5) + ' · 7d ' + say(v7), idx !== null);
     legend('quota', [
       { name: live ? '5h window' : '5h window highs', id: '5h', line: live, color: g.dim, v: idx === null ? '' : say(v5) },
