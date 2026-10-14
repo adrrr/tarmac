@@ -40,6 +40,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   Inside the repeated hour the label now carries the UTC offset, `02:30 +02` then `02:30 +01`.
   Every other time reads as before, the spring night included (#249).
 
+- **A session started from `/` has no project name, rather than an empty one.** The project is
+  the basename of the working directory, and the basename of the root is the empty string. The
+  fleet now reads it as no project, so `list` prints a dash where it printed nothing, and the
+  `--range` reader does the same with a journal line that carries `""`: a day's cost stays under
+  the project an earlier reading named instead of moving to a heading with no name (#246).
+
 - **The hour a clock changes in says so on the 24h cost chart.** A selected column was labelled in
   wall-clock time alone, so in Paris the first of the two repeated autumn hours read `02:00–02:00`
   and the spring hour `01:00–03:00`. When the UTC offset differs between the start and the end of

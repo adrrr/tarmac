@@ -593,6 +593,24 @@ test('the project of a day survives a last reading that could not name it', asyn
   assert.equal(hours[1].sessions[0].project, 'alpha', 'and the same inside the hour');
 });
 
+// A session in `/` has the empty string for a basename, and a journal written before the fleet
+// said so may carry it. It is no more a name than a missing one: it does not take the day's
+// project away from a reading that had one, and it does not open a bucket of its own.
+test('an empty project name is no more a name than a missing one', async () => {
+  const dir = journal();
+  const now = at(2026, 8, 7);
+  day(dir, '2026-08-07', [
+    rec(at(2026, 8, 7, 9), [sess({ project: 'alpha', costUsd: 1 })]),
+    rec(at(2026, 8, 7, 17), [sess({ project: 'alpha', costUsd: 3 })]),
+    rec(at(2026, 8, 7, 17, 30), [sess({ project: '', costUsd: 5 })]),
+  ]);
+
+  const { days, hours } = await readRange({ dir, range: '7d', now });
+
+  assert.deepEqual(days[0].byProject, [{ project: 'alpha', costUsd: 4 }]);
+  assert.equal(hours[1].sessions[0].project, 'alpha', 'and the same inside the hour');
+});
+
 // ── what the hour carries for a curve to be drawn from ────────────────────────────────
 
 // The promise is "the last cost that was MEASURED", and a reading that measured none is not a
