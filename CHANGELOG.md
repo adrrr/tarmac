@@ -42,9 +42,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **A session started from `/` has no project name, rather than an empty one.** The project is
   the basename of the working directory, and the basename of the root is the empty string. The
-  fleet now reads it as no project, so `list` prints a dash where it printed nothing, and the
-  `--range` reader does the same with a journal line that carries `""`: a day's cost stays under
-  the project an earlier reading named instead of moving to a heading with no name (#246).
+  fleet now reads it as no project: `list` prints a dash where it printed nothing, the history
+  page names it with a dash, and `list --json`, `/api/fleet` and the journal carry `null` where
+  they carried `""`. The `--range` reader reads a `""` already in the journal the same way, so
+  at 7d and 30d such a session counts under the dash, with the sessions whose directory was
+  never published, and a `""` no longer takes a day's cost away from a project another reading
+  named (#246).
 
 - **The hour a clock changes in says so on the 24h cost chart.** A selected column was labelled in
   wall-clock time alone, so in Paris the first of the two repeated autumn hours read `02:00–02:00`
