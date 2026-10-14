@@ -29,6 +29,7 @@ import {
   gridLen,
   historyScript,
   hourSpan,
+  minuteAt,
   legendByCost,
   quotaOfHours,
   quotaOfSamples,
@@ -464,6 +465,36 @@ test('an hour a clock changes in names the offset at both ends, and no other hou
     process.env.TZ = 'America/St_Johns';
     // West of UTC, with minutes in the offset. 1 November 2026: 02:00 -02:30 becomes 01:00 -03:30.
     assert.equal(hourSpan(Date.UTC(2026, 10, 1, 3, 30)), '01:00 -02:30–01:00 -03:30');
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
+
+// A tapped minute on the 24h context and quota charts. On the night a clock falls back every
+// minute of the repeated hour happens twice, and in wall-clock time alone the two read the same.
+test('a minute that happens twice names its offset, and no other minute does', () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    assert.equal(minuteAt(Date.UTC(2026, 9, 25, 0, 30)), '02:30 +02');
+    assert.equal(minuteAt(Date.UTC(2026, 9, 25, 1, 30)), '02:30 +01');
+    assert.equal(minuteAt(Date.UTC(2026, 9, 25, 0, 0)), '02:00 +02');
+    assert.equal(minuteAt(Date.UTC(2026, 9, 25, 1, 59)), '02:59 +01');
+    assert.equal(minuteAt(Date.UTC(2026, 9, 24, 23, 59)), '01:59');
+    assert.equal(minuteAt(Date.UTC(2026, 9, 25, 2, 0)), '03:00');
+    // Spring: an hour is skipped, none is repeated.
+    assert.equal(minuteAt(Date.UTC(2027, 2, 28, 0, 59)), '01:59');
+    assert.equal(minuteAt(Date.UTC(2027, 2, 28, 1, 0)), '03:00');
+    process.env.TZ = 'Australia/Lord_Howe';
+    // 4 April 2027: 02:00 +11 becomes 01:30 +10:30, so 01:30 to 01:59 happen twice.
+    assert.equal(minuteAt(Date.UTC(2027, 3, 3, 14, 45)), '01:45 +11');
+    assert.equal(minuteAt(Date.UTC(2027, 3, 3, 15, 15)), '01:45 +10:30');
+    assert.equal(minuteAt(Date.UTC(2027, 3, 3, 14, 15)), '01:15');
+    process.env.TZ = 'Antarctica/Troll';
+    // 25 October 2026: 03:00 +02 becomes 01:00 +00, two hours back, so 01:00 to 02:59 happen twice.
+    assert.equal(minuteAt(Date.UTC(2026, 9, 24, 23, 0)), '01:00 +02');
+    assert.equal(minuteAt(Date.UTC(2026, 9, 25, 2, 59)), '02:59 +00');
   } finally {
     if (tz === undefined) delete process.env.TZ;
     else process.env.TZ = tz;

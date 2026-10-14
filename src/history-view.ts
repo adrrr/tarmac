@@ -347,16 +347,38 @@ export function hourOf(t: number): number {
 export function hourSpan(t: number): string {
   var two = function (n: number) { return (n < 10 ? '0' : '') + n; };
   var clock = function (d: Date) { return two(d.getHours()) + ':' + two(d.getMinutes()); };
-  var offset = function (d: Date) {
-    var m = -d.getTimezoneOffset(), abs = Math.abs(m);
-    return (m < 0 ? '-' : '+') + two(Math.floor(abs / 60)) + (abs % 60 ? ':' + two(abs % 60) : '');
-  };
   var s = t, e = t + HOUR;
   while (s < e - MIN && hourOf(s) !== t) s += MIN;
   while (e > s + MIN && hourOf(e - MIN) !== t) e -= MIN;
   var a = new Date(s), b = new Date(e);
   if (a.getTimezoneOffset() === b.getTimezoneOffset()) return clock(a) + '–' + clock(b);
-  return clock(a) + ' ' + offset(a) + '–' + clock(b) + ' ' + offset(b);
+  return clock(a) + ' ' + utcOffset(a) + '–' + clock(b) + ' ' + utcOffset(b);
+}
+
+/**
+ * The label of the minute at `t`, as `HH:MM`.
+ *
+ * On the night a clock falls back every minute of the repeated hour happens twice, and those
+ * minutes carry the UTC offset, as `hourSpan` writes it, so the two `02:30` can be told apart
+ * (#249). A minute is repeated when the offset a couple of hours either side of it, applied to
+ * its wall-clock time, lands on another moment that has that offset.
+ */
+export function minuteAt(t: number): string {
+  var two = function (n: number) { return (n < 10 ? '0' : '') + n; };
+  var d = new Date(t), z = d.getTimezoneOffset();
+  var twice = [t - 2 * HOUR, t + 2 * HOUR].some(function (c) {
+    var y = new Date(c).getTimezoneOffset(), u = t + (y - z) * MIN;
+    return u !== t && new Date(u).getTimezoneOffset() === y;
+  });
+  var clock = two(d.getHours()) + ':' + two(d.getMinutes());
+  return twice ? clock + ' ' + utcOffset(d) : clock;
+}
+
+/** The UTC offset in force at `d`, as `+02`, or `+10:30` where it has minutes. */
+export function utcOffset(d: Date): string {
+  var two = function (n: number) { return (n < 10 ? '0' : '') + n; };
+  var m = -d.getTimezoneOffset(), abs = Math.abs(m);
+  return (m < 0 ? '-' : '+') + two(Math.floor(abs / 60)) + (abs % 60 ? ':' + two(abs % 60) : '');
 }
 
 /**
@@ -733,6 +755,8 @@ const PURE = [
   ctxRows,
   hourOf,
   hourSpan,
+  minuteAt,
+  utcOffset,
   moment,
   startOfDay,
   nextDay,
@@ -1228,7 +1252,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
         var x = xOf(b, cur); hair(g, x, b.t, x, b.b, g.fg, .5);
         series.forEach(function (s) { if (s.v[idx] !== null) dot(g, x, yOf(s.v[idx]), slotColor(s.slot), 3.5); });
       }
-      head('ctx', idx === null ? 'per session · 24h' : hhmm(t0 + idx * series[0].step), climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
+      head('ctx', idx === null ? 'per session · 24h' : minuteAt(t0 + idx * series[0].step), climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
       var pct = function (v) { return v === null ? '—' : Math.round(v) + '%'; };
       // Under a tapped minute the number is that minute's, and it is the highest any of the
       // project's lines was reading then: the same reduction the week's chart makes an hour at
@@ -1264,7 +1288,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       // sentence, and the sentence is what explains the space those baselines cross.
       startNote(g, b, t0, t1, recordFrom());
       if (idx !== null) { var x2 = xOf(b, cur); hair(g, x2, b.t, x2, b.b, g.fg, .5); }
-      head('ctx', idx === null ? 'per project · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + hhmm(t0 + idx * HOUR),
+      head('ctx', idx === null ? 'per project · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + minuteAt(t0 + idx * HOUR),
            climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
       el('ctx-legend').hidden = true;
     }
@@ -1428,7 +1452,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     // saying 87 is one page disagreeing with itself about one minute.
     var say = function (v) { return v === null ? '—' : Math.floor(v) + '%'; };
     var at = idx === null ? null : t0 + idx * q.step;
-    head('quota', idx === null ? 'account · ' + state.range : (live ? hhmm(at) : dayWord(at) + ' ' + hhmm(at)),
+    head('quota', idx === null ? 'account · ' + state.range : (live ? '' : dayWord(at) + ' ') + minuteAt(at),
          '5h ' + say(v5) + ' · 7d ' + say(v7), idx !== null);
     legend('quota', [
       { name: live ? '5h window' : '5h window highs', id: '5h', line: live, color: g.dim, v: idx === null ? '' : say(v5) },
