@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The note under the history charts speaks of session lines only at 24h.** Its last sentence,
+  that a session recycled overnight comes back as a new line, describes the 24h context chart,
+  which draws one line per session. At 7d and 30d that chart draws one band per project, so the
+  sentence named lines the reader could not see. It is now hidden on those two ranges (#250).
+
 - **A time the clock repeats says which one it is on the context and quota charts.** A tapped
   minute on the 24h view, and a tapped hour on the 7d and 30d views, was labelled in wall-clock
   time alone, so on the night a clock falls back in Paris each minute from `02:00` to `02:59` was

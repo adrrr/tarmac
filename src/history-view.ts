@@ -955,7 +955,7 @@ ${
 ${chart('ctx', 'Context', 'per session &middot; 24h')}
 ${chart('cost', 'Cost', 'per project &middot; hourly &middot; 24h')}
 ${chart('quota', 'Quota', 'account &middot; 24h')}
-  <p class="note">Recorded once a minute, only while <code>tarmac serve</code> runs. A minute it was not running is a minute with no reading, drawn as a gap and never as a zero. A session recycled overnight comes back as a new line from its first frame.${
+  <p class="note">Recorded once a minute, only while <code>tarmac serve</code> runs. A minute it was not running is a minute with no reading, drawn as a gap and never as a zero. <span id="note-24h">A session recycled overnight comes back as a new line from its first frame.</span>${
     off ? '' : ' The journal keeps the same fields as the ring, no names and no paths.'
   }</p>
   <div class="hist-range" role="group" aria-label="range">
@@ -1580,6 +1580,8 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     state.range = r; state.data = null; state.err = null; state.loading = true;
     state.cursor = {}; state.iso = {};
     RANGES.forEach(function (x) { el('range-' + x).setAttribute('aria-pressed', x === r ? 'true' : 'false'); });
+    // Session lines are a 24h thing: the long ranges draw one band per project.
+    el('note-24h').hidden = r !== '24h';
     redraw();
     load();
   }

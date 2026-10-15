@@ -152,6 +152,24 @@ test('a pill the journal cannot answer for is not asked at all', async () => {
   assert.match(m.p.el('hist-covers').textContent, /need the journal, which is off/);
 });
 
+// The sentence about recycled sessions describes the 24h context chart, one line per session.
+// The long ranges draw one band per project, so there it would name lines nobody can see.
+test('the note speaks of session lines only on the range that draws them', async () => {
+  const m = mount();
+  await settle(m);
+  assert.match(m.p.el('note-24h').textContent, /^A session recycled overnight comes back as a new line/);
+  assert.equal(m.p.el('note-24h').hidden, false);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+  assert.equal(m.p.el('note-24h').hidden, true, 'not at 7d');
+  m.p.el('range-30d').fire('click');
+  await settle(m);
+  assert.equal(m.p.el('note-24h').hidden, true, 'not at 30d');
+  m.p.el('range-24h').fire('click');
+  await settle(m);
+  assert.equal(m.p.el('note-24h').hidden, false, 'and back at 24h');
+});
+
 // ── the bug this file exists for ─────────────────────────────────────────────────────────
 //
 // The range and the data it was fetched for are two facts, and for the length of a request
