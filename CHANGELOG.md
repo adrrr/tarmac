@@ -33,6 +33,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A legend key on the history charts isolates its own project, and only that one.** The legend
+  keyed a project by the name it prints and the charts by `String(name)`, so the nameless project
+  and a project named `null` met: a tap on `null` lit both lines, a tap on the dash isolated
+  nothing and faded every line, and under a tapped minute both keys read the higher of the two.
+  Both sides now key a project by its name as JSON. While a range loads, each chart's subtitle
+  already reads what the loaded chart will say, `per project · hour max · 7d`, not the bare `7d`
+  (#253).
+
 - **The note under the history charts speaks of session lines only at 24h.** Its last sentence,
   that a session recycled overnight comes back as a new line, describes the 24h context chart,
   which draws one line per session. At 7d and 30d that chart draws one band per project, so the
