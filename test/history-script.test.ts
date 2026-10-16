@@ -226,6 +226,22 @@ test('while a range is in flight the view claims nothing about what it holds', a
   await settle(m);
 });
 
+test('while a range is in flight each chart already names what it will draw', async () => {
+  const m = mount();
+  await settle(m);
+  const subs = (): string[] => ['ctx', 'cost', 'quota'].map((id) => m.p.el(id + '-sub').textContent);
+  for (const r of ['7d', '24h']) {
+    m.hold(true);
+    m.p.el('range-' + r).fire('click');
+    await settle(m);
+    const loading = subs();
+    m.hold(false);
+    m.release();
+    await settle(m);
+    assert.deepEqual(loading, subs(), `the ${r} subtitles, before and after the answer`);
+  }
+});
+
 // ── the reader's hand ────────────────────────────────────────────────────────────────────
 
 test('a tap puts a cursor on one chart, and the way back to now appears with it', async () => {
@@ -247,15 +263,15 @@ test('a tap on a legend key isolates its series, and a second tap lets the fleet
   const m = mount();
   await settle(m);
   const legend = m.p.el('ctx-legend');
-  assert.match(legend.innerHTML, /data-key="alpha" aria-pressed="false"/);
-  const key = { getAttribute: (n: string): string | null => (n === 'data-key' ? 'alpha' : null), parentNode: null };
+  assert.match(legend.innerHTML, /data-key="&quot;alpha&quot;" aria-pressed="false"/);
+  const key = { getAttribute: (n: string): string | null => (n === 'data-key' ? '"alpha"' : null), parentNode: null };
   legend.fire('click', { target: key });
   await settle(m);
-  assert.match(legend.innerHTML, /data-key="alpha" aria-pressed="true"/);
+  assert.match(legend.innerHTML, /data-key="&quot;alpha&quot;" aria-pressed="true"/);
   assert.equal(legend.classes.has('muted'), true, 'and the rest of the fleet is dimmed');
   legend.fire('click', { target: key });
   await settle(m);
-  assert.match(legend.innerHTML, /data-key="alpha" aria-pressed="false"/);
+  assert.match(legend.innerHTML, /data-key="&quot;alpha&quot;" aria-pressed="false"/);
   assert.equal(legend.classes.has('muted'), false);
 });
 
@@ -789,11 +805,53 @@ test('a key that is the empty string can still be isolated', async () => {
   }));
   await settle(m);
   const legend = m.p.el('ctx-legend');
-  assert.match(legend.innerHTML, /data-key="" aria-pressed="false"/);
-  legend.fire('click', { target: { getAttribute: (n: string): string | null => (n === 'data-key' ? '' : null), parentNode: null } });
+  assert.match(legend.innerHTML, /data-key="&quot;&quot;" aria-pressed="false"/);
+  legend.fire('click', { target: { getAttribute: (n: string): string | null => (n === 'data-key' ? '""' : null), parentNode: null } });
   await settle(m);
-  assert.match(legend.innerHTML, /data-key="" aria-pressed="true"/);
+  assert.match(legend.innerHTML, /data-key="&quot;&quot;" aria-pressed="true"/);
   assert.equal(legend.classes.has('muted'), true, 'and the isolation actually took');
+});
+
+// The nameless project and a project named `null` are two lines with two keys. Keyed by
+// `String(name)` on the chart and by the printed name in the legend, the first tap lit both and
+// the second isolated nothing.
+test('the nameless project and a project named null each isolate their own line', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [0, 1].map((i) => ({
+      t: T0 + i * MIN,
+      sessions: [session({ sid: 'a', project: null, ctxPct: 30 }), session({ sid: 'b', project: 'null', ctxPct: 70 })],
+      rateLimits: null,
+    })),
+  }));
+  await settle(m);
+  const legend = m.p.el('ctx-legend');
+  // The key each button carries, by the name it prints, unescaped the way getAttribute reads it.
+  const keyOf: Record<string, string> = {};
+  for (const b of legend.innerHTML.matchAll(/data-key="([^"]*)".*?<span class="k-name">([^<]*)</g)) keyOf[b[2]] = b[1].replace(/&quot;/g, '"');
+  assert.notEqual(keyOf['null'], keyOf['—'], 'two buttons, two keys');
+  const press = async (key: string): Promise<void> => {
+    legend.fire('click', { target: { getAttribute: (n: string): string | null => (n === 'data-key' ? key : null), parentNode: null } });
+    await settle(m);
+  };
+  // Only the lines in hand are named at the end of the line.
+  const ends = async (key: string): Promise<string[]> => {
+    const from = words(m.p, 'ctx').length;
+    await press(key);
+    const named = words(m.p, 'ctx').slice(from).filter((w) => /^(null|—) \d+%$/.test(w));
+    await press(key);
+    return named;
+  };
+  assert.deepEqual(await ends(keyOf['null']), ['null 70%']);
+  assert.deepEqual(await ends(keyOf['—']), ['— 30%']);
+  // And under a tapped minute each key reads its own line, not the higher of the two.
+  m.p.el('ctx-canvas').fire('pointerdown', { clientX: 200 });
+  await settle(m);
+  const read: Record<string, string> = {};
+  for (const b of legend.innerHTML.matchAll(/<span class="k-name">([^<]*)<\/span><span class="k-val">([^<]*)</g)) read[b[1]] = b[2];
+  assert.deepEqual(read, { null: '70%', '—': '30%' });
 });
 
 // The name is dropped at a month, where four turnovers say it four times over. The tilde is not:

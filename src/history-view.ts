@@ -1031,6 +1031,10 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   // button says it is pressed. No reader sends a project named '' since #246, and this does not
   // count on it.
   var isoOf = function (id) { var v = state.iso[id]; return v === undefined ? null : v; };
+  // A project's key is its name as JSON, in the legend and on the charts alike: the nameless
+  // project is printed as a dash and a project may be named "null", and neither may answer
+  // for the other.
+  var keyOf = function (name) { return JSON.stringify(name); };
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function hhmm(t) { var d = new Date(t); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
@@ -1195,7 +1199,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     box.classList.toggle('muted', isoOf(id) !== null);
     box.classList.toggle('at', !!tapped);
     items.forEach(function (it) {
-      var key = it.id === undefined ? String(it.name) : it.id;
+      var key = it.id;
       html += '<button type="button" class="key' + (it.up ? ' up' : '') + '" data-key="' + esc(key) + '"'
         + ' aria-pressed="' + (state.iso[id] === key ? 'true' : 'false') + '">'
         + (it.line ? '<i class="k-ln"' : '<i class="k-sw"') + ' aria-hidden="true" style="background:' + esc(it.color) + '"></i>'
@@ -1206,6 +1210,13 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   }
 
   // ── the three charts ────────────────────────────────────────────────────────────────
+  /** What a chart plots, said the same way while its range is still being read. */
+  function subOf(id) {
+    var live = state.range === '24h';
+    if (id === 'ctx') return live ? 'per session · 24h' : 'per project · hour max · ' + state.range;
+    if (id === 'cost') return 'per project · ' + (live ? 'hourly · 24h' : 'daily · ' + state.range);
+    return 'account · ' + state.range;
+  }
   function roster() {
     var names = [], d = state.data, i, j;
     if (!d) return [];
@@ -1218,7 +1229,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   function drawCtx() {
     var d = state.data, r = roster(), live = state.range === '24h';
     var series = live ? ctxLines(d.samples, d.cadence || MIN, r) : ctxRows(d.hours, r, d.from, d.to);
-    if (series.length === 0) return blank('ctx', live ? 'per session · 24h' : 'per project · hour max · ' + state.range);
+    if (series.length === 0) return blank('ctx', subOf('ctx'));
     var g = setup(el('ctx-canvas'), height(live ? 'ctx24' : 'ctxRows')), b = plotBox(g);
     // The long ranges close at the end of the WINDOW, not at the last hour that has a slot: the
     // grid is the range's, so the last slot is an hour wide like the ones before it.
@@ -1235,7 +1246,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       pctGrid(g, b); timeTicks(g, b, t0, t1, state.range);
       // Climbing last, so the lines the reader came for are drawn over the rest of the fleet.
       series.slice().sort(function (a, c) { return (rising(a) ? 1 : 0) - (rising(c) ? 1 : 0); }).forEach(function (s) {
-        var up = rising(s), on = iso !== null ? iso === String(s.name) : up, color = slotColor(s.slot);
+        var up = rising(s), on = iso !== null ? iso === keyOf(s.name) : up, color = slotColor(s.slot);
         g.c.save(); g.c.strokeStyle = color; g.c.lineWidth = on ? 2 : 1.5; g.c.globalAlpha = on ? 1 : fadeAlpha(iso);
         g.c.lineJoin = 'round'; g.c.lineCap = 'round';
         var end = polyline(g, s, b, t0, t1, yOf); g.c.restore();
@@ -1252,19 +1263,19 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
         var x = xOf(b, cur); hair(g, x, b.t, x, b.b, g.fg, .5);
         series.forEach(function (s) { if (s.v[idx] !== null) dot(g, x, yOf(s.v[idx]), slotColor(s.slot), 3.5); });
       }
-      head('ctx', idx === null ? 'per session · 24h' : minuteAt(t0 + idx * series[0].step), climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
+      head('ctx', idx === null ? subOf('ctx') : minuteAt(t0 + idx * series[0].step), climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
       var pct = function (v) { return v === null ? '—' : Math.round(v) + '%'; };
       // Under a tapped minute the number is that minute's, and it is the highest any of the
       // project's lines was reading then: the same reduction the week's chart makes an hour at
       // a time, so the two ranges do not answer the same question two ways.
       var atMinute = {};
       if (idx !== null) series.forEach(function (s) {
-        var v = s.v[idx], key = String(s.name);
+        var v = s.v[idx], key = keyOf(s.name);
         if (v !== null && (atMinute[key] === undefined || atMinute[key] === null || v > atMinute[key])) atMinute[key] = v;
       });
       legend('ctx', ctxKeys(series).map(function (kk) {
-        var v = idx === null ? kk.v : (atMinute[String(kk.name)] === undefined ? null : atMinute[String(kk.name)]);
-        return { name: kk.name === null ? '—' : kk.name, line: true, color: slotColor(kk.slot),
+        var v = idx === null ? kk.v : (atMinute[keyOf(kk.name)] === undefined ? null : atMinute[keyOf(kk.name)]);
+        return { name: kk.name === null ? '—' : kk.name, id: keyOf(kk.name), line: true, color: slotColor(kk.slot),
                  v: pct(v) + (idx === null && kk.up ? ' ↑' : ''), up: kk.up };
       }), idx !== null);
     } else {
@@ -1288,7 +1299,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       // sentence, and the sentence is what explains the space those baselines cross.
       startNote(g, b, t0, t1, recordFrom());
       if (idx !== null) { var x2 = xOf(b, cur); hair(g, x2, b.t, x2, b.b, g.fg, .5); }
-      head('ctx', idx === null ? 'per project · hour max · ' + state.range : dayWord(t0 + idx * HOUR) + ' ' + minuteAt(t0 + idx * HOUR),
+      head('ctx', idx === null ? subOf('ctx') : dayWord(t0 + idx * HOUR) + ' ' + minuteAt(t0 + idx * HOUR),
            climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
       el('ctx-legend').hidden = true;
     }
@@ -1298,7 +1309,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     var d = state.data, r = roster(), live = state.range === '24h';
     var cost = live ? costHourly(d.samples, r) : costDaily(d.days, r, d.from, d.to);
     var buckets = cost.buckets, n = buckets.length;
-    if (n === 0) return blank('cost', 'per project · ' + (live ? 'hourly · 24h' : 'daily · ' + state.range));
+    if (n === 0) return blank('cost', subOf('cost'));
     var g = setup(el('cost-canvas'), height('cost')), b = plotBox(g);
     var totals = buckets.map(function (bk) { return bk.by.reduce(function (a, v) { return a + v; }, 0); });
     var max = Math.max.apply(null, totals) || 1;
@@ -1320,7 +1331,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       bk.by.forEach(function (val, k) {
         if (val <= 0) return;
         var hgt = (val / ymax) * (b.b - b.t), y0 = b.b - (acc * (b.b - b.t)) / ymax, y1 = y0 - hgt; acc += val;
-        var faded = (sel !== null && sel !== i) || (iso !== null && iso !== String(cost.projects[k].name));
+        var faded = (sel !== null && sel !== i) || (iso !== null && iso !== keyOf(cost.projects[k].name));
         var gap = hgt > 3 ? 1 : 0, yy0 = y0 - gap, yy1 = y1 + gap; if (yy0 - yy1 < 1) yy1 = yy0 - 1;
         g.c.save(); g.c.globalAlpha = (faded ? .3 : 1) * fill(); g.c.fillStyle = slotColor(cost.projects[k].slot);
         if (k === top && hgt > 5) {
@@ -1343,11 +1354,11 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     // spelled out is the one place it reads as a measurement.
     var read = sel === null || buckets[sel].n > 0;
     head('cost', sel === null
-      ? 'per project · ' + (live ? 'hourly · 24h' : 'daily · ' + state.range)
+      ? subOf('cost')
       : (live ? hourSpan(bk2.t) : dayWord(bk2.t)),
       read ? money(sel === null ? total : totals[sel]) : 'no reading', sel !== null);
     legend('cost', keys.map(function (kk) {
-      return { name: kk.name === null ? '—' : kk.name, line: false, color: slotColor(kk.slot),
+      return { name: kk.name === null ? '—' : kk.name, id: keyOf(kk.name), line: false, color: slotColor(kk.slot),
                v: sel !== null ? (read ? money(bk2.by[kk.k]) : '—')
                  : kk.total === null ? '—'
                  : '$' + Math.round(kk.total) + (total > 0 ? ' · ' + Math.round((100 * kk.total) / total) + '%' : '') };
@@ -1358,7 +1369,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     var d = state.data, live = state.range === '24h';
     var q = live ? quotaOfSamples(d.samples, d.cadence || MIN) : quotaOfHours(d.hours, d.resets, d.from, d.to);
     var n = q.five.length;
-    if (n === 0) return blank('quota', 'account · ' + state.range);
+    if (n === 0) return blank('quota', subOf('quota'));
     var g = setup(el('quota-canvas'), height('quota')), b = plotBox(g);
     var t0 = q.t0, t1 = live ? t0 + (n - 1) * q.step : Math.min(d.to, t0 + n * q.step);
     var yOf = function (v) { return b.b - (v / 100) * (b.b - b.t); };
@@ -1452,7 +1463,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     // saying 87 is one page disagreeing with itself about one minute.
     var say = function (v) { return v === null ? '—' : Math.floor(v) + '%'; };
     var at = idx === null ? null : t0 + idx * q.step;
-    head('quota', idx === null ? 'account · ' + state.range : (live ? '' : dayWord(at) + ' ') + minuteAt(at),
+    head('quota', idx === null ? subOf('quota') : (live ? '' : dayWord(at) + ' ') + minuteAt(at),
          '5h ' + say(v5) + ' · 7d ' + say(v7), idx !== null);
     legend('quota', [
       { name: live ? '5h window' : '5h window highs', id: '5h', line: live, color: g.dim, v: idx === null ? '' : say(v5) },
@@ -1523,7 +1534,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   function redraw() {
     covers.textContent = coversText();
     el('hist-empty').hidden = !firstRun();
-    if (!state.data) { ids.forEach(function (id) { blank(id, state.range); }); return; }
+    if (!state.data) { ids.forEach(function (id) { blank(id, subOf(id)); }); return; }
     ids.forEach(function (id) { draw[id](); });
   }
 
