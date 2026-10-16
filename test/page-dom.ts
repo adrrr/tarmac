@@ -45,6 +45,7 @@ class Ctx2D {
       },
       set: (target, key: string, value: unknown) => {
         (target as any)[key] = value;
+        target.calls.push({ name: key + '=', args: [value] });
         return true;
       },
     });

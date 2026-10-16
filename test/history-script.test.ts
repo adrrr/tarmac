@@ -1137,3 +1137,48 @@ test('a tap on an hour the clock repeats tells the two apart on the week\'s cont
     else process.env.TZ = tz;
   }
 });
+
+
+// The cost chart keys its bars the same way, and its only tell is the alpha each bar is filled
+// at: the harness records property sets beside the calls so a test can read it.
+test('on the cost chart, the nameless project and a project named null each isolate their own bars', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [0, 1].map((i) => ({
+      t: T0 + i * MIN,
+      sessions: [session({ sid: 'a', project: null, costUsd: 1 + i }), session({ sid: 'b', project: 'null', costUsd: 3 + i })],
+      rateLimits: null,
+    })),
+  }));
+  await settle(m);
+  const legend = m.p.el('cost-legend');
+  const keyOf: Record<string, string> = {};
+  for (const b of legend.innerHTML.matchAll(/data-key="([^"]*)".*?<span class="k-name">([^<]*)</g)) keyOf[b[2]] = b[1].replace(/&quot;/g, '"');
+  assert.notEqual(keyOf['null'], keyOf['—'], 'two buttons, two keys');
+  const press = async (key: string): Promise<void> => {
+    legend.fire('click', { target: { getAttribute: (n: string): string | null => (n === 'data-key' ? key : null), parentNode: null } });
+    await settle(m);
+  };
+  // Each bar's fill at the alpha set since the save that opened it: full for the project in
+  // hand, .3 of it for the rest. Bars come in roster order, the project named null before the
+  // nameless one.
+  const bars = async (key: string): Promise<string[]> => {
+    const calls = (ctx(m.p, 'cost') as unknown as { calls: { name: string; args: unknown[] }[] }).calls;
+    const from = calls.length;
+    await press(key);
+    const out: number[] = [];
+    let cur: number | null = null;
+    for (const c of calls.slice(from)) {
+      if (c.name === 'save') cur = null;
+      else if (c.name === 'globalAlpha=') cur = c.args[0] as number;
+      else if ((c.name === 'fill' || c.name === 'fillRect') && cur !== null) out.push(cur);
+    }
+    await press(key);
+    const full = Math.max(...out);
+    return out.map((a) => (a === full ? 'on' : 'faded'));
+  };
+  assert.deepEqual(await bars(keyOf['null']), ['on', 'faded']);
+  assert.deepEqual(await bars(keyOf['—']), ['faded', 'on']);
+});
