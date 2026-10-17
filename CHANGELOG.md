@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A refused re-install leaves backup.json alone.** Taking back what the run changed wrote
+  backup.json again with the bytes it already had. A write truncates first, so on the full disk
+  that can make a re-install fail, that rewrite could leave the only way back to your original
+  statusLine half written, with nothing said. A file is now written back only when its bytes
+  differ from the ones the run found (#255).
+
 - **A legend key on the history charts isolates its own project, and only that one.** The legend
   keyed a project by the name it prints and the charts by `String(name)`, so the nameless project
   and a project named `null` met: a tap on `null` lit both lines, a tap on the dash isolated

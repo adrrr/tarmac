@@ -809,11 +809,15 @@ test('a re-install that refuses leaves behind no directory it made', () => {
   fs.rmSync(paths(home).wrapper);
   fs.mkdirSync(paths(home).wrapper);
   const backupBefore = fs.readFileSync(paths(home).backup);
+  // Bytes alone cannot tell a rewrite from no write; an mtime set in the past can.
+  const past = new Date('2020-01-01T00:00:00Z');
+  fs.utimesSync(paths(home).backup, past, past);
   assert.throws(() => install({ home }), /statusline\.sh is not a regular file/);
   assert.equal(fs.existsSync(paths(home).snapshots), false, 'the snapshots directory it created is gone');
   // And only that: the list `unwind` reads is the fresh branch's, so a shorter one would take
   // back backup.json and the state directory, neither of which this run made.
   assert.deepEqual(fs.readFileSync(paths(home).backup), backupBefore, 'backup.json keeps the bytes it had');
+  assert.equal(fs.statSync(paths(home).backup).mtimeMs, past.getTime(), 'and was not written back at all');
   assert.equal(fs.existsSync(paths(home).stateDir), true, 'the state directory that was there before still is');
 });
 

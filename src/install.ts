@@ -992,7 +992,11 @@ function unwind(p: TarmacPaths, before: Map<string, Buffer | null>): void {
   const drop = (target: string, remove: (t: string) => void): void => {
     if (!before.has(target)) return attempt(() => remove(target));
     const original = before.get(target) ?? null;
-    if (original !== null) attempt(() => fs.writeFileSync(target, original));
+    // Only what changed goes back: a write truncates first, and on the full disk that brought
+    // us here a needless rewrite can leave backup.json, the only way back, half written.
+    if (original !== null && !readOrNull(target)?.equals(original)) {
+      attempt(() => fs.writeFileSync(target, original));
+    }
   };
   drop(p.backup, (f) => fs.rmSync(f, { force: true }));
   drop(p.wrapper, (f) => fs.rmSync(f, { force: true }));
