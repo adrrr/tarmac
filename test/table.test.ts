@@ -368,6 +368,29 @@ test('an escape sequence in a source string never reaches the terminal', () => {
   assert.match(out, /waiting · \ufffd\[31mred/);
 });
 
+// #257: a bidi control is not a control character to `\p{Cc}`, and it does worse than one —
+// U+202E paints nothing, so the cell was counted a column wider than it drew, and it reverses
+// every character the terminal prints after it on that line, the cells to its right included.
+test('a bidi control cannot reorder the row it sits in', () => {
+  for (const cp of [0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]) {
+    const out = renderTable(fleet([row({ project: `al${String.fromCodePoint(cp)}pha` })]));
+    assert.match(out, /al�pha +idle/, `U+${cp.toString(16).toUpperCase()} is shown as a character that could not be printed`);
+  }
+});
+
+// The joiner builds one emoji out of two, and a terminal fuses nothing else: between two letters
+// it paints no column and the letters keep theirs. Joined into one glyph, `a`, U+200D, `b` was
+// measured at the one column of its base, and the cell was padded a column short.
+test('a joiner between two letters does not fuse them into one column', () => {
+  for (const project of ['a‍b', 'a‍\u{1f600}', '\u{1f600}‍b']) {
+    const out = renderTable(
+      fleet([row({ project }), row({ sessionId: 's2', project: 'a'.repeat(measure(project.replace('‍', ''))) })], { sessions: 2 }),
+    );
+    const [joined, ascii] = out.split('\n').slice(1, 3);
+    assert.equal(padding(joined), padding(ascii), `${JSON.stringify(project)}: the joiner paints nothing, and each side its own columns`);
+  }
+});
+
 // The cut falls between glyphs, and a combining mark is not one: 'e' + U+0301 is a letter
 // with an accent on it, one column, and cutting between the two hands the ellipsis a bare
 // 'e' and drops the accent from the name. Nineteen of them fill nineteen of the twenty
@@ -391,10 +414,10 @@ test('a mark with nothing to ride on paints no column', () => {
 });
 
 // The half of that the stray glyph does not cover: a joiner with nothing before it has nothing
-// to join, so it stands as a glyph of its own and the NEXT character joins IT — the glyph has a
-// base, just not in front of it. Measured at its first code point, the width table was consulted
-// at U+200D and a wide character behind a stray joiner counted 1 where a terminal paints 2, which
-// is the misalignment the display-column arithmetic exists to prevent.
+// to join, and the character behind it once joined IT, making a glyph whose base was not in
+// front. Measured at its first code point, the width table was consulted at U+200D and a wide
+// character behind a stray joiner counted 1 where a terminal paints 2, which is the
+// misalignment the display-column arithmetic exists to prevent.
 test('a wide character behind a stray joiner still paints two columns', () => {
   const out = renderTable(
     fleet([row({ project: '\u200d項' }), row({ sessionId: 's2', project: 'aa' })], { sessions: 2 }),
@@ -412,8 +435,8 @@ test('never cuts a flag between its two regional indicators', () => {
   assert.match(out.split('\n')[1], /^(?:\u{1f1eb}\u{1f1f7}){9}… {2}idle/u);
 });
 
-// A joiner takes the character behind it into its own glyph, and an indicator is the one
-// character that must not go: swallowed, the glyph is no longer the half-flag its partner pairs
+// A joiner used to take any character behind it into its own glyph, and an indicator is one
+// that must not go: swallowed, the glyph is no longer the half-flag its partner pairs
 // with, the partner starts a glyph of its own, and the cut can fall between the two — the cell
 // ends on the lone U+1F1EB a terminal draws as the boxed letter F, which is the state #183
 // fixed. A stray joiner at the head of the cell costs the whole run its pairing, not one flag.
@@ -490,7 +513,9 @@ test('the width helpers answer the columns a terminal paints, glyph by glyph', (
     ['a combining mark rides on its letter', 'éx', ['é', 'x'], 2],
     ['a mark with nothing before it paints nothing', '́a', ['́', 'a'], 1],
     ['a stray selector paints nothing', '️a', ['️', 'a'], 1],
-    ['a joiner takes the wide character behind it', '‍項', ['‍項'], 2],
+    ['a joiner with nothing before it paints nothing, and joins nothing', '‍項', ['‍', '項'], 2],
+    ['a joiner between two pictographs makes one emoji', '\u{1f469}\u200d\u{1f4bb}', ['\u{1f469}\u200d\u{1f4bb}'], 2],
+    ['a joiner between two letters fuses nothing', 'a\u200db', ['a\u200d', 'b'], 2],
     ['the emoji presentation is two columns', '❤️', ['❤️'], 2],
     ['indicators pair from the left, and the odd one stands alone', flag + '\u{1f1eb}', [flag, '\u{1f1eb}'], 3],
     ['a rider on a flag keeps the pair at two', flag + '\u{1f3fb}', [flag + '\u{1f3fb}'], 2],

@@ -393,11 +393,12 @@ function clip(cell: string, i: number): string {
  * byte but `/` and NUL, `waitingFor` is free text, and a status word is whatever the payload
  * said. Printed as they arrive, a `\n` breaks one row into two physical lines that no cap
  * measured and no padding aligned, a `\r` paints the next cell over this one, and an ESC hands
- * whatever named that directory the terminal's own escape codes. Each control character
+ * whatever named that directory the terminal's own escape codes. A bidi control paints nothing
+ * and reverses the rest of the line, the cells to its right included (#257). Each of them
  * becomes U+FFFD: one column, and visible, because a character silently dropped is a name
  * silently rewritten — the reader has to be able to see that something was there.
  */
-const sanitise = (cell: string): string => cell.replace(/\p{Cc}/gu, '\uFFFD');
+const sanitise = (cell: string): string => cell.replace(/[\p{Cc}\p{Bidi_Control}]/gu, '\uFFFD');
 
 /**
  * How many columns a string paints. What the terminal counts, and what neither `.length` nor
@@ -431,13 +432,7 @@ export function glyphs(s: string): string[] {
   const out: string[] = [];
   for (const ch of s) {
     const prev = out.length - 1;
-    const indicator = HALF_FLAG.test(ch);
-    // An indicator is the one character a trailing joiner does not take: it pairs with the
-    // indicator before it, and no emoji sequence joins a flag to anything. Swallowed, it would
-    // leave a glyph that is no longer the half-flag its partner tests for, so the partner would
-    // start a glyph of its own and the cut could fall between the two — one lone indicator, and
-    // every pair behind it shifted by one. That is the #183 state, reached by a stray joiner.
-    if (prev >= 0 && (RIDES.test(ch) || (out[prev].endsWith(ZWJ) && !indicator) || (indicator && HALF_FLAG.test(out[prev]))))
+    if (prev >= 0 && (RIDES.test(ch) || joins(out[prev], ch) || (HALF_FLAG.test(ch) && HALF_FLAG.test(out[prev]))))
       out[prev] += ch;
     else out.push(ch);
   }
@@ -445,6 +440,18 @@ export function glyphs(s: string): string[] {
 }
 
 const ZWJ = '\u200D';
+/**
+ * Whether a joiner ending `glyph` fuses `ch` into it: only between two pictographs, because an
+ * emoji sequence is the one thing a terminal fuses. Anywhere else the joiner paints nothing and
+ * both sides keep their columns, and a glyph that swallowed the letter behind it was measured at
+ * the one column of its base (#257). An indicator is not a pictograph either, and that matters
+ * beyond width: swallowed, it would leave a glyph that is no longer the half-flag its partner
+ * tests for, the cut could fall between the two, and every pair behind it shift by one — the
+ * #183 state, reached by a stray joiner.
+ */
+const joins = (glyph: string, ch: string): boolean =>
+  glyph.endsWith(ZWJ) && PICTOGRAPH.test(ch) && PICTOGRAPH.test(glyph);
+const PICTOGRAPH = /^\p{Extended_Pictographic}/u;
 /**
  * Marks, joiners, variation selectors, skin tones and tags: everything that belongs to a
  * neighbour. The tags are the subdivision flags — a black flag and the letters of a region
@@ -454,8 +461,7 @@ const ZWJ = '\u200D';
 const RIDES = /[\p{Mn}\p{Me}\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}]/u;
 /**
  * What rides, arrived at the FRONT of a glyph, where there is nothing yet to ride on: a glyph
- * standing alone because `glyphs` had nowhere to put it, or a stray joiner that the character
- * behind it joined instead. Built out of the class above rather than beside it, because two
+ * standing alone because `glyphs` had nowhere to put it. Built out of the class above rather than beside it, because two
  * lists of what rides would drift apart.
  */
 const LEADING_RIDES = new RegExp(`^${RIDES.source}+`, 'u');
@@ -477,10 +483,8 @@ const FLAG = /^[\u{1F1E6}-\u{1F1FF}]{2}/u;
  * terminals that honour it draw two.
  */
 export function widthOf(g: string): number {
-  // The columns are the base's, and the base is not always the first code point: a joiner that
-  // arrived with nothing before it stands as a glyph until the next character joins IT, and the
-  // glyph then leads with a code point that paints nothing. Everything below asks about the base,
-  // so a wide character behind a stray joiner counts the two columns a terminal paints it in.
+  // The columns are the base's, and a glyph may lead with code points that paint nothing: a
+  // mark or a joiner that arrived with nothing before it. Everything below asks about the base.
   const base = g.replace(LEADING_RIDES, '');
   // Asked before U+FE0F, because a selector standing on its own is not that request: there is
   // no character in front of it whose presentation could be selected. A terminal draws nothing
