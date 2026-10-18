@@ -33,6 +33,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A bidi control or a stray joiner in a name no longer misaligns `tarmac list`.** A U+202E in
+  a basename or a `waitingFor` reached the terminal as it arrived: counted one column where it
+  paints none, it reversed everything printed after it on the row. Bidi controls are now shown as
+  U+FFFD, like control characters. A zero-width joiner fused the character behind it into one
+  glyph wherever it sat, so `a`, U+200D, `b` measured one column for the two a terminal paints; it
+  now joins only two pictographs, as in an emoji sequence (#257).
+
 - **A refused re-install leaves backup.json alone.** Taking back what the run changed wrote
   backup.json again with the bytes it already had. A write truncates first, so on the full disk
   that can make a re-install fail, that rewrite could leave the only way back to your original
