@@ -516,6 +516,7 @@ test('the width helpers answer the columns a terminal paints, glyph by glyph', (
     ['a joiner with nothing before it paints nothing, and joins nothing', '‍項', ['‍', '項'], 2],
     ['a joiner between two pictographs makes one emoji', '\u{1f469}\u200d\u{1f4bb}', ['\u{1f469}\u200d\u{1f4bb}'], 2],
     ['a joiner between two letters fuses nothing', 'a\u200db', ['a\u200d', 'b'], 2],
+    ['a joiner after a pictograph leaves an indicator to its partner', '\u{1f600}\u200d' + flag, ['\u{1f600}\u200d', flag], 4],
     ['the emoji presentation is two columns', '❤️', ['❤️'], 2],
     ['indicators pair from the left, and the odd one stands alone', flag + '\u{1f1eb}', [flag, '\u{1f1eb}'], 3],
     ['a rider on a flag keeps the pair at two', flag + '\u{1f3fb}', [flag + '\u{1f3fb}'], 2],

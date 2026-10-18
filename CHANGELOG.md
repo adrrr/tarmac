@@ -38,7 +38,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   paints none, it reversed everything printed after it on the row. Bidi controls are now shown as
   U+FFFD, like control characters. A zero-width joiner fused the character behind it into one
   glyph wherever it sat, so `a`, U+200D, `b` measured one column for the two a terminal paints; it
-  now joins only two pictographs, the emoji sequences it exists for (#257).
+  now joins only two pictographs, as in an emoji sequence (#257).
 
 - **A refused re-install leaves backup.json alone.** Taking back what the run changed wrote
   backup.json again with the bytes it already had. A write truncates first, so on the full disk
