@@ -1021,7 +1021,9 @@ function writeWrapper(p: TarmacPaths, chainCommand: string | null, home: string)
     throw new Error(`refusing to chain the tarmac wrapper to itself (${chainCommand})`);
   }
   refuseNonRegular(p.wrapper, 'a statusline wrapper');
-  fs.writeFileSync(p.wrapper, renderWrapper({ snapshotDir: p.snapshots, chainCommand }), { mode: 0o755 });
+  // Renamed into place, not written over: Claude Code runs this file at every frame, and a
+  // write that truncates and then fails on a full disk leaves it an empty statusline (#259).
+  writeAtomic(p.wrapper, renderWrapper({ snapshotDir: p.snapshots, chainCommand }), 0o755);
 }
 
 // Claude Code re-reads settings.json at frame cadence: a truncated read window is real.
@@ -1038,12 +1040,15 @@ function writeWrapper(p: TarmacPaths, chainCommand: string | null, home: string)
 // settings.json rather than under `~/.claude/tarmac/`, so the unwind above cannot see it and
 // `reap` never looks there: nothing else would ever clear a full copy of their settings.
 // After a successful rename it is already gone, and `force` makes the removal a no-op.
-function writeAtomic(file: string, text: string): void {
+//
+// `createMode` is the mode of a file the write creates: the temp file is always new, so a
+// `mode` passed to its open would only ever apply, masked by umask, to the temp name.
+function writeAtomic(file: string, text: string, createMode?: number): void {
   const target = resolveWriteTarget(file);
   const tmp = `${target}${TEMP_PREFIX}${process.pid}.tmp`;
   try {
     fs.writeFileSync(tmp, text);
-    const mode = modeOf(target);
+    const mode = modeOf(target) ?? createMode ?? null;
     if (mode !== null) fs.chmodSync(tmp, mode); // after the write: umask masks the create mode
     fs.renameSync(tmp, target);
   } finally {

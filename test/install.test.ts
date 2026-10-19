@@ -1317,6 +1317,52 @@ test('the unwind puts back the backup and the wrapper it overwrote', () => {
   assert.match(out, /MINE/, 'the statusline the first install wrapped still renders');
 });
 
+// A re-install rewrites the wrapper Claude Code keeps running. On a full disk a write can
+// truncate and then fail, and the unwind's write-back of the old bytes can fail the same way:
+// staged here as every write under the wrapper's name emptying its file and throwing ENOSPC.
+// Written in place, that leaves an empty statusline.sh; renamed into place, the old one stays
+// whole until the rename (#259).
+test('a re-install that runs out of disk leaves the old wrapper whole', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const p = paths(home);
+  const wrapperBefore = fs.readFileSync(p.wrapper, 'utf8');
+
+  const realWrite = fs.writeFileSync;
+  fs.writeFileSync = ((file: fs.PathOrFileDescriptor, data: string, options?: fs.WriteFileOptions) => {
+    if (typeof file === 'string' && file.startsWith(p.wrapper)) {
+      realWrite(file, '', options);
+      throw Object.assign(new Error(`ENOSPC: no space left on device, write '${file}'`), { code: 'ENOSPC' });
+    }
+    realWrite(file, data, options);
+  }) as typeof fs.writeFileSync;
+  try {
+    assert.throws(() => install({ home }), /ENOSPC/);
+  } finally {
+    fs.writeFileSync = realWrite;
+  }
+
+  assert.equal(fs.readFileSync(p.wrapper, 'utf8'), wrapperBefore, 'the statusline Claude Code runs is not left empty');
+  const strays = fs.readdirSync(p.dir).filter((f) => f.includes(TEMP_PREFIX));
+  assert.deepEqual(strays, [], 'and the temp file does not outlive the run');
+});
+
+test('a fresh install writes the wrapper 0755', () => {
+  const home = fakeHome('{}');
+  install({ home });
+  assert.equal(fs.statSync(paths(home).wrapper).mode & 0o777, 0o755);
+});
+
+// `createMode` is the mode of a file the write CREATES. A wrapper already there keeps its own
+// mode, and through a link that mode is the user's own file's: 0755 must win over neither.
+test('a re-install keeps the mode of the wrapper it replaces', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.chmodSync(paths(home).wrapper, 0o700);
+  install({ home });
+  assert.equal(fs.statSync(paths(home).wrapper).mode & 0o777, 0o700, 'a re-install does not widen the wrapper');
+});
+
 // `existsSync` follows the link, so a DANGLING one reads as absent and the unwind unlinks it
 // — removing something this run never created, which is the one thing it must not do. The
 // same dotfiles-repo-not-cloned shape the rest of this file is built around.
