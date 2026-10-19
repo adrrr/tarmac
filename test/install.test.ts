@@ -1353,6 +1353,16 @@ test('a fresh install writes the wrapper 0755', () => {
   assert.equal(fs.statSync(paths(home).wrapper).mode & 0o777, 0o755);
 });
 
+// `createMode` is the mode of a file the write CREATES. A wrapper already there keeps its own
+// mode, and through a link that mode is the user's own file's: 0755 must win over neither.
+test('a re-install keeps the mode of the wrapper it replaces', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.chmodSync(paths(home).wrapper, 0o700);
+  install({ home });
+  assert.equal(fs.statSync(paths(home).wrapper).mode & 0o777, 0o700, 'a re-install does not widen the wrapper');
+});
+
 // `existsSync` follows the link, so a DANGLING one reads as absent and the unwind unlinks it
 // — removing something this run never created, which is the one thing it must not do. The
 // same dotfiles-repo-not-cloned shape the rest of this file is built around.
