@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A re-install that runs out of disk no longer empties your statusline.** It rewrote
+  statusline.sh in place while Claude Code kept running it. A write truncates first, so on a
+  full disk it could fail with the file already empty, and putting the old bytes back could
+  fail the same way. The wrapper is now written to a temp file and renamed into place, like
+  settings.json: the old one stays whole until the rename (#259).
+
 - **A bidi control or a stray joiner in a name no longer misaligns `tarmac list`.** A U+202E in
   a basename or a `waitingFor` reached the terminal as it arrived: counted one column where it
   paints none, it reversed everything printed after it on the row. Bidi controls are now shown as
