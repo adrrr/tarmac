@@ -453,12 +453,15 @@ const joins = (glyph: string, ch: string): boolean =>
   glyph.endsWith(ZWJ) && PICTOGRAPH.test(ch) && PICTOGRAPH.test(glyph);
 const PICTOGRAPH = /^\p{Extended_Pictographic}/u;
 /**
- * Marks, joiners, variation selectors, skin tones and tags: everything that belongs to a
- * neighbour. The tags are the subdivision flags — a black flag and the letters of a region
- * spelled in U+E0020..U+E007F — and they ride for the same reason a skin tone does: a terminal
- * paints the sequence as the one flag its base stands for, never a column per tag.
+ * Marks, joiners, variation selectors, skin tones, tags and Hangul jamo: everything that
+ * belongs to a neighbour. The tags are the subdivision flags — a black flag and the letters of a
+ * region spelled in U+E0020..U+E007F — and they ride for the same reason a skin tone does: a
+ * terminal paints the sequence as the one flag its base stands for, never a column per tag.
+ * The jamo are the vowels and final consonants of a decomposed syllable (U+1160..U+11FF,
+ * U+D7B0..U+D7FF). The standard calls them letters, not marks, but a terminal paints them inside
+ * the two columns of the leading consonant before them, as it paints the NFC syllable (#261).
  */
-const RIDES = /[\p{Mn}\p{Me}\u200B-\u200D\uFEFF\uFE00-\uFE0F\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}]/u;
+const RIDES = /[\p{Mn}\p{Me}\u200B-\u200D\uFEFF\uFE00-\uFE0F\u1160-\u11FF\uD7B0-\uD7FF\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}]/u;
 /**
  * What rides, arrived at the FRONT of a glyph, where there is nothing yet to ride on: a glyph
  * standing alone because `glyphs` had nowhere to put it. Built out of the class above rather than beside it, because two

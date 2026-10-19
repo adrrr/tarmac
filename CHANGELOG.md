@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A name written in decomposed Hangul no longer misaligns `tarmac list`.** Spelled in jamo, a
+  syllable is a leading consonant, a vowel and maybe a final consonant. The two after the first
+  were counted a column each where a terminal paints all three in two, so the cell was padded
+  short and the row shifted left, and a cut could fall inside a syllable. They now ride on the
+  consonant before them, and both spellings of a name measure the same (#261).
+
 - **A re-install that runs out of disk no longer empties your statusline.** It rewrote
   statusline.sh in place while Claude Code kept running it. A write truncates first, so on a
   full disk it could fail with the file already empty, and putting the old bytes back could

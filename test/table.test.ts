@@ -528,6 +528,23 @@ test('the width helpers answer the columns a terminal paints, glyph by glyph', (
   }
 });
 
+// Decomposed Hangul (#261): a leading consonant is wide, and the vowel and final consonant
+// after it are letters, not marks, so nothing in the standard's categories makes them ride.
+// A terminal paints the three as one syllable in two columns, the NFC spelling's two.
+test('a Hangul syllable spelled in jamo is the two columns of its NFC spelling', () => {
+  const han = '\u1112\u1161\u11ab';
+  const geul = '\u1100\u1173\u11af';
+  assert.deepEqual(glyphs(han + geul), [han, geul], 'the vowel and the final ride on their leading consonant');
+  assert.equal(measure(han + geul), 4, 'NFD');
+  assert.equal(measure('\ud55c\uae00'), 4, 'NFC');
+  assert.equal(measure('\ud55c\u11ab'), 2, 'a final jamo after a precomposed syllable rides on it too');
+  const out = renderTable(fleet([row({ project: han + geul }), row({ sessionId: 's2', project: 'abcd' })], { sessions: 2 }));
+  const [nfd, ascii] = out.split('\n').slice(1, 3);
+  assert.equal(padding(nfd), padding(ascii), 'and the row stays aligned');
+  const cut = renderTable(fleet([row({ project: han.repeat(12) })])).split('\n')[1];
+  assert.match(cut, new RegExp(`^(?:${han}){9}… {2}idle`, 'u'), 'the cut falls between syllables, never inside one');
+});
+
 // A cell is made safe to print before the cap is consulted, and that order is the point: four
 // of the eight columns have no cap, and a guard that lived past the early return would cover
 // the capped four alone. The type forbids the word below. CTX prints the reader's own
