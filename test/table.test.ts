@@ -538,6 +538,8 @@ test('a Hangul syllable spelled in jamo is the two columns of its NFC spelling',
   assert.equal(measure(han + geul), 4, 'NFD');
   assert.equal(measure('\ud55c\uae00'), 4, 'NFC');
   assert.equal(measure('\ud55c\u11ab'), 2, 'a final jamo after a precomposed syllable rides on it too');
+  assert.equal(measure('\ua960\ud7b0\ud7cb'), 2, 'an Extended-A lead with an Extended-B vowel and final');
+  assert.equal(measure('\u115f\u1160'), 2, 'the two fillers make one syllable');
   const out = renderTable(fleet([row({ project: han + geul }), row({ sessionId: 's2', project: 'abcd' })], { sessions: 2 }));
   const [nfd, ascii] = out.split('\n').slice(1, 3);
   assert.equal(padding(nfd), padding(ascii), 'and the row stays aligned');
