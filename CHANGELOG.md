@@ -37,6 +37,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   its ring around the whole track, which says nothing about where in the day the handle sits.
   The ring is now on the handle, in both engines; the buttons beside it keep theirs (#263).
 
+- **`uninstall` no longer acts on a snapshots directory its plan did not name.** It held
+  settings.json to the plan, but read the directory again from the wrapper. A re-install with
+  another `--snapshots-dir` while the prompt waited leaves settings.json alone, so uninstall went
+  ahead and removed the prune marker from the new directory. It now refuses, before writing
+  anything, when the directory or the marker is not what the plan printed (#262).
+
 - **A name written in decomposed Hangul no longer misaligns `tarmac list`.** Spelled in jamo, a
   syllable is a leading consonant, a vowel and maybe a final consonant. The two after the first
   were counted a column each where a terminal paints all three in two, so the cell was padded
