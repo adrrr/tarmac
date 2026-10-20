@@ -938,6 +938,32 @@ test('uninstall --yes refuses when settings.json changed between the plan and th
   assert.equal(fs.existsSync(paths(home).wrapper), true, 'and nothing was uninstalled');
 });
 
+// The same line of cli.ts now carries the snapshots directory and the marker the plan printed
+// (#262), so each is pinned end to end the way `expect` is above.
+const REINSTALL_ELSEWHERE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'reinstall-elsewhere-between-reads.mjs');
+const REMOVE_MARKER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'remove-marker-between-reads.mjs');
+
+test('uninstall --yes refuses when a re-install moved the snapshots directory between the plan and the restore', () => {
+  const home = fakeHome(MINE);
+  tarmac(['install', '--yes'], home);
+  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
+  const to = path.join(tempDir('tarmac-to-'), 'snapshots');
+  const run = tarmac(['uninstall', '--yes'], home, { NODE_OPTIONS: `--import=${pathToFileURL(REINSTALL_ELSEWHERE).href}`, TARMAC_TEST_TO: to });
+  assert.equal(run.status, 1, run.stdout);
+  assert.match(run.stderr, /snapshots directory changed since the plan/);
+  assert.equal(fs.existsSync(path.join(to, PRUNE_MARKER)), true, 'the marker in the new directory stays');
+});
+
+test('uninstall --yes refuses when the prune marker went away between the plan and the restore', () => {
+  const home = fakeHome(MINE);
+  tarmac(['install', '--yes'], home);
+  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
+  const run = tarmac(['uninstall', '--yes'], home, { NODE_OPTIONS: `--import=${pathToFileURL(REMOVE_MARKER).href}` });
+  assert.equal(run.status, 1, run.stdout);
+  assert.match(run.stderr, /prune marker changed since the plan/);
+  assert.equal(fs.existsSync(paths(home).wrapper), true, 'and nothing was uninstalled');
+});
+
 test('--home still chooses the target, and no longer means "a sandbox"', () => {
   const running = fakeHome('{}');
   const target = fakeHome('{}');
