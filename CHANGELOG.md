@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The replay scrubber's focus ring goes around the handle.** Reached by tab, the slider drew
+  its ring around the whole track, which says nothing about where in the day the handle sits.
+  The ring is now on the handle, in both engines; the buttons beside it keep theirs (#263).
+
 - **A name written in decomposed Hangul no longer misaligns `tarmac list`.** Spelled in jamo, a
   syllable is a leading consonant, a vowel and maybe a final consonant. The two after the first
   were counted a column each where a terminal paints all three in two, so the cell was padded
