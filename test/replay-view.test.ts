@@ -236,14 +236,29 @@ test('the thumb is the thing you can grab, and the track the thing it runs on', 
 // reader loses. `appearance:none` takes the browser's own focus ring with it, so the page owes
 // one back — to the handle it just redrew, and to the buttons beside it.
 test('every control in the replay row shows where the keyboard is', () => {
-  const focus = [...replayCss().matchAll(/([^{}]*:focus-visible[^{}]*)\{([^}]*)\}/g)]
-    .filter(([, , declarations]) => /outline\s*:/.test(declarations))
-    .map(([, selector]) => selector)
-    .join(' ');
-  for (const control of ['.replay input[type="range"]:focus-visible', '.replay button:focus-visible', '.replaying-note button:focus-visible']) {
-    assert.ok(focus.includes(control), control);
+  const rings = focusRules().filter(([, declarations]) => /outline\s*:\s*2px/.test(declarations)).map(([selector]) => selector).join(' ');
+  for (const control of [
+    '.replay input[type="range"]:focus-visible::-webkit-slider-thumb',
+    '.replay input[type="range"]:focus-visible::-moz-range-thumb',
+    '.replay button:focus-visible',
+    '.replaying-note button:focus-visible',
+  ]) {
+    assert.ok(rings.includes(control), control);
   }
 });
+
+// The ring goes on the handle, not around the whole track: the handle is what the arrow keys
+// move, and a ring the width of the row says nothing about where in the day the reader is.
+test('the scrubber rings its handle, not its track', () => {
+  const own = focusRules().filter(([selector]) =>
+    selector.split(',').some((s) => s.trim() === '.replay input[type="range"]:focus-visible'));
+  assert.equal(own.length, 1, 'one rule for the input itself');
+  assert.match(own[0][1], /outline\s*:\s*none/);
+});
+
+/** Every `:focus-visible` rule in the page's stylesheet, as [selector, declarations]. */
+const focusRules = (): [string, string][] =>
+  [...replayCss().matchAll(/([^{}]*:focus-visible[^{}]*)\{([^}]*)\}/g)].map(([, selector, declarations]) => [selector.trim(), declarations]);
 
 // Play and Pause are one button, and the word on it is the whole of what says which. A word is
 // nothing to glance at across a room — and a screenshot of a paused replay reads the same as a

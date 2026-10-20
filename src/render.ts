@@ -1331,8 +1331,14 @@ ${HISTORY_CSS}
   .replay input[type="range"]:disabled { opacity:.45; cursor:default; }
   /* What appearance:none took away and the page owes back: a control that can be reached by
      tab and not seen once it is there is a control a keyboard reader loses. The hue is the one
-     this page already spends on "a human is being waited for", which is what a focus ring is. */
-  .replay input[type="range"]:focus-visible, .replay button:focus-visible,
+     this page already spends on "a human is being waited for", which is what a focus ring is.
+     On the scrubber it rings the handle, the part the arrow keys move, not the whole track. One
+     rule per engine: a selector list holding a pseudo-element the browser does not know is
+     dropped whole. */
+  .replay input[type="range"]:focus-visible { outline:none; }
+  .replay input[type="range"]:focus-visible::-webkit-slider-thumb { outline:2px solid var(--wait); outline-offset:2px; }
+  .replay input[type="range"]:focus-visible::-moz-range-thumb { outline:2px solid var(--wait); outline-offset:2px; }
+  .replay button:focus-visible,
   .replaying-note button:focus-visible { outline:2px solid var(--wait); outline-offset:2px; }
   /* The two things the reader has to be able to read while dragging: the minute under the
      handle, and what the whole range covers. Tabular, so neither jitters as it counts. */
