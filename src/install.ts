@@ -122,6 +122,14 @@ export interface UninstallOptions extends HomeOptions {
    * and a file that has appeared since is a change like any other.
    */
   expect?: string | null;
+  /**
+   * `UninstallPlan.snapshots` and `UninstallPlan.marker`, held the way `expect` holds
+   * settings.json. A re-install with another `--snapshots-dir` rewrites the wrapper and leaves
+   * settings.json alone, so `expect` alone lets it through to a marker the plan never named.
+   * Left out, nothing is compared.
+   */
+  snapshots?: string | null;
+  marker?: UninstallPlan['marker'];
 }
 
 /**
@@ -1134,7 +1142,7 @@ function removePruneMarker(snapshots: string | null): void {
   if (isPlainFile(marker)) fs.rmSync(marker, { force: true });
 }
 
-export function uninstall({ home, expect }: UninstallOptions): { mode: UninstallMode } {
+export function uninstall({ home, expect, snapshots: planned, marker }: UninstallOptions): { mode: UninstallMode } {
   const root = requireHome(home);
   const p = paths(root);
   const backup = installedBackupOrRefuse(p);
@@ -1150,6 +1158,12 @@ export function uninstall({ home, expect }: UninstallOptions): { mode: Uninstall
   // is the only answer that keeps the plan a promise; the next run plans against the new file.
   if (expect !== undefined && currentText !== expect) {
     throw new Error(`${p.settings} changed since the plan — nothing was written, run uninstall again`);
+  }
+  if (planned !== undefined && snapshots !== planned) {
+    throw new Error(`the snapshots directory changed since the plan — nothing was written, run uninstall again`);
+  }
+  if (marker !== undefined && (snapshots === null ? null : markerState(path.join(snapshots, PRUNE_MARKER))) !== marker) {
+    throw new Error(`the prune marker changed since the plan — nothing was written, run uninstall again`);
   }
   let mode: UninstallMode;
 

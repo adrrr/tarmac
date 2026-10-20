@@ -267,11 +267,48 @@ test('uninstall refuses when settings.json appeared since a plan that found none
   assert.equal(fs.existsSync(paths(home).wrapper), true);
 });
 
+// A re-install with another --snapshots-dir does not touch settings.json, so `expect` lets it
+// through: it rewrites the wrapper and clears the directory the plan printed. The plan names
+// a directory and a marker; an uninstall handed them refuses to act on any others.
+test('uninstall refuses when the snapshots directory moved since the plan', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const plan = planUninstall({ home });
+  const to = path.join(tempDir('tarmac-to-'), 'snapshots');
+  install({ home, snapshotsDir: to });
+  fs.writeFileSync(path.join(to, PRUNE_MARKER), '');
+
+  assert.throws(
+    () => uninstall({ home, expect: plan.currentText, snapshots: plan.snapshots, marker: plan.marker }),
+    /snapshots directory changed since the plan/,
+  );
+  assert.equal(fs.existsSync(path.join(to, PRUNE_MARKER)), true, 'the marker in the new directory stays');
+  assert.equal(fs.existsSync(paths(home).wrapper), true, 'and the wrapper with it');
+  assert.equal(fs.existsSync(paths(home).backup), true);
+});
+
+test('uninstall refuses when the prune marker changed since the plan', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const plan = planUninstall({ home });
+  assert.equal(plan.marker, 'none');
+  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
+  const before = settingsOf(home);
+
+  assert.throws(
+    () => uninstall({ home, expect: plan.currentText, snapshots: plan.snapshots, marker: plan.marker }),
+    /prune marker changed since the plan/,
+  );
+  assert.equal(settingsOf(home), before, 'and the refusal wrote nothing');
+  assert.equal(fs.existsSync(path.join(paths(home).snapshots, PRUNE_MARKER)), true);
+});
+
 test('uninstall restores as planned when settings.json is the file the plan read', () => {
   const home = fakeHome(MINE);
   install({ home });
   const plan = planUninstall({ home });
-  assert.equal(uninstall({ home, expect: plan.currentText }).mode, plan.mode);
+  const { currentText: expect, snapshots, marker } = plan;
+  assert.equal(uninstall({ home, expect, snapshots, marker }).mode, plan.mode);
   assert.equal(settingsOf(home), MINE, 'the original bytes, back');
 });
 
@@ -898,6 +935,32 @@ test('uninstall --yes refuses when settings.json changed between the plan and th
   assert.equal(run.status, 1, run.stdout);
   assert.match(run.stderr, /changed since the plan/);
   assert.notEqual(settingsOf(home), installed, 'the preload did rewrite the file between the two reads');
+  assert.equal(fs.existsSync(paths(home).wrapper), true, 'and nothing was uninstalled');
+});
+
+// The same line of cli.ts now carries the snapshots directory and the marker the plan printed
+// (#262), so each is pinned end to end the way `expect` is above.
+const REINSTALL_ELSEWHERE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'reinstall-elsewhere-between-reads.mjs');
+const REMOVE_MARKER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'remove-marker-between-reads.mjs');
+
+test('uninstall --yes refuses when a re-install moved the snapshots directory between the plan and the restore', () => {
+  const home = fakeHome(MINE);
+  tarmac(['install', '--yes'], home);
+  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
+  const to = path.join(tempDir('tarmac-to-'), 'snapshots');
+  const run = tarmac(['uninstall', '--yes'], home, { NODE_OPTIONS: `--import=${pathToFileURL(REINSTALL_ELSEWHERE).href}`, TARMAC_TEST_TO: to });
+  assert.equal(run.status, 1, run.stdout);
+  assert.match(run.stderr, /snapshots directory changed since the plan/);
+  assert.equal(fs.existsSync(path.join(to, PRUNE_MARKER)), true, 'the marker in the new directory stays');
+});
+
+test('uninstall --yes refuses when the prune marker went away between the plan and the restore', () => {
+  const home = fakeHome(MINE);
+  tarmac(['install', '--yes'], home);
+  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
+  const run = tarmac(['uninstall', '--yes'], home, { NODE_OPTIONS: `--import=${pathToFileURL(REMOVE_MARKER).href}` });
+  assert.equal(run.status, 1, run.stdout);
+  assert.match(run.stderr, /prune marker changed since the plan/);
   assert.equal(fs.existsSync(paths(home).wrapper), true, 'and nothing was uninstalled');
 });
 
