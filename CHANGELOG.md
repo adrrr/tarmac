@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The install plan and the `serve` settings block print a control character as a visible
+  mark.** Their paths and commands went to the terminal as they were, so a `\n`, an ESC or a
+  bidi control in a `--home` or a `--snapshots-dir` broke or repainted the plan you were about
+  to confirm, or the block `serve` opens with. Each one now prints as U+FFFD, as the cells of
+  `tarmac list` already did (#264).
+
 - **The manual says a serve that lost the journal lock takes it back.** It said such a serve
   stops writing and names the pid, and stopped there. The tick after the holder leaves, that
   serve holds the lock again and writes, without a message, unlike a serve refused at startup,

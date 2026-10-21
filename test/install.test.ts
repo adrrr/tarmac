@@ -2217,6 +2217,28 @@ test('the plan names both directories, and what the move clears', () => {
   assert.equal(fs.readdirSync(from).length, 4, 'and the plan is a dry run');
 });
 
+// The plan is what the user says yes to, so a path that repaints it is a consent to something
+// they never read. A directory may be named anything but `/` and NUL.
+test('the plan prints a control character in a path as a visible mark, not as itself', () => {
+  const home = fakeHome(MINE);
+  const odd = path.join(tempDir('tarmac-to-'), 'sn\u001b[2Kaps\nfile  /elsewhere');
+  const out = renderPlan(planInstall({ home, snapshotsDir: odd }));
+  assert.doesNotMatch(out, /\u001b/, 'no escape reaches the terminal');
+  assert.match(out, /sn\ufffd\[2Kaps\ufffdfile/, 'and the reader can see something was there');
+  assert.equal(out.split('\n').filter((l) => l.includes('/elsewhere')).length, 1, 'one row, not a forged one below it');
+  assert.doesNotMatch(out, /^ *file +\/elsewhere/m);
+});
+
+// The header names the home when `--home` points away from yours, and it prints before every
+// row: an ESC there can hide all of them, the sanitised ones included.
+test('the plan header prints a control character in a --home as a visible mark, not as itself', () => {
+  const home = path.join(tempDir('tarmac-home-'), 'ho\u001b[8mme\nfile  /elsewhere');
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  const out = renderPlan(planInstall({ home }));
+  assert.doesNotMatch(out, /\u001b/, 'no escape reaches the terminal, the header included');
+  assert.match(out.split('\n')[0], /ho\ufffd\[8mme\ufffdfile {2}\/elsewhere$/, 'one header line, and it shows something was there');
+});
+
 // A relocation that has nothing to clear is still a relocation: an install made minutes ago
 // has no payload in that directory yet, and the plan that fell silent for it would be silent
 // for exactly the move made before the first frame is drawn.

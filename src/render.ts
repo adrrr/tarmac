@@ -84,10 +84,13 @@ export function renderPlan(plan: Plan): string {
   }
   rows.push(['undo', plan.undo]);
 
+  // Every value is a path or a command from the user's disk, and so is the home the header
+  // names under `--home`, printed before all of them: a `\n` or an ESC in one repaints the
+  // plan they are about to say yes to. The labels are literals.
   const w = Math.max(...rows.map(([label]) => label.length));
   return (
-    `tarmac ${plan.action} — ${where}\n\n` +
-    rows.map(([label, value]) => `  ${label.padEnd(w)}  ${value}\n`).join('') +
+    `tarmac ${plan.action} — ${sanitise(where)}\n\n` +
+    rows.map(([label, value]) => `  ${label.padEnd(w)}  ${sanitise(value)}\n`).join('') +
     '\n'
   );
 }
@@ -204,8 +207,8 @@ export function renderSettings(config: Config, configFile: string, historyDir: s
   // from past the edge of an 80-column terminal.
   return (
     `tarmac settings — flag > env > file > default\n` +
-    rows.map(([label, value, source]) => `  ${label.padEnd(9)}  ${value}  (${source})\n`).join('') +
-    `  file       ${configFile}\n`
+    rows.map(([label, value, source]) => `  ${label.padEnd(9)}  ${sanitise(value)}  (${source})\n`).join('') +
+    `  file       ${sanitise(configFile)}\n`
   );
 }
 
