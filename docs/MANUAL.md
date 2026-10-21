@@ -1005,6 +1005,10 @@ somebody else's and sweeping it with a retention nobody there set, and it says w
 If the directory was simply erased, which is how a journal is thrown away, nobody took anything:
 the serve takes its own lock back and carries on.
 
+A serve stopped this way is not refused for good, unlike one refused at startup. The tick after
+the holder leaves, it takes the lock again and writes its next line, and it prints nothing when
+it does: the stop was said once, the resume is not said at all.
+
 A lock is taken back when the pid in it is no longer a process, or when nothing has touched it for
 five minutes: pids are reused, so an abandoned lock can name a stranger who is alive, and the
 heartbeat is what tells the two apart. A lock file nobody can read a pid from, which is also what
