@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The manual says a serve that lost the journal lock takes it back.** It said such a serve
+  stops writing and names the pid, and stopped there. The tick after the holder leaves, that
+  serve holds the lock again and writes, without a message, unlike a serve refused at startup,
+  which keeps no journal until it is restarted. The manual now says both (#267).
+
 - **The replay scrubber's focus ring goes around the handle.** Reached by tab, the slider drew
   its ring around the whole track, which says nothing about where in the day the handle sits.
   The ring is now on the handle, in both engines; the buttons beside it keep theirs (#263).
