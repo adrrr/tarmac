@@ -613,6 +613,24 @@ test('the settings block spells out the precedence it applied', () => {
   assert.match(out, /flag.*env.*file.*default/, 'the order, not just the winner');
 });
 
+test('the settings block prints a control character in a path as a visible mark, not as itself', () => {
+  const out = renderSettings(
+    {
+      staleAfterMs: { value: 600_000, source: 'default' },
+      port: { value: 4477, source: 'default' },
+      snapshotsDir: { value: '/x/sn\u001b[2Kaps', source: 'flag' },
+      trustHosts: { value: [], source: 'default' },
+      historyDays: { value: 30, source: 'file' },
+    },
+    '/x/con\rfig.json',
+    '/x/hist\u202eory',
+  );
+  assert.doesNotMatch(out, /[\u001b\r\u202e]/u, 'no control reaches the terminal');
+  assert.match(out, /\/x\/sn\ufffd\[2Kaps/);
+  assert.match(out, /\/x\/con\ufffdfig\.json/);
+  assert.match(out, /\/x\/hist\ufffdory/);
+});
+
 // The one setting that widens who may read this port, so the run that has it says so in its
 // first three lines — and the run that does not says nothing, because an empty list was
 // chosen by nobody and there is no source to attribute it to.
