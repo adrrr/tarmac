@@ -504,6 +504,10 @@ export function widthOf(g: string): number {
   // while it was two glyphs. Measured as the one glyph a terminal draws, it has to say so.
   if (FLAG.test(base)) return 2;
   const cp = base.codePointAt(0)!;
+  // U+3164 HANGUL FILLER is Wide in the standard and sits inside a range below, but it paints
+  // nothing: tmux 3.6 and later drop it and glibc 2.40 and later give it no columns (#271).
+  // macOS's own wcwidth and utf8proc still answer two, and an older tmux follows them.
+  if (cp === 0x3164) return 0;
   return WIDE.some(([lo, hi]) => cp >= lo && cp <= hi) ? 2 : 1;
 }
 
