@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The manual no longer says an open demo shows the same picture all afternoon.** Its sessions
+  and its scrubber hold still, but their uptimes count from the live clock, so a session that
+  reads 24h when the demo opens reads 28h four hours later. The manual now says so (#268).
+
 - **The install plan and the `serve` settings block print a control character as a visible
   mark.** Their paths and commands went to the terminal as they were, so a `\n`, an ESC or a
   bidi control in a `--home` or a `--snapshots-dir` broke or repainted the plan you were about
