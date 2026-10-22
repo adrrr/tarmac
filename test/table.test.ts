@@ -547,6 +547,17 @@ test('a Hangul syllable spelled in jamo is the two columns of its NFC spelling',
   assert.match(cut, new RegExp(`^(?:${han}){9}… {2}idle`, 'u'), 'the cut falls between syllables, never inside one');
 });
 
+// U+3164 HANGUL FILLER (#271): East Asian Wide in the standard, and a common way to spoof a
+// name, but tmux 3.6 and later drop it and glibc 2.40 and later give it no columns. A cell that
+// counts it two pads two short.
+test('a Hangul filler is no columns, so its row lines up with the others', () => {
+  assert.equal(measure('abㅤcd'), measure('abcd'));
+  assert.equal(measure('ab\u3164\u0301cd'), measure('abcd'), 'a mark riding on the filler paints nothing either');
+  const out = renderTable(fleet([row({ project: 'abㅤcd' }), row({ sessionId: 's2', project: 'abcd' })], { sessions: 2 }));
+  const [filler, ascii] = out.split('\n').slice(1, 3);
+  assert.equal(padding(filler), padding(ascii));
+});
+
 // A cell is made safe to print before the cap is consulted, and that order is the point: four
 // of the eight columns have no cap, and a guard that lived past the early return would cover
 // the capped four alone. The type forbids the word below. CTX prints the reader's own

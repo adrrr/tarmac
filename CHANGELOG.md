@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The Hangul filler U+3164 in a project name no longer shifts its `tarmac list` row.** It is
+  Wide in the standard, so the table counted it two columns, but tmux 3.6 and later drop it and
+  glibc 2.40 and later give it none, and the row came out two columns short. It now counts none.
+  Where the terminal still gives it two, as macOS's own `wcwidth` does, the row now comes out two
+  columns long instead (#271).
+
 - **The manual no longer says an open demo shows the same picture all afternoon.** Its sessions
   and its scrubber hold still, but their uptimes count from the live clock, so a session that
   reads 24h when the demo opens reads 28h four hours later. The manual now says so (#268).
