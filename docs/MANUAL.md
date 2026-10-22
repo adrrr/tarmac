@@ -295,7 +295,9 @@ record of your real one. What it does still read is its own settings, so a `--po
 else about the serve is unchanged: the same port rules, the same `Host` guard, the same routes.
 
 It also runs no sampler. The day it starts with is the day it keeps, so a demo left open for an
-afternoon shows the same picture at the end of it as at the beginning.
+afternoon shows the same sessions doing the same things at the end of it as at the beginning.
+Only their uptimes move on: they count from the live clock, so a session that reads 24h when
+the demo opens reads 28h four hours later.
 
 The page says so about itself. A `demo data` badge sits beside the title on every view, and the
 terminal says the same under the URL, so a screenshot of it cannot be passed around as a
