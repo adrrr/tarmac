@@ -688,6 +688,24 @@ test('an hour says what kind each session was, and a reading that could not say 
   assert.equal(hours[0].sessions[0].kind, 'background');
 });
 
+// A journal written before #212 may carry `kind: ''`. It is no more a kind than a missing one,
+// and read as one it is not `interactive`, so the anchored views would leave the session out
+// as an agent.
+test('an empty kind is no more a kind than a missing one', async () => {
+  const dir = journal();
+  const now = at(2026, 8, 7);
+  day(dir, '2026-08-07', [
+    rec(at(2026, 8, 7, 10, 5), [sess({ kind: 'interactive' })]),
+    rec(at(2026, 8, 7, 10, 50), [sess({ kind: '' })]),
+    rec(at(2026, 8, 7, 11, 5), [sess({ kind: '' })]),
+  ]);
+
+  const { hours } = await readRange({ dir, range: '7d', now });
+
+  assert.equal(hours[0].sessions[0].kind, 'interactive', 'it does not unsay a kind that was read');
+  assert.equal(hours[1].sessions[0].kind, null, 'and alone it reads as no kind');
+});
+
 // An hour built from one reading and an hour built from sixty are drawn the same and mean
 // different things: the first is a serve that was starting or stopping, or a laptop asleep.
 test('an hour says how many readings it was built from', async () => {

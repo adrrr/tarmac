@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A journal line with an empty `kind` no longer replays as an agent.** The reader kept `''`
+  as a kind, and once one session in the range calls itself `interactive`, every other kind
+  counts as an agent and stays off the context chart, so at 7d and 30d such a session was
+  missing from it. An empty kind now reads as no kind, as an empty session id and an empty
+  project already did (#272).
+
 - **The Hangul filler U+3164 in a project name no longer shifts its `tarmac list` row.** It is
   Wide in the standard, so the table counted it two columns, but tmux 3.6 and later drop it and
   glibc 2.40 and later give it none, and the row came out two columns short. It now counts none.
