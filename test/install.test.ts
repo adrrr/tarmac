@@ -2282,6 +2282,24 @@ test('the cleared line prints a control character in a path as a visible mark, n
   assert.match(cleared[0], /from .*sn\ufffd\[2Kaps\ufffdfile — they belong in .*sn\ufffd\[8maps/);
 });
 
+// `list` warns when the installed wrapper is ours but names no directory, and that warning
+// carries two paths from the same --home.
+test('the silent-wrapper warning prints a control character in a --home as a visible mark', () => {
+  const home = path.join(tempDir('tarmac-home-'), 'ho\u001b[8mme');
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  assert.equal(cliInstall(home).status, 0);
+  const wrapper = paths(home).wrapper;
+  fs.writeFileSync(wrapper, fs.readFileSync(wrapper, 'utf8').replace(/^TARMAC_DIR=.*\n/m, ''));
+  const claude = path.join(tempDir('tarmac-bin-'), 'claude');
+  fs.writeFileSync(claude, "#!/bin/sh\nprintf '[]\\n'\n", { mode: 0o700 });
+
+  const res = spawnSync(process.execPath, [CLI, 'list', '--home', home, '--claude-bin', claude], { encoding: 'utf8', timeout: 20000 });
+  const warn = res.stderr.split('\n').filter((l) => l.includes('is ours but does not say where it writes'));
+  assert.equal(warn.length, 1, res.stderr);
+  assert.doesNotMatch(warn[0], /\u001b/, 'no escape reaches the terminal');
+  assert.match(warn[0], /ho\ufffd\[8mme.*ho\ufffd\[8mme/);
+});
+
 // A relocation that has nothing to clear is still a relocation: an install made minutes ago
 // has no payload in that directory yet, and the plan that fell silent for it would be silent
 // for exactly the move made before the first frame is drawn.
