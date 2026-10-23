@@ -2239,6 +2239,67 @@ test('the plan header prints a control character in a --home as a visible mark, 
   assert.match(out.split('\n')[0], /ho\ufffd\[8mme\ufffdfile {2}\/elsewhere$/, 'one header line, and it shows something was there');
 });
 
+// The plan is not the only place a path reaches the terminal: a refusal and the two lines an
+// install prints after it carry one too, and the same ESC repaints them the same way.
+const cliInstall = (home: string, ...extra: string[]) =>
+  spawnSync(process.execPath, [CLI, 'install', '--yes', '--home', home, ...extra], { encoding: 'utf8', timeout: 20000 });
+
+test('a refusal prints a control character in a path as a visible mark, not as itself', () => {
+  const home = fakeHome(MINE);
+  const odd = path.join(tempDir('tarmac-to-'), 'sn\u001b[2Kaps\u0007file');
+  assert.equal(cliInstall(home, '--snapshots-dir', odd).status, 0);
+
+  const refused = cliInstall(home);
+  assert.equal(refused.status, 1, refused.stderr);
+  assert.doesNotMatch(refused.stderr, /\u001b/, 'no escape reaches the terminal');
+  assert.match(refused.stderr, /^tarmac: .*sn\ufffd\[2Kaps\ufffdfile/, 'and one line shows something was there');
+});
+
+test('the undo line prints a control character in a --home as a visible mark, not as itself', () => {
+  const home = path.join(tempDir('tarmac-home-'), 'ho\u001b[8mme\nx');
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+
+  const res = cliInstall(home);
+  assert.equal(res.status, 0, res.stderr);
+  const undo = res.stdout.split('\n').filter((l) => l.startsWith('install: statusLine wrapped'));
+  assert.equal(undo.length, 1);
+  assert.doesNotMatch(undo[0], /\u001b/, 'no escape reaches the terminal');
+  assert.match(undo[0], /ho\ufffd\[8mme\ufffdx/);
+});
+
+test('the cleared line prints a control character in a path as a visible mark, not as itself', () => {
+  const home = fakeHome(MINE);
+  const odd = path.join(tempDir('tarmac-from-'), 'sn\u001b[2Kaps\u0007file');
+  assert.equal(cliInstall(home, '--snapshots-dir', odd).status, 0);
+  litter(odd);
+  const to = path.join(tempDir('tarmac-to-'), 'sn\u001b[8maps');
+
+  const moved = cliInstall(home, '--snapshots-dir', to);
+  assert.equal(moved.status, 0, moved.stderr);
+  const cleared = moved.stdout.split('\n').filter((l) => l.startsWith('install: cleared'));
+  assert.equal(cleared.length, 1, moved.stdout);
+  assert.doesNotMatch(cleared[0], /\u001b/, 'no escape reaches the terminal');
+  assert.match(cleared[0], /from .*sn\ufffd\[2Kaps\ufffdfile — they belong in .*sn\ufffd\[8maps/);
+});
+
+// `list` warns when the installed wrapper is ours but names no directory, and that warning
+// carries two paths from the same --home.
+test('the silent-wrapper warning prints a control character in a --home as a visible mark', () => {
+  const home = path.join(tempDir('tarmac-home-'), 'ho\u001b[8mme');
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  assert.equal(cliInstall(home).status, 0);
+  const wrapper = paths(home).wrapper;
+  fs.writeFileSync(wrapper, fs.readFileSync(wrapper, 'utf8').replace(/^TARMAC_DIR=.*\n/m, ''));
+  const claude = path.join(tempDir('tarmac-bin-'), 'claude');
+  fs.writeFileSync(claude, "#!/bin/sh\nprintf '[]\\n'\n", { mode: 0o700 });
+
+  const res = spawnSync(process.execPath, [CLI, 'list', '--home', home, '--claude-bin', claude], { encoding: 'utf8', timeout: 20000 });
+  const warn = res.stderr.split('\n').filter((l) => l.includes('is ours but does not say where it writes'));
+  assert.equal(warn.length, 1, res.stderr);
+  assert.doesNotMatch(warn[0], /\u001b/, 'no escape reaches the terminal');
+  assert.match(warn[0], /ho\ufffd\[8mme.*ho\ufffd\[8mme/);
+});
+
 // A relocation that has nothing to clear is still a relocation: an install made minutes ago
 // has no payload in that directory yet, and the plan that fell silent for it would be silent
 // for exactly the move made before the first frame is drawn.

@@ -22,7 +22,7 @@ import { install, uninstall, paths, planInstall, planUninstall, installedSnapsho
 import { confirmTyped } from './prompt.ts';
 import { reapOrphanedTemps } from './reap.ts';
 import { acquireJournalLock, createHistoryStore, historyDirFor } from './history-store.ts';
-import { clearedLine, renderPlan, renderSettings, renderTable, restoreMeaning, servingLine } from './render.ts';
+import { clearedLine, renderPlan, renderSettings, renderTable, restoreMeaning, sanitise, servingLine } from './render.ts';
 import { runWatch } from './watch.ts';
 
 const USAGE = `tarmac — fleet observability for Claude Code
@@ -136,7 +136,7 @@ try {
       console.log(
         res.alreadyInstalled
           ? `install: already installed — wrapper regenerated, settings.json left alone`
-          : `install: statusLine wrapped — undo with \`${plan.undo}\``,
+          : `install: statusLine wrapped — undo with \`${sanitise(plan.undo)}\``,
       );
       // What the plan promised, as it actually went, for each directory this install can
       // clear: a frame of the OLD wrapper can land in either between the two, so the counts
@@ -163,7 +163,7 @@ try {
     // is also advice about a directory this run will never open.
     if (frozen === null && wrapperIsOurs(p) && !args.demo)
       console.error(
-        `tarmac: ${p.wrapper} is ours but does not say where it writes — falling back to ${p.snapshots}`,
+        `tarmac: ${sanitise(p.wrapper)} is ours but does not say where it writes — falling back to ${sanitise(p.snapshots)}`,
       );
     const config = resolveConfig({
       flags: { staleAfter: args.staleAfter, port: args.port, snapshotsDir: args.snapshotsDir, trustHosts: args.trustHost, historyDays: args.historyDays },
@@ -208,7 +208,7 @@ try {
       // did not happen. Same reason `serve` says on stdout which port it walked to.
       if (days !== null && lock === null) {
         const why = heldBy === null ? `could not take the journal lock in ${historyDir}` : `pid ${heldBy} holds the journal in ${historyDir}`;
-        console.log(`tarmac: ${why}, so this serve keeps no journal`);
+        console.log(`tarmac: ${sanitise(why)}, so this serve keeps no journal`);
       }
       // Given back on the way out, signals included: Node's default for each of these ends the
       // process without running an exit hook, so a Ctrl-C would leave the lock behind and the
@@ -241,7 +241,7 @@ try {
       if (!args.demo) {
         const { reaped, failed } = reapOrphanedTemps(snapshotsDir);
         if (reaped > 0) console.log(`tarmac: reaped ${reaped} orphaned snapshot temp file(s)`);
-        if (failed > 0) console.error(`tarmac: could not remove ${failed} orphaned temp file(s) under ${snapshotsDir}`);
+        if (failed > 0) console.error(`tarmac: could not remove ${failed} orphaned temp file(s) under ${sanitise(snapshotsDir)}`);
       }
 
       // The invented day ends now, so the last minute of it is the fleet the live view shows.
@@ -339,6 +339,7 @@ try {
     }
   }
 } catch (e) {
-  console.error(`tarmac: ${(e as Error).message}`);
+  // A refusal names paths from `--home` and `--snapshots-dir`, which may hold any byte but NUL.
+  console.error(`tarmac: ${sanitise((e as Error).message)}`);
   process.exit(1);
 }
