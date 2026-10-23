@@ -552,7 +552,9 @@ function recordOf(line: string): Record_ | null {
       // Nor is it a project: it is the basename of `/`, which a journal written before the fleet
       // read it as no project may still carry.
       project: typeof entry.project === 'string' && entry.project !== '' ? entry.project : null,
-      kind: typeof entry.kind === 'string' ? entry.kind : null,
+      // Nor a kind: a journal written before #212 may carry it, and `''` is not `interactive`,
+      // so the anchored views would leave the session out as an agent.
+      kind: typeof entry.kind === 'string' && entry.kind !== '' ? entry.kind : null,
       ctxPct: number(entry.ctxPct),
       costUsd: number(entry.costUsd),
       state: typeof entry.state === 'string' ? entry.state : null,
