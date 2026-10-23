@@ -33,12 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **A refusal, the lines an install prints after its plan and the CLI warnings show a control
+- **A refusal, the lines an install prints after its plan and three CLI warnings show a control
   character as a visible mark.** The plan already did (#264), but a refusal, the `undo with`
-  line, the line naming what a move cleared and the warnings `list` and `serve` print about the
-  wrapper, the journal lock and leftover temp files still printed their paths as they were, so
-  an ESC in a `--home` or a `--snapshots-dir` reached the terminal. Each one now prints as
-  U+FFFD (#275).
+  line, the line naming what a move cleared, the warning `list` prints about a wrapper that does
+  not say where it writes, and the lines `serve` prints about the journal lock and leftover temp
+  files still printed their paths as they were, so an ESC in a `--home` or a `--snapshots-dir`
+  reached the terminal. Each such character now prints as U+FFFD (#275).
 
 - **A journal line with an empty `kind` no longer replays as an agent.** The reader kept `''`
   as a kind, and once one session in the range calls itself `interactive`, every other kind
