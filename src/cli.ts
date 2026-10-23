@@ -22,7 +22,7 @@ import { install, uninstall, paths, planInstall, planUninstall, installedSnapsho
 import { confirmTyped } from './prompt.ts';
 import { reapOrphanedTemps } from './reap.ts';
 import { acquireJournalLock, createHistoryStore, historyDirFor } from './history-store.ts';
-import { clearedLine, renderPlan, renderSettings, renderTable, restoreMeaning, servingLine } from './render.ts';
+import { clearedLine, renderPlan, renderSettings, renderTable, restoreMeaning, sanitise, servingLine } from './render.ts';
 import { runWatch } from './watch.ts';
 
 const USAGE = `tarmac — fleet observability for Claude Code
@@ -136,7 +136,7 @@ try {
       console.log(
         res.alreadyInstalled
           ? `install: already installed — wrapper regenerated, settings.json left alone`
-          : `install: statusLine wrapped — undo with \`${plan.undo}\``,
+          : `install: statusLine wrapped — undo with \`${sanitise(plan.undo)}\``,
       );
       // What the plan promised, as it actually went, for each directory this install can
       // clear: a frame of the OLD wrapper can land in either between the two, so the counts
@@ -339,6 +339,7 @@ try {
     }
   }
 } catch (e) {
-  console.error(`tarmac: ${(e as Error).message}`);
+  // A refusal names paths from `--home` and `--snapshots-dir`, which may hold any byte but NUL.
+  console.error(`tarmac: ${sanitise((e as Error).message)}`);
   process.exit(1);
 }

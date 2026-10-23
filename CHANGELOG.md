@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A refusal and the lines an install prints after its plan show a control character as a
+  visible mark.** The plan already did (#264), but a refusal, the `undo with` line and the
+  line naming what a move cleared still printed their paths as they were, so an ESC in a
+  `--home` or a `--snapshots-dir` reached the terminal. Each one now prints as U+FFFD (#275).
+
 - **A journal line with an empty `kind` no longer replays as an agent.** The reader kept `''`
   as a kind, and once one session in the range calls itself `interactive`, every other kind
   counts as an agent and stays off the context chart, so at 7d and 30d such a session was

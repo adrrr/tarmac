@@ -107,7 +107,7 @@ const movedFate = (moving: ClearedPayloads): string =>
 
 /** What an install cleared, as it went: the same sentence for both directories it can clear. */
 export const clearedLine = (cleared: ClearedPayloads, snapshots: string): string =>
-  `install: cleared ${cleared.payloads} runtime payload(s) from ${cleared.dir} — they belong in ${snapshots}` +
+  `install: cleared ${cleared.payloads} runtime payload(s) from ${sanitise(cleared.dir)} — they belong in ${sanitise(snapshots)}` +
   (cleared.kept > 0 ? ` (${cleared.kept} file(s) kept, so the directory stays)` : '');
 
 /**
@@ -401,7 +401,7 @@ function clip(cell: string, i: number): string {
  * becomes U+FFFD: one column, and visible, because a character silently dropped is a name
  * silently rewritten — the reader has to be able to see that something was there.
  */
-const sanitise = (cell: string): string => cell.replace(/[\p{Cc}\p{Bidi_Control}]/gu, '\uFFFD');
+export const sanitise = (cell: string): string => cell.replace(/[\p{Cc}\p{Bidi_Control}]/gu, '\uFFFD');
 
 /**
  * How many columns a string paints. What the terminal counts, and what neither `.length` nor
