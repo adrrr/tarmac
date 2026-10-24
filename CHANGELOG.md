@@ -40,6 +40,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   files still printed their paths as they were, so an ESC in a `--home` or a `--snapshots-dir`
   reached the terminal. Each such character now prints as U+FFFD (#275).
 
+- **A symlink at `history/.lock` no longer holds the journal for as long as its target is
+  touched.** The pid was read off the link itself, so it had none, but the heartbeat was read
+  through it, so a target something else kept writing to looked like a serve alive and beating,
+  and every `serve` with a retention kept no journal. A link that pointed at nothing held it for
+  good, its heartbeat unreadable and the link never removed. The heartbeat is the link's own now,
+  and a link left quiet for five minutes is reclaimed like any other lock (#279).
+
 - **A journal line with an empty `kind` no longer replays as an agent.** The reader kept `''`
   as a kind, and once one session in the range calls itself `interactive`, every other kind
   counts as an agent and stays off the context chart, so at 7d and 30d such a session was
