@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An invisible format character in a project name no longer shifts its `tarmac list` row.**
+  U+180E, U+2060..U+2064, U+206A..U+206F, U+1BCA0..U+1BCA3, U+1D173..U+1D17A and U+E0001 are
+  neither Wide nor a mark, so the table counted each one column, but a terminal draws nothing
+  for them and glibc gives them no width, and the row came out a column short. They now count
+  none (#278).
+
 - **A refusal, the lines an install prints after its plan and three CLI warnings show a control
   character as a visible mark.** The plan already did (#264), but a refusal, the `undo with`
   line, the line naming what a move cleared, the warning `list` prints about a wrapper that does

@@ -558,6 +558,17 @@ test('a Hangul filler is no columns, so its row lines up with the others', () =>
   assert.equal(padding(filler), padding(ascii));
 });
 
+// The default ignorable format characters (#278): U+180E, U+2060..U+2064, U+206A..U+206F,
+// U+1BCA0..U+1BCA3, U+1D173..U+1D17A and U+E0001. Neither Wide nor a mark, so the table gave
+// each one column, but a terminal draws nothing for them and glibc gives them no width.
+test('an invisible format character is no columns, so its row lines up with the others', () => {
+  for (const ch of ['\u180E', '\u2060', '\u2063', '\u2064', '\u206A', '\u206F', '\u{1BCA0}', '\u{1BCA3}', '\u{1D173}', '\u{1D17A}', '\u{E0001}'])
+    assert.equal(measure(`ab${ch}cd`), measure('abcd'), `U+${ch.codePointAt(0)!.toString(16).toUpperCase()}`);
+  const out = renderTable(fleet([row({ project: 'ab\u2060cd' }), row({ sessionId: 's2', project: 'abcd' })], { sessions: 2 }));
+  const [joiner, ascii] = out.split('\n').slice(1, 3);
+  assert.equal(padding(joiner), padding(ascii));
+});
+
 // A cell is made safe to print before the cap is consulted, and that order is the point: four
 // of the eight columns have no cap, and a guard that lived past the early return would cover
 // the capped four alone. The type forbids the word below. CTX prints the reader's own
