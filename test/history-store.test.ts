@@ -631,6 +631,57 @@ test('a lock that is a named pipe is read as unreadable rather than waited on', 
   }
 });
 
+// The other half of #197's repro (#279): the lock is only taken by a serve that keeps a
+// journal, so a serve with no retention never reads it, and a pipe there costs it nothing.
+// Pinned rather than assumed, through the binary for the same reason as above.
+test('a serve that keeps no journal never reads the lock, so a named pipe there holds nothing up', async () => {
+  const root = tempDir('tarmac-lock-');
+  const snapshots = path.join(root, 'snapshots');
+  const dir = historyDirFor(snapshots);
+  fs.mkdirSync(snapshots, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const made = spawnSync('mkfifo', [lockFile(dir)]);
+  assert.equal(made.status, 0, `mkfifo ${lockFile(dir)}: ${made.error?.message ?? made.stderr}`);
+  // Quiet for longer than a lock is honoured, so a serve that judged it would reclaim it: the
+  // pipe still being there at the end is what says nothing read it.
+  const quiet = (Date.now() - 10 * 60_000) / 1000;
+  fs.lutimesSync(lockFile(dir), quiet, quiet);
+
+  const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts');
+  const child = spawn(process.execPath, [cli, 'serve', '--port', '0', '--home', root, '--snapshots-dir', snapshots], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  try {
+    const out = await waitForOutput(child, /tarmac serving/);
+    assert.doesNotMatch(out, /journal lock|holds the journal/, 'no journal was asked for, so no lock was judged');
+    assert.ok(fs.lstatSync(lockFile(dir)).isFIFO(), 'and the pipe is where it was');
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+// The pid is read off the link itself and the heartbeat was read through it (#279): a symlink at
+// `.lock` had no pid and the fresh mtime of whatever it pointed at, so a file something else
+// keeps touching held the directory for as long as that went on. Both are the link's now.
+test('a lock that is a symlink is judged by its own heartbeat, not its target\'s', () => {
+  const root = tempDir('tarmac-lock-');
+  const dir = path.join(root, 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  const target = path.join(root, 'busy');
+  fs.writeFileSync(target, `${process.pid}\n`);
+  fs.symlinkSync(target, lockFile(dir));
+  const now = Date.now();
+  const quiet = (now - 5 * 60_000 - 1000) / 1000;
+  fs.lutimesSync(lockFile(dir), quiet, quiet);
+  fs.utimesSync(target, now / 1000, now / 1000);
+
+  const { lock } = acquireJournalLock({ dir, now: () => now });
+
+  assert.ok(lock, 'a link nobody has touched for five minutes is taken over, however busy its target');
+  assert.ok(fs.lstatSync(lockFile(dir)).isFile(), 'and the lock is a file of ours again');
+  assert.equal(fs.readFileSync(target, 'utf8').trim(), String(process.pid), 'the target is not touched');
+});
+
 // The startup sweep runs on `listening`, before the first tick, and it is the destructive half
 // of #133: `prune` is reached by two paths and only one of them passed through `append`.
 test('a store that lost its directory prunes nothing, on the path that does not go through append', () => {

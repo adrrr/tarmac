@@ -174,7 +174,9 @@ export function acquireJournalLock({ dir, now = Date.now }: { dir: string; now?:
   const pid = lockPid(file);
   let beat: number | null;
   try {
-    beat = fs.statSync(file).mtimeMs;
+    // `lstat`, as `lockPid` reads it: a link at `.lock` beat with its target, so a file that
+    // something else keeps touching held the directory for as long as that went on (#279).
+    beat = fs.lstatSync(file).mtimeMs;
   } catch {
     // No file to read a heartbeat off, so nothing holds this: it went between the two calls.
     beat = null;
@@ -196,7 +198,7 @@ export function acquireJournalLock({ dir, now = Date.now }: { dir: string; now?:
   // closes it is one level up, where every tick re-reads the lock before writing, so a directory
   // that ended up with two owners has one again within the minute.
   try {
-    if (lockPid(file) === pid && fs.statSync(file).mtimeMs === beat) fs.unlinkSync(file);
+    if (lockPid(file) === pid && fs.lstatSync(file).mtimeMs === beat) fs.unlinkSync(file);
   } catch {
     // Already gone, or not ours to remove. The retry below is what decides either way.
   }
