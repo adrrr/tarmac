@@ -472,6 +472,7 @@ const RIDES = /[\p{Mn}\p{Me}\u200B-\u200D\uFEFF\uFE00-\uFE0F\u1160-\u11FF\uD7B0-
  * lists of what rides would drift apart.
  */
 const LEADING_RIDES = new RegExp(`^${RIDES.source}+`, 'u');
+const INVISIBLE = /^[\u180E\u2060-\u2064\u206A-\u206F\u{1BCA0}-\u{1BCA3}\u{1D173}-\u{1D17A}\u{E0001}]/u;
 /**
  * One regional indicator, anchored at both ends, and that is what pairs from the left rather
  * than swallowing a run: a glyph that is already a pair fails the single-indicator test, so
@@ -508,6 +509,9 @@ export function widthOf(g: string): number {
   // nothing: tmux 3.6 and later drop it and glibc 2.40 and later give it no columns (#271).
   // macOS's own wcwidth and utf8proc still answer two, and an older tmux follows them.
   if (cp === 0x3164) return 0;
+  // The default ignorable format characters: neither Wide nor a mark, so the table would give
+  // them one, but a terminal draws nothing for them and glibc gives them no width (#278).
+  if (INVISIBLE.test(base)) return 0;
   return WIDE.some(([lo, hi]) => cp >= lo && cp <= hi) ? 2 : 1;
 }
 
