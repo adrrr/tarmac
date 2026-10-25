@@ -81,16 +81,28 @@ interface Segment {
   waitingFor?: string;
 }
 
-interface Actor {
+interface Base {
   sid: string;
   cwd: string;
   name: string;
-  kind: 'interactive' | 'background';
   pid: number | null;
-  model: { id: string; display_name: string };
-  effort: string;
   /** The minute it appears. Every actor is still there at the end: the shown minute is eight. */
   born: number;
+  segments: Segment[];
+}
+
+/**
+ * A background agent: a row of `claude agents --json` and nothing else. It draws no frame, so
+ * no status line ever files it a snapshot, and the demo invents none (#280).
+ */
+interface Agent extends Base {
+  kind: 'background';
+}
+
+interface Actor extends Base {
+  kind: 'interactive';
+  model: { id: string; display_name: string };
+  effort: string;
   /** Context percent at its first turn, and how fast the window fills while it works. */
   ctxFrom: number;
   ctxPerBusyMinute: number;
@@ -98,7 +110,6 @@ interface Actor {
   costPerBusyMinute: number;
   /** How old its reading is whenever it is taken — a terminal nobody is looking at draws less. */
   ageMs: number;
-  segments: Segment[];
   /**
    * A minute range this session has taken no turn in — the `used_percentage: null` dial. One
    * session recycles mid-day so a reader scrubbing the record walks past the state this whole
@@ -115,7 +126,7 @@ interface Actor {
  * — because a record whose every minute holds the same fleet is a scrubber with nothing behind
  * it, and flat charts are the thing #150 is replacing.
  */
-const ACTORS: Actor[] = [
+const ACTORS: (Actor | Agent)[] = [
   {
     sid: '4e91c0a7-1d35-4b82-9f60-3a7c58d2e014',
     cwd: `${WORK}/api-gateway`,
@@ -130,7 +141,7 @@ const ACTORS: Actor[] = [
     // two thirds is a fleet with nothing at stake, and the number most people install this to
     // watch is the one that is about to run out.
     ctxPerBusyMinute: 0.147,
-    costPerBusyMinute: 0.038,
+    costPerBusyMinute: 0.046,
     ageMs: 2_000,
     // The recycle at 642 is why its ramp restarts: a compacted session is a new window.
     fresh: { from: 642, to: 654 },
@@ -154,7 +165,7 @@ const ACTORS: Actor[] = [
     born: 0,
     ctxFrom: 5,
     ctxPerBusyMinute: 0.07,
-    costPerBusyMinute: 0.019,
+    costPerBusyMinute: 0.023,
     ageMs: 68_000,
     segments: [
       { from: 0, status: 'idle' },
@@ -175,7 +186,7 @@ const ACTORS: Actor[] = [
     born: 0,
     ctxFrom: 11,
     ctxPerBusyMinute: 0.06,
-    costPerBusyMinute: 0.041,
+    costPerBusyMinute: 0.050,
     ageMs: 3_000,
     segments: [
       { from: 0, status: 'busy' },
@@ -196,7 +207,7 @@ const ACTORS: Actor[] = [
     born: 214,
     ctxFrom: 4,
     ctxPerBusyMinute: 0.09,
-    costPerBusyMinute: 0.033,
+    costPerBusyMinute: 0.040,
     ageMs: 5_000,
     segments: [
       { from: 214, status: 'idle' },
@@ -213,13 +224,7 @@ const ACTORS: Actor[] = [
     name: 're-run the payments suite until it is green',
     kind: 'background',
     pid: null,
-    model: FABLE,
-    effort: 'max',
     born: 483,
-    ctxFrom: 4,
-    ctxPerBusyMinute: 0.05,
-    costPerBusyMinute: 0.017,
-    ageMs: 4_000,
     segments: [{ from: 483, status: 'working' }],
   },
   {
@@ -233,7 +238,7 @@ const ACTORS: Actor[] = [
     born: 908,
     ctxFrom: 3,
     ctxPerBusyMinute: 0.08,
-    costPerBusyMinute: 0.024,
+    costPerBusyMinute: 0.029,
     ageMs: 9_000,
     segments: [
       { from: 908, status: 'idle' },
@@ -250,13 +255,7 @@ const ACTORS: Actor[] = [
     name: 'draft the migration notes',
     kind: 'background',
     pid: null,
-    model: OPUS,
-    effort: 'high',
     born: 1017,
-    ctxFrom: 6,
-    ctxPerBusyMinute: 0.06,
-    costPerBusyMinute: 0.022,
-    ageMs: 7_000,
     segments: [{ from: 1017, status: 'working' }],
   },
   {
@@ -270,7 +269,7 @@ const ACTORS: Actor[] = [
     born: 1183,
     ctxFrom: 2,
     ctxPerBusyMinute: 0.12,
-    costPerBusyMinute: 0.046,
+    costPerBusyMinute: 0.056,
     ageMs: 47_000,
     segments: [
       { from: 1183, status: 'idle' },
@@ -284,14 +283,14 @@ const ACTORS: Actor[] = [
 const working = (status: string): boolean => status === 'busy' || status === 'working';
 
 /** Which segment an actor is in at `minute`. */
-function segmentAt(actor: Actor, minute: number): Segment {
+function segmentAt(actor: Base, minute: number): Segment {
   let current = actor.segments[0];
   for (const s of actor.segments) if (s.from <= minute) current = s;
   return current;
 }
 
 /** How many minutes of work an actor has done by `minute` — what fills a window and costs money. */
-function busyMinutes(actor: Actor, minute: number): number {
+function busyMinutes(actor: Base, minute: number): number {
   let total = 0;
   for (let i = 0; i < actor.segments.length; i++) {
     const s = actor.segments[i];
@@ -375,6 +374,7 @@ export function demoFleetAt(minute: number, dayStart: number, now: number = dayS
   const limits = rateLimits(minute, now, cyclesBack);
   const snapshots = new Map<string, Snapshot>();
   for (const a of live) {
+    if (a.kind === 'background') continue;
     const pct = contextAt(a, minute);
     snapshots.set(a.sid, {
       sessionId: a.sid,
