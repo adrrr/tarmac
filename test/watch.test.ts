@@ -162,3 +162,11 @@ test('the screen is cleared on a terminal, and never when the output is piped', 
   await tty.run;
   assert.match(tty.out[0], /^\x1b\[/);
 });
+
+// `--claude-bin` is a path typed on the command line, and the reason a refresh failed names
+// it, on every frame. One-shot `list` prints the same reason through `sanitise` (#283).
+test('a failing refresh prints the control characters in its reason as visible marks', () => {
+  const frame = renderWatch({ fleet: null, error: '/x/ag\u001b[8ments: not found', ageMs: 0, everyMs: 5000 });
+  assert.doesNotMatch(frame, /\u001b/, 'no escape reaches the terminal through the failure line');
+  assert.match(frame, /! refresh failing — \/x\/ag\uFFFD\[8ments: not found/);
+});

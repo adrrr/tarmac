@@ -6,7 +6,7 @@
 import http from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { reason, renderLive, renderPage } from './render.ts';
+import { reason, renderLive, renderPage, sanitise } from './render.ts';
 import type { View } from './render.ts';
 import { hostName, SOURCE_PHRASE } from './config.ts';
 import { createHistory, HISTORY_CADENCE_MS } from './history.ts';
@@ -101,7 +101,8 @@ export interface FleetServerDeps {
   /**
    * Where the journal's own troubles are said out loud. `serve` runs unattended for hours, so
    * a journal that quietly stopped writing would leave a reader believing they have a week of
-   * history until the day they go looking for it.
+   * history until the day they go looking for it. The default prints through `sanitise`: the
+   * journal's directory is in these lines, and it comes from `--home` as it was typed.
    */
   report?: (line: string) => void;
   /**
@@ -128,7 +129,7 @@ export function createFleetServer({
   rangeCacheMs = 60_000,
   readJournal = (s, range, now) => s.read(range, now),
   rangeDeadlineMs = 30_000,
-  report = (line) => console.error(line),
+  report = (line) => console.error(sanitise(line)),
   history = createHistory({ since: Date.now(), cadence: sampleEveryMs }),
   demo = false,
 }: FleetServerDeps): Server {
