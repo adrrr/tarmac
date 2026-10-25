@@ -41,6 +41,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   through the sanitiser. Each such character now prints as U+FFFD, as in the plan and the other
   CLI lines (#283).
 
+- **`serve --demo` no longer gives its two background agents a context reading.** An agent draws
+  no frame, so no status line ever files one, and the demo invented a snapshot for each anyway:
+  the screen showed eight readings over a `covered` of six. The two agents now carry none, so no
+  cost either, and the six sessions' invented rates rise to keep the day near what it cost
+  before (#280).
+
 - **An invisible format character in a project name no longer shifts its `tarmac list` row.**
   U+180E, U+2060..U+2064, U+206A..U+206F, U+1BCA0..U+1BCA3, U+1D173..U+1D17A and U+E0001 are
   neither Wide nor a mark, so the table counted each one column, but a terminal draws nothing

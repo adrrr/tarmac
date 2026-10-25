@@ -93,7 +93,7 @@ test('the shown minute puts a session in every state the map can draw, and the w
 test('no reading in the shown minute is stale, and every session is chained', () => {
   const { rows, health } = demoFleetAt(SHOWN, DAY_START);
   assert.equal(health.stale, 0);
-  for (const r of rows) {
+  for (const r of rows.filter((r) => r.kind !== 'background')) {
     assert.ok(r.snapshotAgeMs !== null && r.snapshotAgeMs < DEFAULT_STALE_AFTER_MS, `${r.project} is dated`);
   }
   // Against `chainable`, not `sessions`: the two background agents in this fleet draw no TUI
@@ -105,6 +105,18 @@ test('no reading in the shown minute is stale, and every session is chained', ()
   assert.equal(health.noSessionId, 0);
   assert.equal(health.schemaGuard.state, 'ok', 'a Claude Code build the fixtures cover: no shape-check footnote');
   assert.equal(health.unknownStatus, 1, 'the one unrecognised status the demo means to show, and only one');
+});
+
+// A background agent draws no frame, so no status line ever files it a reading (#280). One the
+// demo invented anyway put eight context readings on the screen over a `covered` of six.
+test('the demo shows a context reading for exactly the sessions it counts as covered', () => {
+  for (const minute of [0, 600, SHOWN]) {
+    const { rows, health } = demoFleetAt(minute, DAY_START);
+    for (const r of rows.filter((r) => r.kind === 'background')) {
+      assert.equal(r.ctxState, 'absent', `minute ${minute}: ${r.name} carries a reading no agent files`);
+    }
+    assert.equal(rows.filter((r) => r.ctxState !== 'absent').length, health.covered, `minute ${minute}`);
+  }
 });
 
 // A demo whose picture moved between two runs would be a screenshot nobody could re-take, and
