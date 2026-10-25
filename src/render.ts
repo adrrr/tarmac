@@ -291,7 +291,7 @@ export function renderTable({ rows, health }: Fleet): string {
   return (
     [line(head), ...body.map(line)].join('\n') +
     '\n' +
-    (warns.length ? '\n' + warns.join('\n') + '\n' : '') +
+    (warns.length ? '\n' + warns.map(sanitise).join('\n') + '\n' : '') +
     `\n${health.sessions} sessions · ${health.busy} busy · ${total}\n${accountLine(gauges, account, health)}\n`
   );
 }
@@ -922,7 +922,7 @@ export interface WatchFrame {
 export function renderWatch({ fleet, error, ageMs, everyMs }: WatchFrame): string {
   const parts: string[] = [];
   if (fleet) parts.push(renderTable(fleet));
-  if (error) parts.push(`! refresh failing — ${error}\n`);
+  if (error) parts.push(`! refresh failing — ${sanitise(error)}\n`);
   parts.push(
     // No fleet, no age: "updated 0s ago" before the first reading ever landed would be the
     // same confident lie as a 0% context nobody measured.

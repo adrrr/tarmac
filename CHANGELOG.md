@@ -33,6 +33,14 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The journal lines `serve` prints and the warnings under `tarmac list` show a control
+  character as a visible mark.** Both printed a path from `--home` or `--snapshots-dir` as it
+  was: the lines about pruning, a stopped journal or a failed write, and the `! snapshots
+  unavailable` warning, on every frame of `list --watch` too. So did the `! refresh failing`
+  line of `list --watch`, with the `--claude-bin` path that one-shot `list` already printed
+  through the sanitiser. Each such character now prints as U+FFFD, as in the plan and the other
+  CLI lines (#283).
+
 - **An invisible format character in a project name no longer shifts its `tarmac list` row.**
   U+180E, U+2060..U+2064, U+206A..U+206F, U+1BCA0..U+1BCA3, U+1D173..U+1D17A and U+E0001 are
   neither Wide nor a mark, so the table counted each one column, but a terminal draws nothing

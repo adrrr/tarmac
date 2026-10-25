@@ -852,3 +852,11 @@ test('the split names only a window the account line actually prints a number fo
   assert.match(out, /5h — schema drift/);
   assert.doesNotMatch(out, /read differently/);
 });
+
+// The footer is built out of paths as much as out of counts: a missing `--snapshots-dir` is
+// named in it, on every frame of `list --watch`, so it is printed the way a cell is (#283).
+test('makes a warning safe to print, the path in it included', () => {
+  const out = renderTable(fleet([row()], { snapshotsError: 'not found: /x/sn\u001b[8maps' }));
+  assert.doesNotMatch(out, /\u001b/, 'no escape reaches the terminal through the footer');
+  assert.match(out, /! snapshots unavailable — not found: \/x\/sn�\[8maps/);
+});

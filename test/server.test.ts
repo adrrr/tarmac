@@ -1663,6 +1663,19 @@ test('a journal stopped by its own cap says so, rather than filling up in silenc
   );
 });
 
+// `--home` names the journal's directory, and `serve` prints it with nothing between it and the
+// terminal but the default `report`, so that is where an escape in it is made visible (#283).
+test("the default report prints a journal path's control characters as visible marks", async (t) => {
+  const dir = path.join(tempDir('tarmac-serve-hist-'), 'ho\u001b[8mme', 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '2001-01-01.jsonl'), '');
+  const said = t.mock.method(console, 'error', () => {});
+  await withServer(collectOk, async () => {}, { sampleEveryMs: 60_000, store: createHistoryStore({ dir, days: 1 }) });
+  const lines = said.mock.calls.map((c) => String(c.arguments[0]));
+  assert.ok(lines.some((l) => /removed 1 journal file/.test(l)), `the prune said nothing: ${lines.join(' | ')}`);
+  for (const l of lines) assert.doesNotMatch(l, /\u001b/, 'no escape reaches the terminal');
+});
+
 // Once, not once a minute. A line a minute for the rest of the day is a log a reader learns to
 // scroll past, which is the same as not printing it.
 test('a journal that keeps failing says so once, not on every tick', async () => {
