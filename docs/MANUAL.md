@@ -228,7 +228,7 @@ every session diffs forever (#20). The rules that came out of the move:
   leaves is what the old directory's purge clears: the runtime payloads this wrapper wrote
   there, plain files, in that directory and not a level below it, the provenance being the
   wrapper's own frozen path. The `history/` journal sits *beside* that directory rather than
-  in it, so a move leaves it where it was and `serve --range` starts a new one at the new
+  in it, so a move leaves it where it was and `serve` starts a new one at the new
   location (#140). The move out of `.claude` is the exception, being the migration above.
 
 If you read the snapshots with something other than tarmac, this is a breaking change of path.
