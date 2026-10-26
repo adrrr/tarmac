@@ -815,7 +815,8 @@ export const wrapperIsOurs = (p: TarmacPaths): boolean => carriesWrapperMarker(p
 export function installedSnapshotsDir(p: TarmacPaths): string | null {
   const head = readHead(p.wrapper, 8192);
   if (head === null || !head.includes(WRAPPER_MARKER)) return null;
-  const line = /^TARMAC_DIR=(.*)$/m.exec(head);
+  // A quoted value may span lines: `--snapshots-dir` refuses only NUL, and sh keeps a newline.
+  const line = /^TARMAC_DIR=('(?:[^']|'\\'')*'|"[^"]*"|.*)/m.exec(head);
   return line === null ? null : shUnquote(line[1]);
 }
 

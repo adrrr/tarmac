@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A newline in `--snapshots-dir` no longer hides the install.** The wrapper keeps the path
+  as it was given, newline included, but the reader took only the first line of it, found no
+  closing quote and answered "no install here". A re-install then froze the default directory
+  without refusing, `list` and `serve` read the default with a warning, and `uninstall` could
+  not name the directory it leaves behind. The quoted value is now read across lines (#284).
 - **The journal lines `serve` prints and the warnings under `tarmac list` show a control
   character as a visible mark.** Both printed a path from `--home` or `--snapshots-dir` as it
   was: the lines about pruning, a stopped journal or a failed write, and the `! snapshots
