@@ -1989,6 +1989,17 @@ test('a snapshots path with a newline survives the round trip', () => {
   assert.equal(installedSnapshotsDir(paths(home)), odd);
 });
 
+// The quoted value must end the line. sh reads `'/a'"/sub"` as `/a/sub`, so stopping at the
+// first closing quote would read the wrong directory without a word.
+test('a snapshots value with more after its closing quote is not read', () => {
+  const home = fakeHome('{}');
+  fs.mkdirSync(paths(home).dir, { recursive: true });
+  const wrapper = renderWrapper({ snapshotDir: '/a', chainCommand: null });
+  assert.ok(wrapper.includes("TARMAC_DIR='/a'"));
+  fs.writeFileSync(paths(home).wrapper, wrapper.replace("TARMAC_DIR='/a'", "TARMAC_DIR='/a'\"/sub\""));
+  assert.equal(installedSnapshotsDir(paths(home)), null);
+});
+
 // M4 (review): the install plan names the snapshots directory precisely because it is no
 // longer guessable from the path above it. `uninstall` is the command that LEAVES those files
 // behind — "your snapshots survive uninstall" — so it owes the same sentence, and it owes the

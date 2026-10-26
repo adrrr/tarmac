@@ -816,7 +816,8 @@ export function installedSnapshotsDir(p: TarmacPaths): string | null {
   const head = readHead(p.wrapper, 8192);
   if (head === null || !head.includes(WRAPPER_MARKER)) return null;
   // A quoted value may span lines: `--snapshots-dir` refuses only NUL, and sh keeps a newline.
-  const line = /^TARMAC_DIR=('(?:[^']|'\\'')*'|"[^"]*"|.*)/m.exec(head);
+  // It must also end the line: anything after the closing quote changes what sh reads.
+  const line = /^TARMAC_DIR=('(?:[^']|'\\'')*'|"[^"]*"|.*)$/m.exec(head);
   return line === null ? null : shUnquote(line[1]);
 }
 
