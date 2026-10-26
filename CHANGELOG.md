@@ -27,7 +27,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   the old purge already followed — only the names it files, only plain files, only that directory
   and never a level below it, and one file it cannot show it wrote keeps the directory — and the
   plan counts them before you confirm. The `history/` journal `serve` keeps beside that directory
-  is not among them: it stays where it was, so a `serve --range` after a move reads an empty one
+  is not among them: it stays where it was, so a `serve` after a move reads an empty one
   (#140). The move out of `.claude` still needs no flag: it is the migration, and it was always
   announced and collected.
 
@@ -153,7 +153,7 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   the basename of the working directory, and the basename of the root is the empty string. The
   fleet now reads it as no project: `list` prints a dash where it printed nothing, the history
   page names it with a dash, and `list --json`, `/api/fleet` and the journal carry `null` where
-  they carried `""`. The `--range` reader reads a `""` already in the journal the same way, so
+  they carried `""`. The range reader reads a `""` already in the journal the same way, so
   at 7d and 30d such a session counts under the dash, with the sessions whose directory was
   never published, and a `""` no longer takes a day's cost away from a project another reading
   named (#246).
