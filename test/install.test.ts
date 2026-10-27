@@ -1768,7 +1768,10 @@ test('a .git file counts as a repository just as a .git directory does', () => {
 test('the plan is quiet about git when .claude is not a repository', () => {
   const plan = planInstall({ home: fakeHome('{}') });
   assert.equal(plan.gitRepo, null);
-  assert.equal(/git/i.test(renderPlan(plan)), false);
+  // Not a bare /git/i: the plan prints the home path, and mkdtemp's random suffix can spell it.
+  const out = renderPlan(plan);
+  assert.doesNotMatch(out, /git repositor/i);
+  assert.doesNotMatch(out, /\.gitignore/);
 });
 
 // The workaround someone will already have applied to #20: point the legacy directory at a
