@@ -199,10 +199,12 @@ export function acquireJournalLock({ dir, now = Date.now }: { dir: string; now?:
   // closes it is one level up, where every tick re-reads the lock before writing, so a directory
   // that ended up with two owners has one again within the minute.
   try {
-    const judged = fs.lstatSync(file);
+    // The pid, then the heartbeat, then the removal, in that order: the lstat that judges is the
+    // last read before it, so a lock that arrived after the pid was read is told by its mtime.
     // `rmdir` for a directory, which `unlink` cannot remove (#291), and not a recursive remove:
     // one that holds something is not ours, and ENOTEMPTY keeps it, as in the install's unwind.
-    if (lockPid(file) === pid && judged.mtimeMs === beat) {
+    const judged = lockPid(file) === pid ? fs.lstatSync(file) : null;
+    if (judged !== null && judged.mtimeMs === beat) {
       if (judged.isDirectory()) fs.rmdirSync(file);
       else fs.unlinkSync(file);
     }

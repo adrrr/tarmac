@@ -746,6 +746,42 @@ test('a lock that changed since it was judged is not the lock a reclaim removes'
   assert.equal(heldBy, 1, 'and the serve that owns it now is the one to name');
 });
 
+// The same window on a lock with no pid in it, where the pid cannot tell the two locks apart: a
+// serve in the middle of taking the directory has a file there with no pid in it yet, read
+// exactly as the abandoned one is, so the heartbeat is the one read that tells them apart and it
+// has to be the last before the removal. Read first, the lock that replaced the judged one was
+// removed in its place and two serves held the directory. Stood in by the first lstat after the
+// clock, which is the first read of the recheck in either order.
+test('an unreadable lock replaced after it was judged is not the lock a reclaim removes', () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(lockFile(dir), 'not a pid\n');
+  const quiet = beat(dir) + 5 * 60_000 + 1;
+  let clocked = false;
+  const arrived: number[] = [];
+  const realLstat = fs.lstatSync;
+  fs.lstatSync = ((p: fs.PathLike, options?: fs.StatSyncOptions) => {
+    const read = realLstat(p, options);
+    if (clocked && arrived.length === 0 && p === lockFile(dir)) {
+      // Another serve removes the abandoned lock and opens its own, not yet written.
+      fs.unlinkSync(lockFile(dir));
+      arrived.push(fs.openSync(lockFile(dir), 'wx'));
+    }
+    return read;
+  }) as typeof fs.lstatSync;
+  let lock;
+  try {
+    ({ lock } = acquireJournalLock({ dir, now: () => ((clocked = true), quiet) }));
+  } finally {
+    fs.lstatSync = realLstat;
+  }
+
+  assert.equal(arrived.length, 1, 'the other serve really did arrive inside the reclaim');
+  assert.equal(lock, null, 'its lock is not the one that was judged abandoned');
+  assert.ok(fs.fstatSync(arrived[0]!).nlink > 0, 'and it is still on disk, so one serve holds the directory');
+  fs.closeSync(arrived[0]!);
+});
+
 // `stopped` is a sentence for a reader and it now has two causes; `capped` is the one a machine
 // reads. `/api/history` carries it into `coverage.capped`, which a page renders as "journal
 // capped": a serve that lost its directory has not filled anything, and must not say it has.
