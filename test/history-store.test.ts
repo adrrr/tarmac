@@ -598,6 +598,31 @@ test('an unreadable lock nobody has touched for five minutes is taken over', () 
   assert.equal(fs.readFileSync(lockFile(dir), 'utf8').trim(), String(process.pid));
 });
 
+// A directory at `.lock` reads as an unreadable lock, but `unlink` cannot remove one, so it was
+// never reclaimed and every serve with a retention kept no journal, however quiet it stayed (#291).
+// `rmdir` and not a recursive remove: a directory that holds something is not ours to empty.
+test('a directory at the lock is reclaimed when empty and quiet, and held otherwise', () => {
+  const at = (contents: boolean) => {
+    const dir = path.join(tempDir('tarmac-lock-'), 'history');
+    fs.mkdirSync(lockFile(dir), { recursive: true });
+    if (contents) fs.writeFileSync(path.join(lockFile(dir), 'keep'), 'x');
+    return dir;
+  };
+
+  const fresh = at(false);
+  assert.equal(acquireJournalLock({ dir: fresh, now: () => beat(fresh) }).lock, null, 'a fresh one holds');
+  assert.ok(fs.lstatSync(lockFile(fresh)).isDirectory());
+
+  const quiet = at(false);
+  const { lock } = acquireJournalLock({ dir: quiet, now: () => beat(quiet) + 5 * 60_000 + 1 });
+  assert.ok(lock, 'an empty one quiet for five minutes is taken over');
+  assert.equal(fs.readFileSync(lockFile(quiet), 'utf8').trim(), String(process.pid));
+
+  const full = at(true);
+  assert.equal(acquireJournalLock({ dir: full, now: () => beat(full) + 5 * 60_000 + 1 }).lock, null);
+  assert.ok(fs.existsSync(path.join(lockFile(full), 'keep')), 'one that holds something stays as it is');
+});
+
 // The family of #190, #193 and #195, on the file this module opens before any other: the lock
 // was read without asking what it was, and `readFileSync` on a FIFO waits for a writer that
 // need never come — one named pipe at `.lock` and `serve` printed its settings, listened on

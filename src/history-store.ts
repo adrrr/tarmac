@@ -97,7 +97,8 @@ const lockPid = (file: string): number | null => {
     // printed the settings block and nothing after it (#197).
     //
     // A lock that is not a regular file reads as one with no pid in it, which the rules below
-    // already answer: fresh, it holds the directory; quiet for five minutes, it is reclaimed.
+    // already answer: fresh, it holds the directory; quiet for five minutes, it is reclaimed —
+    // except a directory that holds something, which is not ours to empty and stays (#291).
     // Nothing here blocks and nothing is removed for being the wrong kind.
     //
     // `lstat`, where the guards on settings.json and backup.json stat: those two are a reader's
@@ -198,7 +199,13 @@ export function acquireJournalLock({ dir, now = Date.now }: { dir: string; now?:
   // closes it is one level up, where every tick re-reads the lock before writing, so a directory
   // that ended up with two owners has one again within the minute.
   try {
-    if (lockPid(file) === pid && fs.lstatSync(file).mtimeMs === beat) fs.unlinkSync(file);
+    const judged = fs.lstatSync(file);
+    // `rmdir` for a directory, which `unlink` cannot remove (#291), and not a recursive remove:
+    // one that holds something is not ours, and ENOTEMPTY keeps it, as in the install's unwind.
+    if (lockPid(file) === pid && judged.mtimeMs === beat) {
+      if (judged.isDirectory()) fs.rmdirSync(file);
+      else fs.unlinkSync(file);
+    }
   } catch {
     // Already gone, or not ours to remove. The retry below is what decides either way.
   }

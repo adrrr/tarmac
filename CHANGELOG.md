@@ -271,7 +271,8 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   no fleet served, and the one file in that directory tarmac writes for itself is what did it. The
   kind is asked before the open now, and a lock that is not a regular file reads as a lock with no
   pid in it — held while its heartbeat is fresh, reclaimed after the five minutes of silence that
-  frees any unreadable lock. `lstat` here, where settings.json and backup.json are stat'd: those
+  frees any unreadable lock. A directory there is reclaimed only when empty: one that holds
+  anything is not tarmac's to clear, and it keeps that `serve` from journaling (#291). `lstat` here, where settings.json and backup.json are stat'd: those
   are a reader's files and may be symlinked into place, this one is created `wx` in a directory
   tarmac owns and is never pointed anywhere (#197).
 - **A fresh install no longer writes backup.json without asking what is there.** The read side
