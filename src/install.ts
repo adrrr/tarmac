@@ -1002,10 +1002,18 @@ function unwind(p: TarmacPaths, before: Map<string, Buffer | null>): void {
   const drop = (target: string, remove: (t: string) => void): void => {
     if (!before.has(target)) return attempt(() => remove(target));
     const original = before.get(target) ?? null;
-    // Only what changed goes back: a write truncates first, and on the full disk that brought
-    // us here a needless rewrite can leave backup.json, the only way back, half written.
+    // Only what changed goes back. By rename first, as `writeWrapper` writes, so a write that stops
+    // half way leaves the file whole (#295); in place only when the rename does not fit, on the
+    // full disk that can bring us here: it needs room for a second copy, and APFS some for the
+    // rename itself, where a write in place reuses the blocks the file already holds.
     if (original !== null && !readOrNull(target)?.equals(original)) {
-      attempt(() => fs.writeFileSync(target, original));
+      attempt(() => {
+        try {
+          writeAtomic(target, original);
+        } catch {
+          fs.writeFileSync(target, original);
+        }
+      });
     }
   };
   drop(p.backup, (f) => fs.rmSync(f, { force: true }));
@@ -1053,7 +1061,7 @@ function writeWrapper(p: TarmacPaths, chainCommand: string | null, home: string)
 //
 // `createMode` is the mode of a file the write creates: the temp file is always new, so a
 // `mode` passed to its open would only ever apply, masked by umask, to the temp name.
-function writeAtomic(file: string, text: string, createMode?: number): void {
+function writeAtomic(file: string, text: string | Buffer, createMode?: number): void {
   const target = resolveWriteTarget(file);
   const tmp = `${target}${TEMP_PREFIX}${process.pid}.tmp`;
   try {

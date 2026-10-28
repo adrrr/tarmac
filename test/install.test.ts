@@ -1410,6 +1410,66 @@ test('a re-install that runs out of disk leaves the old wrapper whole', () => {
   assert.deepEqual(strays, [], 'and the temp file does not outlive the run');
 });
 
+// The same full disk, one step later: the new wrapper is renamed into place, the settings write
+// fails, and the unwind puts the old wrapper back. Staged as a write under the wrapper's own
+// name truncating it and throwing, which an in-place write-back meets and a rename never does.
+test('the unwind puts the old wrapper back by rename, not in place', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const p = paths(home);
+  const wrapperBefore = fs.readFileSync(p.wrapper, 'utf8');
+  danglingSettings(home);
+
+  const realWrite = fs.writeFileSync;
+  fs.writeFileSync = ((file: fs.PathOrFileDescriptor, data: string, options?: fs.WriteFileOptions) => {
+    if (file === p.wrapper) {
+      realWrite(file, '', options);
+      throw Object.assign(new Error(`ENOSPC: no space left on device, write '${file}'`), { code: 'ENOSPC' });
+    }
+    realWrite(file, data, options);
+  }) as typeof fs.writeFileSync;
+  try {
+    assert.throws(() => install({ home }), /ENOENT/);
+  } finally {
+    fs.writeFileSync = realWrite;
+  }
+
+  assert.equal(fs.readFileSync(p.wrapper, 'utf8'), wrapperBefore, 'the statusline Claude Code runs is not left empty');
+  const strays = fs.readdirSync(p.dir).filter((f) => f.includes(TEMP_PREFIX));
+  assert.deepEqual(strays, [], 'and the temp file does not outlive the run');
+});
+
+// The rename's own price on that disk: a second copy, and on APFS room for the rename itself,
+// where a write over the file reuses the blocks its bytes already hold. Staged as every rename
+// the unwind makes failing with ENOSPC: the earlier install's files must still come back.
+test('the unwind still puts the old files back when the full disk refuses the rename', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const p = paths(home);
+  const backupBefore = fs.readFileSync(p.backup, 'utf8');
+  const wrapperBefore = fs.readFileSync(p.wrapper, 'utf8');
+  danglingSettings(home);
+
+  const realRename = fs.renameSync;
+  let wrapperRenames = 0;
+  fs.renameSync = ((from: fs.PathLike, to: fs.PathLike) => {
+    if (to === p.backup || (to === p.wrapper && ++wrapperRenames > 1)) {
+      throw Object.assign(new Error(`ENOSPC: no space left on device, rename '${from}' -> '${to}'`), { code: 'ENOSPC' });
+    }
+    realRename(from, to);
+  }) as typeof fs.renameSync;
+  try {
+    assert.throws(() => install({ home }), /ENOENT/);
+  } finally {
+    fs.renameSync = realRename;
+  }
+
+  assert.equal(fs.readFileSync(p.backup, 'utf8'), backupBefore, 'the way back is still the earlier install');
+  assert.equal(fs.readFileSync(p.wrapper, 'utf8'), wrapperBefore, 'and so is the wrapper it names');
+  const strays = fs.readdirSync(p.dir).filter((f) => f.includes(TEMP_PREFIX));
+  assert.deepEqual(strays, [], 'and no temp file outlives the run');
+});
+
 test('a fresh install writes the wrapper 0755', () => {
   const home = fakeHome('{}');
   install({ home });
