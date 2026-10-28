@@ -81,17 +81,29 @@ interface Segment {
   waitingFor?: string;
 }
 
-interface Actor {
+interface Base {
   sid: string;
   cwd: string;
   name: string;
-  kind: 'interactive' | 'background';
   pid: number | null;
-  model: { id: string; display_name: string };
-  effort: string;
   /** The minute it appears, and the minute it is gone — a fleet that never moves is a still. */
   born: number;
   dies: number;
+  segments: Segment[];
+}
+
+/**
+ * A background agent: a row of `claude agents --json` and nothing else. It draws no frame, so
+ * no status line ever files it a snapshot, and the demo invents none (#292).
+ */
+interface Agent extends Base {
+  kind: 'background';
+}
+
+interface Actor extends Base {
+  kind: 'interactive';
+  model: { id: string; display_name: string };
+  effort: string;
   /** Context percent at its first turn, and how fast the window fills while it works. */
   ctxFrom: number;
   ctxPerBusyMinute: number;
@@ -99,7 +111,6 @@ interface Actor {
   costPerBusyMinute: number;
   /** How old its snapshot is whenever it is read — a terminal nobody is looking at draws less. */
   ageMs: number;
-  segments: Segment[];
   /**
    * A minute range this session has taken no turn in — `used_percentage: null`, the "no turn
    * yet" dial. One session recycles mid-day so the replay has one to walk past.
@@ -110,7 +121,7 @@ interface Actor {
 // Six actors — four sessions and two background agents placed beside the session sharing
 // their directory — four of which are not there at midnight. The names are the fixtures'
 // standard: invented projects under an invented home, and agents named after their prompt.
-const ACTORS: Actor[] = [
+const ACTORS: (Actor | Agent)[] = [
   {
     sid: '3a91c7d2-5e48-4f06-8b13-97d40a62e5f1',
     cwd: `${DEMO_HOME}/harbor`,
@@ -123,7 +134,7 @@ const ACTORS: Actor[] = [
     dies: DEMO_MINUTES,
     ctxFrom: 6,
     ctxPerBusyMinute: 0.14,
-    costPerBusyMinute: 0.052,
+    costPerBusyMinute: 0.063,
     ageMs: 2_000,
     // The recycle at 700 is why the ramp restarts: a compacted session is a new window.
     fresh: { from: 700, to: 707 },
@@ -148,7 +159,7 @@ const ACTORS: Actor[] = [
     dies: DEMO_MINUTES,
     ctxFrom: 12,
     ctxPerBusyMinute: 0.09,
-    costPerBusyMinute: 0.031,
+    costPerBusyMinute: 0.038,
     ageMs: 96_000,
     segments: [
       { from: 0, status: 'idle' },
@@ -164,14 +175,8 @@ const ACTORS: Actor[] = [
     name: 'sweep the flaky specs',
     kind: 'background',
     pid: null,
-    model: { id: 'claude-fable-5', display_name: 'Fable 5' },
-    effort: 'max',
     born: 300,
     dies: DEMO_MINUTES,
-    ctxFrom: 4,
-    ctxPerBusyMinute: 0.05,
-    costPerBusyMinute: 0.018,
-    ageMs: 4_000,
     segments: [{ from: 300, status: 'working' }],
   },
   {
@@ -182,14 +187,8 @@ const ACTORS: Actor[] = [
     name: 'rewrite the changelog entry',
     kind: 'background',
     pid: null,
-    model: { id: 'claude-opus-5', display_name: 'Opus 5' },
-    effort: 'high',
     born: 611,
     dies: 883,
-    ctxFrom: 5,
-    ctxPerBusyMinute: 0.07,
-    costPerBusyMinute: 0.021,
-    ageMs: 6_000,
     segments: [{ from: 611, status: 'working' }],
   },
   {
@@ -204,7 +203,7 @@ const ACTORS: Actor[] = [
     dies: DEMO_MINUTES,
     ctxFrom: 3,
     ctxPerBusyMinute: 0.08,
-    costPerBusyMinute: 0.027,
+    costPerBusyMinute: 0.033,
     ageMs: 41_000,
     segments: [
       { from: 521, status: 'busy' },
@@ -224,7 +223,7 @@ const ACTORS: Actor[] = [
     dies: DEMO_MINUTES,
     ctxFrom: 2,
     ctxPerBusyMinute: 0.11,
-    costPerBusyMinute: 0.044,
+    costPerBusyMinute: 0.053,
     ageMs: 3_000,
     segments: [
       { from: 1103, status: 'idle' },
@@ -241,14 +240,14 @@ const ACTORS: Actor[] = [
 const working = (status: string): boolean => status === 'busy' || status === 'working';
 
 /** Which segment an actor is in at `minute`. */
-function segmentAt(actor: Actor, minute: number): Segment {
+function segmentAt(actor: Base, minute: number): Segment {
   let current = actor.segments[0];
   for (const s of actor.segments) if (s.from <= minute) current = s;
   return current;
 }
 
 /** How many minutes of work an actor has done by `minute` — what fills a window and costs money. */
-function busyMinutes(actor: Actor, minute: number): number {
+function busyMinutes(actor: Base, minute: number): number {
   let total = 0;
   for (let i = 0; i < actor.segments.length; i++) {
     const s = actor.segments[i];
@@ -310,7 +309,7 @@ export function demoMinute(minute: number, dayStart: number): DemoSources {
         };
   });
 
-  const snapshots = live.map((a) => {
+  const snapshots = live.filter((a): a is Actor => a.kind === 'interactive').map((a) => {
     const recycled = a.fresh !== undefined && minute >= a.fresh.from;
     const since = recycled ? busyMinutes(a, a.fresh!.from) : 0;
     // A session that has taken no turn since its recycle has the KEY, holding null. That is

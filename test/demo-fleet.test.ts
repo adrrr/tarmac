@@ -101,8 +101,20 @@ test('the minute the screenshots are taken of shows all four states, and the wai
 test('no reading in the captured minute is stale, so nothing in the screenshots is dated', () => {
   const fleet = fleetAt(DEMO_MINUTES - 1);
   assert.equal(fleet.health.stale, 0);
-  for (const r of fleet.rows) {
+  for (const r of fleet.rows.filter((r) => r.kind !== 'background')) {
     assert.ok(r.snapshotAgeMs !== null && r.snapshotAgeMs < DEFAULT_STALE_AFTER_MS, `${r.project} is dated`);
+  }
+});
+
+// A background agent draws no frame, so no status line ever files it a reading (#280). One the
+// capture fleet invented anyway put a context dial and a cost on a node no real fleet has one on.
+test('the demo shows a context reading for exactly the sessions it counts as covered', () => {
+  for (const minute of [0, 400, 812, DEMO_MINUTES - 1]) {
+    const { rows, health } = fleetAt(minute);
+    for (const r of rows.filter((r) => r.kind === 'background')) {
+      assert.equal(r.ctxState, 'absent', `minute ${minute}: ${r.name} carries a reading no agent files`);
+    }
+    assert.equal(rows.filter((r) => r.ctxState !== 'absent').length, health.covered, `minute ${minute}`);
   }
 });
 
