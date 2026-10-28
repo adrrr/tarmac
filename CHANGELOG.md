@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A failed re-install puts the old wrapper and backup back by rename first.** When a
+  re-install fails after writing the new wrapper, it puts the old statusline.sh and backup.json
+  back. That write went in place, so a run stopped half way could leave either file truncated.
+  It now goes through a temp file and a rename, and writes in place only when a full disk has
+  no room for the rename (#295).
 - **A newline in `--snapshots-dir` no longer hides the install.** The wrapper keeps the path
   as it was given, newline included, but the reader took only the first line of it, found no
   closing quote and answered "no install here". A re-install then froze the default directory
