@@ -569,6 +569,15 @@ test('an invisible format character is no columns, so its row lines up with the 
   assert.equal(padding(joiner), padding(ascii));
 });
 
+// The unassigned default ignorable code points (#296): U+2065 and U+FFF0..U+FFF8. The standard
+// reserves them to be ignored, so a terminal draws nothing for them, but no table gives them a
+// class that would say so.
+test('an unassigned default ignorable code point is no columns', () => {
+  for (const ch of ['\u2065', '\uFFF0', '\uFFF4', '\uFFF8'])
+    assert.equal(measure(`ab${ch}cd`), measure('abcd'), `U+${ch.codePointAt(0)!.toString(16).toUpperCase()}`);
+  assert.equal(measure('ab\uFFF9cd'), measure('abcd') + 1, 'U+FFF9 is an interlinear annotation anchor, outside the range');
+});
+
 // A cell is made safe to print before the cap is consulted, and that order is the point: four
 // of the eight columns have no cap, and a guard that lived past the early return would cover
 // the capped four alone. The type forbids the word below. CTX prints the reader's own

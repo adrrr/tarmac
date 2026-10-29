@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An unassigned default ignorable code point no longer shifts its `tarmac list` row.** U+2065
+  and U+FFF0..U+FFF8 are reserved to be ignored, so a terminal draws nothing for them, but the
+  table still counted each one column and the row came out a column short. They now count none,
+  like the format characters beside them (#296).
 - **A failed re-install puts the old wrapper and backup back by rename first.** When a
   re-install fails after writing the new wrapper, it puts the old statusline.sh and backup.json
   back. That write went in place, so a run stopped half way could leave either file truncated.
