@@ -966,14 +966,54 @@ test('a ring of idle sessions whose costs never climb is still a first run', asy
     samples: [0, 1, 2].map((i) => ({
       t: T0 + i * MIN,
       sessions: [
-        session({ ctxState: 'absent', ctxPct: null, costUsd: 0.8 }),
-        session({ sid: 'b', project: 'beta', ctxState: 'absent', ctxPct: null, costUsd: 2.4 }),
+        session({ ctxState: 'fresh', ctxPct: null, costUsd: 0.8 }),
+        session({ sid: 'b', project: 'beta', ctxState: 'fresh', ctxPct: null, costUsd: 2.4 }),
       ],
       rateLimits: null,
     })),
   }));
   await settle(m);
   assert.equal(m.p.el('hist-empty').hidden, false, 'a flat cost lowered the block over charts with nothing in them');
+});
+
+// Per session id, never per project: the nightly recycle replaces a session with a new one at a
+// lower total, and the new one's climb is a bar measured from its own first reading, even while
+// the project stays under what the session it replaced had reached.
+test('a recycled session that climbs from its own first reading is something to draw', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [
+      { sid: 'a', costUsd: 40 },
+      { sid: 'a', costUsd: 40 },
+      { sid: 'a2', costUsd: 0.5 },
+      { sid: 'a2', costUsd: 0.6 },
+    ].map((o, i) => ({
+      t: T0 + i * MIN,
+      sessions: [session({ ...o, ctxState: 'fresh', ctxPct: null })],
+      rateLimits: null,
+    })),
+  }));
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, true, 'the block stayed up over the bar a recycled session drew');
+});
+
+// A total that falls is not spending, and neither is the way back up to it: the bars measure
+// from the highest reading so far, so a dip and a partial recovery draw nothing.
+test('a cost that dips and comes partway back is still a first run', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [5, 3, 4].map((costUsd, i) => ({
+      t: T0 + i * MIN,
+      sessions: [session({ ctxState: 'fresh', ctxPct: null, costUsd })],
+      rateLimits: null,
+    })),
+  }));
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, false, 'a dip and a partial recovery lowered the block over charts with nothing in them');
 });
 
 // The other side of the same rule: a cost that climbs is a bar to draw, with no context reading
