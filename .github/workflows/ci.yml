@@ -55,7 +55,7 @@ jobs:
           TARMAC_REQUIRE_DASH: '1'
 
   hygiene:
-    name: hygiene · no session links
+    name: hygiene · no session links, agent settings
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -68,8 +68,8 @@ jobs:
           fetch-depth: 0
 
       # The runner has shellcheck preinstalled, and dash mode is the shell CI runs it under.
-      - name: the guard parses where it will run
-        run: shellcheck --shell=dash scripts/no-session-links.sh
+      - name: the guards parse where they will run
+        run: shellcheck --shell=dash scripts/no-session-links.sh scripts/settings-attribution-only.sh
 
       # On a push, `before` is the sha main stood at. It is the null sha on the first push to a
       # branch, and a collected object after a force-push; the script reads the last commit alone
@@ -81,6 +81,11 @@ jobs:
             ${{ github.event_name == 'pull_request'
             && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha)
             || format('{0}..{1}', github.event.before, github.sha) }}
+
+      # Claude Code loads this file for anyone who opens the repository in it. jq is preinstalled
+      # on the Ubuntu runners; the script exits 2 rather than passing when it is not.
+      - name: .claude/settings.json holds attribution and nothing else
+        run: sh scripts/settings-attribution-only.sh .claude/settings.json
 
   artifact:
     name: artifact · node 20 · the published dist/
