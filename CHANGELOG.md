@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`serve` keeps its first-run note up over a ring of idle sessions.** A session's first cost
+  reading is the baseline its bars are measured from, so a total that never climbs draws no bar,
+  but the note came down for any cost above 0 and left three empty charts behind it. A cost now
+  counts only once it climbs between two readings of the same session (#299).
 - **A failed re-install puts the old wrapper and backup back by rename first.** When a
   re-install fails after writing the new wrapper, it puts the old statusline.sh and backup.json
   back. That write went in place, so a run stopped half way could leave either file truncated.

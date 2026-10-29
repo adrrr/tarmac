@@ -955,6 +955,27 @@ test('a ring whose only readings are costs of 0 is still a first run', async () 
   assert.equal(m.p.el('hist-empty').hidden, false, 'a cost of 0 lowered the block over charts with nothing in them');
 });
 
+// A cost above 0 that never climbs draws nothing either: a session's first reading is its
+// baseline, and a bar is what it spends after that. Two idle sessions at different totals, so
+// a check that compared one session's cost with another's would see a change (#299).
+test('a ring of idle sessions whose costs never climb is still a first run', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [0, 1, 2].map((i) => ({
+      t: T0 + i * MIN,
+      sessions: [
+        session({ ctxState: 'absent', ctxPct: null, costUsd: 0.8 }),
+        session({ sid: 'b', project: 'beta', ctxState: 'absent', ctxPct: null, costUsd: 2.4 }),
+      ],
+      rateLimits: null,
+    })),
+  }));
+  await settle(m);
+  assert.equal(m.p.el('hist-empty').hidden, false, 'a flat cost lowered the block over charts with nothing in them');
+});
+
 // The other side of the same rule: a cost that climbs is a bar to draw, with no context reading
 // and no window reading beside it.
 test('a ring whose only readings are costs above 0 is something to draw', async () => {
