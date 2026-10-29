@@ -41,10 +41,10 @@ jobs:
       # is worse than none — none fails loudly, one checks a single section and reports success.
       # Only depth 0 uses the all-history refspec, which names `refs/tags/*` and fetches them all.
       # Full history here packs to 2.3 MB, smaller than a depth-1 clone plus its tags.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -55,7 +55,7 @@ jobs:
           TARMAC_REQUIRE_DASH: '1'
 
   hygiene:
-    name: hygiene · no session links
+    name: hygiene · no session links, agent settings
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -63,13 +63,13 @@ jobs:
       # the commits this pull request ADDS, and a depth-1 checkout has neither the base it starts
       # from nor anything between. On a pull request the checkout is the merge ref, whose two
       # parents are the base and head shas named below, so full history reaches both.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       # The runner has shellcheck preinstalled, and dash mode is the shell CI runs it under.
-      - name: the guard parses where it will run
-        run: shellcheck --shell=dash scripts/no-session-links.sh
+      - name: the guards parse where they will run
+        run: shellcheck --shell=dash scripts/no-session-links.sh scripts/settings-attribution-only.sh
 
       # On a push, `before` is the sha main stood at. It is the null sha on the first push to a
       # branch, and a collected object after a force-push; the script reads the last commit alone
@@ -82,13 +82,23 @@ jobs:
             && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha)
             || format('{0}..{1}', github.event.before, github.sha) }}
 
+      # Claude Code loads this file for anyone who opens the repository in it. jq is preinstalled
+      # on the Ubuntu runners; the script exits 2 rather than passing when it is not.
+      - name: .claude/settings.json holds attribution and nothing else
+        run: sh scripts/settings-attribution-only.sh .claude/settings.json
+
+      # Claude Code also loads .claude/settings.local.json (which wins over settings.json), .mcp.json,
+      # and whatever lives in .claude/agents, skills and commands. None of them belongs in this repo.
+      - name: no other agent config is tracked
+        run: test "$(git ls-files -- .claude .mcp.json)" = .claude/settings.json
+
   artifact:
     name: artifact · node 20 · the published dist/
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: npm
