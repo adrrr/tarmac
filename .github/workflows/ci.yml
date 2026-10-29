@@ -41,10 +41,10 @@ jobs:
       # is worse than none — none fails loudly, one checks a single section and reports success.
       # Only depth 0 uses the all-history refspec, which names `refs/tags/*` and fetches them all.
       # Full history here packs to 2.3 MB, smaller than a depth-1 clone plus its tags.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -63,7 +63,7 @@ jobs:
       # the commits this pull request ADDS, and a depth-1 checkout has neither the base it starts
       # from nor anything between. On a pull request the checkout is the merge ref, whose two
       # parents are the base and head shas named below, so full history reaches both.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -87,8 +87,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: npm
