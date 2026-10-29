@@ -18,6 +18,12 @@ import { tempDir } from './sandbox.ts';
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(repoRoot, 'scripts', 'settings-attribution-only.sh');
 
+// jq is a host tool, as dash is in portability.test.ts: without it these cases skip and say so.
+// CI still fails without it, since the hygiene job runs the same script, which exits 2 there.
+const JQ = spawnSync('/bin/sh', ['-c', 'command -v jq'], { encoding: 'utf8' }).status === 0
+  ? {}
+  : { skip: 'jq is not installed here: the settings guard was NOT exercised on this machine' };
+
 function run(file: string, env: NodeJS.ProcessEnv = process.env): { status: number | null; out: string } {
   const r = spawnSync('/bin/sh', [SCRIPT, file], { cwd: repoRoot, encoding: 'utf8', env });
   return { status: r.status, out: `${r.stdout}${r.stderr}` };
@@ -30,12 +36,12 @@ function settings(body: string): string {
   return file;
 }
 
-test("the repository's own settings file passes", () => {
+test("the repository's own settings file passes", JQ, () => {
   const { status, out } = run(path.join(repoRoot, '.claude', 'settings.json'));
   assert.equal(status, 0, out);
 });
 
-test('attribution alone passes, with any of its three keys', () => {
+test('attribution alone passes, with any of its three keys', JQ, () => {
   for (const body of [
     '{"attribution":{"commit":"","pr":"","sessionUrl":false}}',
     '{"attribution":{"commit":"x"}}',
@@ -48,26 +54,26 @@ test('attribution alone passes, with any of its three keys', () => {
 
 // The file is there to switch attribution off. Gone, it switches nothing off, and a guard that
 // passes on a missing file is one a rename walks around.
-test('a missing file fails', () => {
+test('a missing file fails', JQ, () => {
   const file = path.join(tempDir('tarmac-settings-'), 'settings.json');
   const { status, out } = run(file);
   assert.equal(status, 1, out);
   assert.match(out, /missing/);
 });
 
-test('an empty file, or one of whitespace, fails', () => {
+test('an empty file, or one of whitespace, fails', JQ, () => {
   for (const body of ['', '  \n']) {
     const { status, out } = run(settings(body));
     assert.equal(status, 1, `${JSON.stringify(body)}: ${out}`);
   }
 });
 
-test('a file that is not JSON fails', () => {
+test('a file that is not JSON fails', JQ, () => {
   const { status, out } = run(settings('{"attribution": {'));
   assert.equal(status, 1, out);
 });
 
-test('a key beside attribution fails, and is named', () => {
+test('a key beside attribution fails, and is named', JQ, () => {
   for (const key of ['hooks', 'permissions', 'env']) {
     const { status, out } = run(settings(`{"attribution":{"commit":""},"${key}":{}}`));
     assert.equal(status, 1, `${key}: ${out}`);
@@ -76,19 +82,19 @@ test('a key beside attribution fails, and is named', () => {
 });
 
 // A string value, so this one is caught by the key list and not by the type check below it.
-test('an unknown key inside attribution fails', () => {
+test('an unknown key inside attribution fails', JQ, () => {
   const { status, out } = run(settings('{"attribution":{"commit":"","model":"x"}}'));
   assert.equal(status, 1, out);
   assert.match(out, /attribution\.model/);
 });
 
-test('an object under one of the three keys fails', () => {
+test('an object under one of the three keys fails', JQ, () => {
   const { status, out } = run(settings('{"attribution":{"commit":{"hooks":[]}}}'));
   assert.equal(status, 1, out);
   assert.match(out, /attribution\.commit\.hooks/);
 });
 
-test('settings that are not an object, or have no attribution, fail', () => {
+test('settings that are not an object, or have no attribution, fail', JQ, () => {
   for (const body of ['{}', '[]', '"attribution"', '{"attribution":[]}', '{"attribution":"off"}']) {
     const { status, out } = run(settings(body));
     assert.equal(status, 1, `${body}: ${out}`);
@@ -97,7 +103,7 @@ test('settings that are not an object, or have no attribution, fail', () => {
 
 // jq reads a stream: given two documents it judges each, and its exit status follows the last.
 // A clean document after a dirty one must not launder it.
-test('a second document after the first fails, whichever one is dirty', () => {
+test('a second document after the first fails, whichever one is dirty', JQ, () => {
   for (const body of [
     '{"attribution":{}}\n{"hooks":{}}',
     '{"hooks":{}}\n{"attribution":{}}',

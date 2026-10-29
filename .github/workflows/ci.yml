@@ -87,6 +87,11 @@ jobs:
       - name: .claude/settings.json holds attribution and nothing else
         run: sh scripts/settings-attribution-only.sh .claude/settings.json
 
+      # Claude Code also loads .claude/settings.local.json (which wins over settings.json), .mcp.json,
+      # and whatever lives in .claude/agents, skills and commands. None of them belongs in this repo.
+      - name: no other agent config is tracked
+        run: test "$(git ls-files -- .claude .mcp.json)" = .claude/settings.json
+
   artifact:
     name: artifact · node 20 · the published dist/
     runs-on: ubuntu-latest
