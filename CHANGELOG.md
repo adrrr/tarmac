@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A cost that never climbs no longer hides the first-run block.** The history view lowered it
+  as soon as the 24h ring held one session cost, but the bars draw a session's spending from its
+  first reading in the ring, so a cost of 0 or a total that sat still draws nothing: a ring of
+  sessions with no context or window reading showed three empty charts and no word on why. A
+  cost now counts only once a session's total climbs above its first reading (#241, #299).
 - **A failed re-install puts the old wrapper and backup back by rename first.** When a
   re-install fails after writing the new wrapper, it puts the old statusline.sh and backup.json
   back. That write went in place, so a run stopped half way could leave either file truncated.
@@ -178,11 +183,6 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   When someone else's settings left the statusLine without a command, the plan printed
   `statusLine next  (removed)` above "nothing is restored and nothing is deleted". With no command
   now and none after, that row reads `(none)`, like the `statusLine now` row above it (#243).
-
-- **A cost of 0 no longer hides the first-run block.** The history view lowered it as soon as the
-  24h ring held one session cost, including a cost of 0, which the bars draw as nothing: a ring
-  of sessions that had spent nothing yet showed three empty charts and no word on why. A cost now
-  counts only above 0 (#241).
 
 - **An empty config.json reads as no settings.** A `config.json` holding nothing, or only JSON
   whitespace past a leading BOM, stopped every command as not valid JSON, where an empty

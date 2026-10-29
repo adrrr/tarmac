@@ -1484,8 +1484,9 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   /*
    * Is there a single number in the ring? The three charts plot exactly three things, and this
    * asks whether the record holds any of them: a context percentage, a cost, or a window
-   * reading. Nothing else counts as something to draw, and neither does a cost of 0, which the
-   * bars draw as nothing (#241).
+   * reading. Nothing else counts as something to draw, and neither does a cost that never
+   * climbs: a session's first reading is the baseline its bars are measured from, so a flat
+   * total draws nothing, at 0 (#241) or above it (#299).
    *
    * A first cut asked whether the ring held any SAMPLE, and those two part company sixty
    * seconds in, which is the worst possible moment. A serve started before the statusline is
@@ -1496,7 +1497,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
    * the span is non-zero, however little is in it.
    */
   function drawable() {
-    var s = state.data && state.data.samples, i, j, ses, lim, k;
+    var s = state.data && state.data.samples, i, j, ses, lim, k, c, first = {};
     if (!s) return false;
     for (i = 0; i < s.length; i++) {
       lim = s[i].rateLimits;
@@ -1504,7 +1505,10 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       ses = s[i].sessions || [];
       for (j = 0; j < ses.length; j++) {
         if (typeof ses[j].ctxPct === 'number') return true;
-        if (typeof ses[j].costUsd === 'number' && ses[j].costUsd > 0) return true;
+        c = ses[j].costUsd;
+        if (typeof c !== 'number' || typeof ses[j].sid !== 'string') continue;
+        if (!Object.prototype.hasOwnProperty.call(first, ses[j].sid)) first[ses[j].sid] = c;
+        else if (c > first[ses[j].sid]) return true;
       }
     }
     return false;
