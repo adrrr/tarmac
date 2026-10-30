@@ -918,11 +918,15 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
     // Order matters: the backup is the only way back, so it must be on disk BEFORE
     // settings.json sends Claude Code to the wrapper. Crashing between the two otherwise
     // locks the user out of install (backup missing) and uninstall (no install found) at once.
+    // 0600 whatever settings.json is: the backup carries its text twice, `env` tokens and all.
+    // The mode only applies to a file the write creates, so a leftover backup is narrowed too.
     const installedText = JSON.stringify(next, null, 2) + '\n';
     fs.writeFileSync(
       p.backup,
       JSON.stringify({ version: 1, originalText, installedText, previous, installedAt: new Date().toISOString() }, null, 2),
+      { mode: 0o600 },
     );
+    fs.chmodSync(p.backup, 0o600);
     writeAtomic(p.settings, installedText);
   } catch (failure) {
     unwind(p, before);
