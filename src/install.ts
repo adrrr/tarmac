@@ -884,6 +884,8 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
     try {
       fs.mkdirSync(p.snapshots, { recursive: true });
       writeWrapper(p, backup.previous?.command ?? null, root);
+      // The update path never rewrites the backup, and every install before #303 left it 0644.
+      fs.chmodSync(p.backup, 0o600);
     } catch (failure) {
       unwind(p, before);
       throw failure;

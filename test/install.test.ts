@@ -1210,6 +1210,16 @@ test('a leftover backup is narrowed when an install writes over it', () => {
   assert.equal(fs.statSync(paths(home).backup).mode & 0o777, 0o600);
 });
 
+// The upgrade path: `install` over an install made before #303 reads the backup and never
+// writes it, so the 0644 every earlier version left would otherwise outlive the fix.
+test('a re-install narrows a backup an earlier version left 0644', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.chmodSync(paths(home).backup, 0o644);
+  assert.equal(install({ home }).alreadyInstalled, true);
+  assert.equal(fs.statSync(paths(home).backup).mode & 0o777, 0o600);
+});
+
 test('the unwind puts the backup back at the mode it was written with', () => {
   const home = fakeHome(MINE);
   install({ home });
