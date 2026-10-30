@@ -1178,6 +1178,56 @@ test('the permissions of settings.json survive install and uninstall', () => {
   assert.equal(fs.statSync(paths(home).settings).mode & 0o777, 0o600, '"byte for byte" includes who may read the bytes');
 });
 
+// backup.json holds settings.json twice over, `env` tokens included, so a 0644 backup undoes
+// the 0600 above for anyone who can list the directory.
+test('the backup is never wider than the settings.json it copies', () => {
+  const home = fakeHome('{"env":{"FAKE_TOKEN":"x"}}');
+  fs.chmodSync(paths(home).settings, 0o600);
+  // Created 0600, not narrowed after: between a 0644 create and the chmod the token is readable.
+  const realChmod = fs.chmodSync;
+  let created: number | null = null;
+  fs.chmodSync = ((file: fs.PathLike, mode: fs.Mode) => {
+    if (file === paths(home).backup) created ??= fs.statSync(file).mode & 0o777;
+    realChmod(file, mode);
+  }) as typeof fs.chmodSync;
+  try {
+    install({ home });
+  } finally {
+    fs.chmodSync = realChmod;
+  }
+  assert.equal(created, 0o600, 'the file was created wider than it ends up');
+  assert.equal(fs.statSync(paths(home).backup).mode & 0o777, 0o600);
+});
+
+// A backup left from an install whose settings have since moved on is written over, not
+// created, and a create mode does nothing to a file that is already there.
+test('a leftover backup is narrowed when an install writes over it', () => {
+  const home = fakeHome(MINE);
+  fs.mkdirSync(paths(home).dir, { recursive: true });
+  fs.writeFileSync(paths(home).backup, '{}', { mode: 0o644 });
+  fs.chmodSync(paths(home).backup, 0o644);
+  install({ home });
+  assert.equal(fs.statSync(paths(home).backup).mode & 0o777, 0o600);
+});
+
+// The upgrade path: `install` over an install made before #303 reads the backup and never
+// writes it, so the 0644 every earlier version left would otherwise outlive the fix.
+test('a re-install narrows a backup an earlier version left 0644', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.chmodSync(paths(home).backup, 0o644);
+  assert.equal(install({ home }).alreadyInstalled, true);
+  assert.equal(fs.statSync(paths(home).backup).mode & 0o777, 0o600);
+});
+
+test('the unwind puts the backup back at the mode it was written with', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  danglingSettings(home);
+  assert.throws(() => install({ home }), /ENOENT/);
+  assert.equal(fs.statSync(paths(home).backup).mode & 0o777, 0o600);
+});
+
 // ── uninstall ─────────────────────────────────────────────────────────────────────────
 test('restores the original settings.json byte for byte', () => {
   const original = '{\n    "model": "opus",\n    "statusLine": { "type": "command", "command": "echo MINE" }\n}\n';

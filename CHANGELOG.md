@@ -33,6 +33,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`backup.json` is written 0600.** It carries the text of `settings.json` twice, `env` tokens
+  included, and was written with the default mode: a `settings.json` kept at 0600 got a 0644
+  copy beside it. A backup an earlier version left at 0644 is narrowed by the next `install`, a
+  re-install included, and an install that fails at the settings write puts the old one back at
+  0600 (#303).
+
 - **A cost that never climbs no longer hides the first-run block.** The history view lowered it
   as soon as the 24h ring held one session cost, but the bars draw a session's spending from its
   first reading in the ring, so a cost of 0 or a total that sat still draws nothing: a ring of
