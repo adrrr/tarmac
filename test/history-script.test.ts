@@ -410,6 +410,23 @@ test('tapping an hour with no readings says so, rather than pricing it at zero',
   assert.equal(/\$0\.00/.test(m.p.el('cost-legend').innerHTML), false, 'nobody read it, so it did not cost nothing');
 });
 
+// The legend spells a project's total out once the cursor lets go. Rounded to whole dollars, a
+// first twenty cents read `$0` beside its own bar, the zero a cost nobody spent would print. So
+// cents under ten dollars. From ten up the value keeps to whole dollars: it is mono and never
+// wraps, so three more characters come straight off the project's name.
+test('the cost legend prints a small project total to the cent, and a large one in whole dollars', async () => {
+  for (const [spent, read] of [[0.2, '$0.20'], [9.69, '$9.69'], [10.4, '$10'], [47.85, '$48']] as const) {
+    const m = mount(true, () => ({
+      since: T0,
+      cadence: MIN,
+      missed: 0,
+      samples: [1, 1 + spent].map((c, i) => ({ t: T0 + i * MIN, sessions: [session({ costUsd: c })], rateLimits: null })),
+    }));
+    await settle(m);
+    assert.ok(m.p.el('cost-legend').innerHTML.includes(`class="k-val">${read} · 100%<`), `${spent} reads ${read}`);
+  }
+});
+
 // The label under a tap is built in the page. `history-view` pins the function it calls, not the
 // call: with the old label back at the call site, every test of `hourSpan` stays green.
 test('a tap on the hour a clock falls back through names the offset at both ends', async () => {
