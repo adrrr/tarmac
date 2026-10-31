@@ -1041,6 +1041,10 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   function dayWord(t) { var d = new Date(t); return DOW[d.getDay()] + ' ' + d.getDate(); }
   function monWord(t) { var d = new Date(t); return MON[d.getMonth()] + ' ' + d.getDate(); }
   function money(v) { return '$' + v.toFixed(2); }
+  // A legend key is a swatch, a name and this value in 9.6rem, and the value is mono and never
+  // wraps, so every character it takes comes off the name. Under ten dollars cents are most of
+  // the figure, and $9.69 is no wider than $1298. From ten up they would cost a phone the name.
+  function keyMoney(v) { return v < 10 ? money(v) : '$' + Math.round(v); }
   function cssVar(name) {
     if (typeof getComputedStyle !== 'function' || !document.documentElement) return '#888';
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
@@ -1361,7 +1365,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       return { name: kk.name === null ? '—' : kk.name, id: keyOf(kk.name), line: false, color: slotColor(kk.slot),
                v: sel !== null ? (read ? money(bk2.by[kk.k]) : '—')
                  : kk.total === null ? '—'
-                 : money(kk.total) + (total > 0 ? ' · ' + Math.round((100 * kk.total) / total) + '%' : '') };
+                 : keyMoney(kk.total) + (total > 0 ? ' · ' + Math.round((100 * kk.total) / total) + '%' : '') };
     }), sel !== null);
   }
 
