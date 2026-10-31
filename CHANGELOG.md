@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The cost legend prints a project's total to the cent.** It rounded to whole dollars, so a
+  first $0.20 read `$0 · 100%` beside its own bar, as a cost nobody spent would. The legend now
+  prints the total the way the reading under a tap already does (#307).
+
 - **`backup.json` is written 0600.** It carries the text of `settings.json` twice, `env` tokens
   included, and was written with the default mode: a `settings.json` kept at 0600 got a 0644
   copy beside it. A backup an earlier version left at 0644 is narrowed by the next `install`, a

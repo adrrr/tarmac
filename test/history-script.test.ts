@@ -410,6 +410,19 @@ test('tapping an hour with no readings says so, rather than pricing it at zero',
   assert.equal(/\$0\.00/.test(m.p.el('cost-legend').innerHTML), false, 'nobody read it, so it did not cost nothing');
 });
 
+// The legend spells a project's total out once the cursor lets go. Rounded to whole dollars, a
+// first twenty cents read `$0` beside its own bar, the zero a cost nobody spent would print.
+test('the cost legend prints a project total to the cent', async () => {
+  const m = mount(true, () => ({
+    since: T0,
+    cadence: MIN,
+    missed: 0,
+    samples: [1, 1.2].map((c, i) => ({ t: T0 + i * MIN, sessions: [session({ costUsd: c })], rateLimits: null })),
+  }));
+  await settle(m);
+  assert.match(m.p.el('cost-legend').innerHTML, /class="k-val">\$0\.20 · 100%</);
+});
+
 // The label under a tap is built in the page. `history-view` pins the function it calls, not the
 // call: with the old label back at the call site, every test of `hourSpan` stays green.
 test('a tap on the hour a clock falls back through names the offset at both ends', async () => {

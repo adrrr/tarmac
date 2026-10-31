@@ -1361,7 +1361,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       return { name: kk.name === null ? '—' : kk.name, id: keyOf(kk.name), line: false, color: slotColor(kk.slot),
                v: sel !== null ? (read ? money(bk2.by[kk.k]) : '—')
                  : kk.total === null ? '—'
-                 : '$' + Math.round(kk.total) + (total > 0 ? ' · ' + Math.round((100 * kk.total) / total) + '%' : '') };
+                 : money(kk.total) + (total > 0 ? ' · ' + Math.round((100 * kk.total) / total) + '%' : '') };
     }), sel !== null);
   }
 
