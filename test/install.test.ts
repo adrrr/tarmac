@@ -1201,11 +1201,17 @@ test('the temp copy of settings.json is never wider than 0600 while it holds the
 });
 
 // A settings.json created from nothing has no mode to keep, so it gets what a plain create
-// would give it, not the 0600 the temp copy is opened with.
+// would give it, not the 0600 the temp copy is opened with. The umask is set, not read: under
+// the usual 022, a hardcoded 0644 passes too.
 test('a settings.json install creates gets the mode a plain create would', () => {
   const home = fakeHome();
-  install({ home });
-  assert.equal(fs.statSync(paths(home).settings).mode & 0o777, 0o666 & ~process.umask());
+  const umask = process.umask(0o027);
+  try {
+    install({ home });
+  } finally {
+    process.umask(umask);
+  }
+  assert.equal(fs.statSync(paths(home).settings).mode & 0o777, 0o640);
 });
 
 // backup.json holds settings.json twice over, `env` tokens included, so a 0644 backup undoes
