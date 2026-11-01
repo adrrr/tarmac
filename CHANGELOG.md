@@ -33,6 +33,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The temp copy of `settings.json` is no longer world-readable while it is written.** An
+  `install` or `uninstall` writes `settings.json` through a temp file beside it, and that file
+  was created at the default mode and narrowed only after the whole text was in it: a
+  `settings.json` kept at 0600 with an `env` token had a 0644 copy of the token until the chmod.
+  The temp file is now created 0600. A `settings.json` created from nothing keeps the mode it
+  got before (#309).
+
 - **The cost legend no longer prints a small total as `$0`.** It rounded to whole dollars, so a
   first $0.20 read `$0 · 100%` beside its own bar. A total under ten dollars now prints to the
   cent, the way the reading under a tap already does. From ten dollars up it stays whole: the

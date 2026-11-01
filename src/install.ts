@@ -1065,15 +1065,16 @@ function writeWrapper(p: TarmacPaths, chainCommand: string | null, home: string)
 // `reap` never looks there: nothing else would ever clear a full copy of their settings.
 // After a successful rename it is already gone, and `force` makes the removal a no-op.
 //
-// `createMode` is the mode of a file the write creates: the temp file is always new, so a
-// `mode` passed to its open would only ever apply, masked by umask, to the temp name.
+// The temp file is opened 0600 whatever the final mode: it holds the whole text, `env`
+// tokens included, from the first byte, and the chmod to the final mode only comes after the
+// write (umask masks a create mode, a chmod does not) (#309). `createMode` is the mode of a
+// file the write creates; without one, the file gets what a plain create would give it.
 function writeAtomic(file: string, text: string | Buffer, createMode?: number): void {
   const target = resolveWriteTarget(file);
   const tmp = `${target}${TEMP_PREFIX}${process.pid}.tmp`;
   try {
-    fs.writeFileSync(tmp, text);
-    const mode = modeOf(target) ?? createMode ?? null;
-    if (mode !== null) fs.chmodSync(tmp, mode); // after the write: umask masks the create mode
+    fs.writeFileSync(tmp, text, { mode: 0o600 });
+    fs.chmodSync(tmp, modeOf(target) ?? createMode ?? 0o666 & ~process.umask());
     fs.renameSync(tmp, target);
   } finally {
     // In a `finally`, so a removal that throws would REPLACE the failure that stopped the
