@@ -260,9 +260,8 @@ export async function readRange({ dir, range, now, capped = false, readDay }: Re
   // come of it (a hard link to a FIFO is still refused by kind), so what this guard holds
   // is "nothing that can block", not "nothing somebody else named".
   //
-  // The cost, and it is real: `history-store.ts:386` measures the directory with `statSync`,
-  // so a linked day file is charged to the 256 MB cap and never read. The two readings of
-  // one directory disagree by exactly that shape, and this is the side that refuses.
+  // The store agrees on that shape: `measure` weighs with `lstat` and `append` opens with
+  // `O_NOFOLLOW`, so a linked day file is neither charged to the 256 MB cap nor written to (#310).
   //
   // A check before an open is a race, and it stays one: nothing stops the name being
   // replaced between the two. What it costs is bounded — one hung read, once, on a

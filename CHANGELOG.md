@@ -40,9 +40,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   The temp file is now created 0600. A `settings.json` created from nothing keeps the mode it
   got before (#309).
 
-- **A history day file that is a symlink no longer counts against the 256 MB cap.** The cap
-  weighed it through its target while the reader skips it, so a link to a large file could stop
-  the journal over bytes nothing reads. The cap now skips it, as the reader does (#310).
+- **A history day file that is a symlink no longer counts against the 256 MB cap, and `serve` no
+  longer writes through one.** The cap weighed it through its target while the reader skips it, so
+  a link to a large file could stop the journal over bytes nothing reads. The cap now skips it, as
+  the reader does, and a link at today's name costs that reading, which `serve` reports: a line
+  written through it would be weighed by nothing and read by nothing (#310).
 
 - **The cost legend no longer prints a small total as `$0`.** It rounded to whole dollars, so a
   first $0.20 read `$0 · 100%` beside its own bar. A total under ten dollars now prints to the
