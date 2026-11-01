@@ -428,7 +428,8 @@ export function createHistoryStore({
     for (const name of entries) {
       if (!DAY_FILE.test(name)) continue;
       try {
-        const s = fs.statSync(path.join(dir, name));
+        // `lstat`, as the reader: a linked day file is one it skips, so it weighs nothing (#310).
+        const s = fs.lstatSync(path.join(dir, name));
         if (!s.isFile()) continue;
         files += 1;
         bytes += s.size;
@@ -510,9 +511,17 @@ export function createHistoryStore({
 
       try {
         fs.mkdirSync(dir, { recursive: true });
-        // `a`, so two writers cannot interleave a partial line and a restart cannot truncate
+        // `O_APPEND`, so two writers cannot interleave a partial line and a restart cannot truncate
         // what is already there. This process is the only writer, and the flag says so anyway.
-        fs.appendFileSync(path.join(dir, `${day}.jsonl`), line, { flag: 'a' });
+        // `O_NOFOLLOW`, because the cap and the reader both skip a linked day file: a line written
+        // through one would be weighed by nothing and read by nothing, so it is a miss (#310).
+        const { O_WRONLY, O_CREAT, O_APPEND, O_NOFOLLOW } = fs.constants;
+        const fd = fs.openSync(path.join(dir, `${day}.jsonl`), O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW);
+        try {
+          fs.appendFileSync(fd, line);
+        } finally {
+          fs.closeSync(fd);
+        }
       } catch {
         // A full disk, a read-only mount, a directory someone replaced with a file. None of
         // them are worth a dead `serve`, and none of them may pass in silence either.
