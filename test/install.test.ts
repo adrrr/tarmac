@@ -1178,6 +1178,36 @@ test('the permissions of settings.json survive install and uninstall', () => {
   assert.equal(fs.statSync(paths(home).settings).mode & 0o777, 0o600, '"byte for byte" includes who may read the bytes');
 });
 
+// The rename puts a temp copy of settings.json next to it first, `env` token and all. Created
+// at the default mode and narrowed after the write, that copy is 0644 until the chmod (#309).
+test('the temp copy of settings.json is never wider than 0600 while it holds the bytes', () => {
+  const home = fakeHome('{"env":{"FAKE_TOKEN":"x"}}');
+  fs.chmodSync(paths(home).settings, 0o600);
+  const tmp = `${paths(home).settings}${TEMP_PREFIX}${process.pid}.tmp`;
+  const realChmod = fs.chmodSync;
+  const seen: number[] = [];
+  fs.chmodSync = ((file: fs.PathLike, mode: fs.Mode) => {
+    if (file === tmp) seen.push(fs.statSync(file).mode & 0o777);
+    realChmod(file, mode);
+  }) as typeof fs.chmodSync;
+  try {
+    install({ home });
+    uninstall({ home });
+  } finally {
+    fs.chmodSync = realChmod;
+  }
+  assert.deepEqual(seen, [0o600, 0o600], 'install and uninstall each wrote the temp copy at 0600');
+  assert.equal(fs.statSync(paths(home).settings).mode & 0o777, 0o600);
+});
+
+// A settings.json created from nothing has no mode to keep, so it gets what a plain create
+// would give it, not the 0600 the temp copy is opened with.
+test('a settings.json install creates gets the mode a plain create would', () => {
+  const home = fakeHome();
+  install({ home });
+  assert.equal(fs.statSync(paths(home).settings).mode & 0o777, 0o666 & ~process.umask());
+});
+
 // backup.json holds settings.json twice over, `env` tokens included, so a 0644 backup undoes
 // the 0600 above for anyone who can list the directory.
 test('the backup is never wider than the settings.json it copies', () => {
