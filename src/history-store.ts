@@ -428,7 +428,8 @@ export function createHistoryStore({
     for (const name of entries) {
       if (!DAY_FILE.test(name)) continue;
       try {
-        const s = fs.statSync(path.join(dir, name));
+        // `lstat`, as the reader: a linked day file is one it skips, so it weighs nothing (#310).
+        const s = fs.lstatSync(path.join(dir, name));
         if (!s.isFile()) continue;
         files += 1;
         bytes += s.size;

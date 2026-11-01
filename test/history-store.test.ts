@@ -314,6 +314,23 @@ test('the stats count the files on disk and what they weigh', () => {
   assert.equal(stats.stopped, null);
 });
 
+// The reader refuses a day file that is a symlink (`lstat` in history-range.ts), so a cap that
+// weighed it through its target would stop the journal over bytes nothing reads (#310).
+test('a day file that is a symlink weighs nothing against the cap', () => {
+  const root = tempDir('tarmac-hist-');
+  const dir = path.join(root, 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const s = store(dir, 30, clock);
+  s.append(sample(clock.now));
+  const target = path.join(root, 'elsewhere.jsonl');
+  fs.writeFileSync(target, 'x'.repeat(1000));
+  fs.symlinkSync(target, path.join(dir, '2026-08-06.jsonl'));
+
+  const stats = s.stats();
+  assert.equal(stats.files, 1, 'only the day file the store wrote');
+  assert.equal(stats.bytes, fs.statSync(path.join(dir, '2026-08-07.jsonl')).size);
+});
+
 // ── where it lives ────────────────────────────────────────────────────────────────────
 
 // A sibling of the snapshots, never a child of them. Three things already delete files under
