@@ -1319,10 +1319,8 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     var max = Math.max.apply(null, totals) || 1;
     var stepC = [.5, 1, 2, 5, 10, 20, 50, 100, 250, 1000].filter(function (s) { return max / s <= 4; })[0] || 1000;
     var ymax = Math.ceil((max * 1.08) / stepC) * stepC || stepC;
-    for (var v = 0; v <= ymax; v += stepC) {
-      var y = b.b - (v / ymax) * (b.b - b.t); hair(g, b.l, y, b.r, y, g.line);
-      if (v > 0) label(g, '$' + (v < 1 ? v.toFixed(1) : v), b.l + 2, y - 3);
-    }
+    var yOf = function (v) { return b.b - (v / ymax) * (b.b - b.t); };
+    for (var v = 0; v <= ymax; v += stepC) hair(g, b.l, yOf(v), b.r, yOf(v), g.line);
     // Capped, because the columns are the RANGE's now: a week in which the serve ran for one day
     // is one bar with six empty slots beside it, and a bar given the whole plot to fill is a
     // single day drawn as a wall. Wide enough to stay a bar, never wide enough to be a panel.
@@ -1348,6 +1346,8 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       // The column's own total on its cap, only where a week of them has the room.
       if (n <= 7 && totals[i] > 0) label(g, '$' + totals[i].toFixed(totals[i] >= 100 ? 0 : 1), x + barW / 2, yTop - 5, { align: 'center', color: g.fg, weight: 600 });
     });
+    // After the bars, never before: the labels sit at the left edge, over the first column.
+    for (var v2 = stepC; v2 <= ymax; v2 += stepC) label(g, '$' + (v2 < 1 ? v2.toFixed(1) : v2), b.l + 2, yOf(v2) - 3);
     var xEnd = buckets[n - 1].t + buckets[n - 1].span;
     timeTicks(g, b, buckets[0].t, xEnd, state.range);
     if (!live) startNote(g, b, buckets[0].t, xEnd, recordFrom());

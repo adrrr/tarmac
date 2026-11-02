@@ -570,6 +570,27 @@ test('a week with one day of journal in it is drawn a week wide', async () => {
   assert.deepEqual(money, ['$7.0'], `the week printed ${JSON.stringify(money)} over its columns`);
 });
 
+// The axis labels sit at the left edge of the plot, which is where the first column's bar is.
+// Painted before the bars, they are painted over: `$10` reads `$` or `0` depending on the range.
+test('the cost axis labels are drawn over the bars, not under them (#314)', async () => {
+  // The week's journal on its first day, so the one column there is is the one under the labels.
+  const m = mount(true, (url) =>
+    url === '/api/history'
+      ? ring()
+      : { ...(thin('7d', WEEK) as object), days: [{ date: '2026-08-23', byProject: [{ project: 'alpha', costUsd: 7 }] }] },
+  );
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  const calls = frame(m.p, 'cost');
+  const axis = calls.flatMap((c, i) => (c.name === 'fillText' && /^\$\d+(\.\d)?$/.test(String(c.args[0])) && c.args[1] === PL + 2 ? [i] : []));
+  const lastBar = calls.map((c) => c.name).findLastIndex((n) => n === 'fill' || n === 'fillRect');
+  assert.ok(axis.length > 0, 'the cost axis printed no label');
+  assert.ok(lastBar > -1, 'the cost chart drew no bar');
+  assert.ok(axis[0] > lastBar, `the first axis label is call ${axis[0]}, the last bar was filled at ${lastBar}`);
+});
+
 test('a month asked of the same day is a month wide, and not the week again', async () => {
   const window = { from: at(2026, 7, 31, 0), to: at(2026, 8, 30, 0) };
   const m = mount(true, (url) => (url === '/api/history' ? ring() : thin('30d', window)));
