@@ -275,7 +275,7 @@ test('every published CHANGELOG section still says what it said when it was tagg
 // worse than fetching nothing: zero tags fails loudly, one tag passes quietly.
 test('every dated section since tagging began carries the tag that published it', () => {
   const releases = taggedReleases();
-  assert.ok(releases.length > 0, 'no vX.Y.Z tags in this checkout, so nothing can be said about which sections are covered');
+  assert.ok(releases.length > 0, 'no vX.Y.Z tags in this checkout, so nothing can be said about which sections are covered. Run `git fetch --tags` (a shallow clone has none).');
 
   const current = currentChangelog();
   const dated = datedVersions(current);
