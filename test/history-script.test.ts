@@ -589,6 +589,9 @@ test('the cost axis labels are drawn over the bars, not under them (#314)', asyn
   assert.ok(axis.length > 0, 'the cost axis printed no label');
   assert.ok(lastBar > -1, 'the cost chart drew no bar');
   assert.ok(axis[0] > lastBar, `the first axis label is call ${axis[0]}, the last bar was filled at ${lastBar}`);
+  // The total shares the labels' rows on a phone, and it is the figure: it goes on last.
+  const total = calls.findIndex((c) => c.name === 'fillText' && c.args[0] === '$7.0');
+  assert.ok(total > axis[axis.length - 1], `the column total is call ${total}, the last axis label ${axis[axis.length - 1]}`);
 });
 
 test('a month asked of the same day is a month wide, and not the week again', async () => {
