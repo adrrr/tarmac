@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A bar in the first column of the cost chart no longer covers the axis labels.** The labels
+  were drawn before the bars, so a column at the left edge painted over them and `$100` read `$`
+  or `00` depending on the range. They are now drawn after the bars and before the column totals,
+  so a total level with a label stays whole. The grid lines stay under them (#314).
+
 - **The temp copy of `settings.json` is no longer world-readable while it is written.** An
   `install` or `uninstall` writes `settings.json` through a temp file beside it, and that file
   was created at the default mode and narrowed only after the whole text was in it: a
