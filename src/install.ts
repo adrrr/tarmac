@@ -42,7 +42,8 @@ export interface TarmacPaths {
   snapshots: string;
   /**
    * The parent of `snapshots`, wherever that path came from — the rung `mkdir -p` makes on
-   * the way to it, and so the one ours to take back if an install fails.
+   * the way to it, and so ours to take back if an install fails, with every rung above it
+   * that the same run made (#315).
    */
   stateDir: string;
   /** Where they lived before: inside `.claude`. Cleared by `install`, never written again. */
@@ -881,13 +882,14 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
     // two paths this branch touches: `unwind` removes every target it was not told about, and
     // backup.json is the only way back from the install this one is updating.
     const before = whatIsThere([p.dir, p.stateDir, p.snapshots, p.wrapper, p.backup]);
+    let made: string | undefined;
     try {
-      fs.mkdirSync(p.snapshots, { recursive: true });
+      made = fs.mkdirSync(p.snapshots, { recursive: true });
       writeWrapper(p, backup.previous?.command ?? null, root);
       // The update path never rewrites the backup, and every install before #303 left it 0644.
       fs.chmodSync(p.backup, 0o600);
     } catch (failure) {
-      unwind(p, before);
+      unwind(p, before, made);
       throw failure;
     }
     // After the wrapper, always: this is the update path, and until that write lands the
@@ -908,9 +910,10 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
   // that is precisely the state `uninstall` calls `foreign` and clears nothing of. So:
   // remember what was already on disk, and unwind exactly what this run added.
   const before = whatIsThere([p.dir, p.stateDir, p.snapshots, p.wrapper, p.backup]);
+  let made: string | undefined;
   try {
     fs.mkdirSync(p.dir, { recursive: true });
-    fs.mkdirSync(p.snapshots, { recursive: true });
+    made = fs.mkdirSync(p.snapshots, { recursive: true });
     writeWrapper(p, previous?.command ?? null, root);
 
     // Nothing on this path has read backup.json — the marker answered for it — so the kind is
@@ -931,7 +934,7 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
     fs.chmodSync(p.backup, 0o600);
     writeAtomic(p.settings, installedText);
   } catch (failure) {
-    unwind(p, before);
+    unwind(p, before, made);
     throw failure;
   }
 
@@ -996,8 +999,11 @@ const readOrNull = (file: string): Buffer | null => {
  * back from the install that succeeded, and leaving that backup in place with `previous:
  * null` written into it loses the user's statusline just as surely as deleting the file
  * would. A directory that holds the user's own config.json is not ours either way.
+ *
+ * `made` is what `mkdirSync(p.snapshots, { recursive: true })` answered: the first directory
+ * it created, so the highest one this run may take back.
  */
-function unwind(p: TarmacPaths, before: Map<string, Buffer | null>): void {
+function unwind(p: TarmacPaths, before: Map<string, Buffer | null>, made?: string): void {
   const attempt = (undo: () => void): void => {
     try {
       undo();
@@ -1027,11 +1033,15 @@ function unwind(p: TarmacPaths, before: Map<string, Buffer | null>): void {
   // `rmdir`, not a recursive remove: a directory that has gained snapshots or a config since
   // we made it holds someone else's data now, and ENOTEMPTY is the answer we want.
   //
-  // The state directory goes back too, deepest first — `mkdir -p` made both rungs. What is
-  // ABOVE it (`~/.local/state`) is XDG's, not ours: we may have created it on a home that
-  // had none, and unmaking it would be reaching past what this tool owns.
+  // The state directory goes back too, deepest first, and every rung above it that `mkdir -p`
+  // made on the way (#315), up to `made` and never past it: what was there before is not ours.
   drop(p.snapshots, (d) => fs.rmdirSync(d));
   drop(p.stateDir, (d) => fs.rmdirSync(d));
+  if (made !== undefined) {
+    for (let d = path.dirname(p.stateDir); d === made || d.startsWith(made + path.sep); d = path.dirname(d)) {
+      attempt(() => fs.rmdirSync(d));
+    }
+  }
   drop(p.dir, (d) => fs.rmdirSync(d));
 }
 

@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A failed install takes back every directory it made for the snapshots.** The unwind
+  removed the snapshots directory and the one above it, and left every rung `mkdir -p` had made
+  further up: `--snapshots-dir /data/a/b/snapshots` on an empty `/data` left `/data/a` behind. It
+  now goes up to the first directory the run created, and no further (#315).
+
 - **A bar in the first column of the cost chart no longer covers the axis labels.** The labels
   were drawn before the bars, so a column at the left edge painted over them and `$100` read `$`
   or `00` depending on the range. They are now drawn after the bars and before the column totals,
