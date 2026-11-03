@@ -38,6 +38,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   further up: `--snapshots-dir /data/a/b/snapshots` on an empty `/data` left `/data/a` behind. It
   now goes up to the first directory the run created, and no further (#315).
 
+- **`uninstall` removes the `settings.json` install created through a dangling link.** An install
+  through a link whose target did not exist yet created the file at the far end, and uninstall
+  then removed the link only: the file stayed, with a `statusLine` naming the wrapper uninstall
+  had just deleted. It now removes that file and leaves the link as it found it (#318).
+
 - **A bar in the first column of the cost chart no longer covers the axis labels.** The labels
   were drawn before the bars, so a column at the left edge painted over them and `$100` read `$`
   or `00` depending on the range. They are now drawn after the bars and before the column totals,

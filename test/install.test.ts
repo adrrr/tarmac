@@ -906,6 +906,41 @@ test('a dangling symlink is written through, not replaced by a regular file', ()
   assert.equal(fs.existsSync(dotfile), true, 'and the file it named is what got created');
 });
 
+// Uninstall's `absent` branch removed `settings.json` by its own name, which is the link: the
+// file install created at the far end stayed, its statusLine naming a deleted wrapper (#318).
+test('uninstall removes the file a dangling symlink was written through, and keeps the link', () => {
+  const home = fakeHome();
+  const store = path.join(home, 'dotfiles');
+  fs.mkdirSync(store);
+  const dotfile = path.join(store, 'settings.json');
+  fs.symlinkSync(dotfile, paths(home).settings);
+
+  install({ home });
+  assert.equal(uninstall({ home }).mode, 'absent');
+  assert.equal(fs.existsSync(dotfile), false, 'the file install created is gone');
+  assert.equal(fs.lstatSync(paths(home).settings).isSymbolicLink(), true, 'the link is still there');
+  assert.equal(fs.readlinkSync(paths(home).settings), dotfile, 'and still names what it named');
+});
+
+// `resolveWriteTarget` joins a relative link to the path it was found under; the kernel, to the
+// directory the link really is in. Under a symlinked `.claude` the two name different files.
+test('uninstall removes the file it read, not the one a relative link names by its path', () => {
+  const home = fakeHome();
+  fs.mkdirSync(path.join(home, 'store'));
+  fs.symlinkSync(path.join('..', 'store', 'settings.json'), paths(home).settings);
+  install({ home });
+  fs.mkdirSync(path.join(home, 'sub'));
+  for (const dir of ['.claude', 'store']) fs.renameSync(path.join(home, dir), path.join(home, 'sub', dir));
+  fs.symlinkSync(path.join('sub', '.claude'), path.join(home, '.claude'));
+  const theirs = path.join(home, 'store', 'settings.json');
+  fs.mkdirSync(path.dirname(theirs));
+  fs.writeFileSync(theirs, MINE);
+
+  assert.equal(uninstall({ home }).mode, 'absent');
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file nobody read stays');
+  assert.equal(fs.existsSync(path.join(home, 'sub', 'store', 'settings.json')), false, 'the file that was read is gone');
+});
+
 test('install --yes installs into the home it runs under', () => {
   const home = fakeHome(MINE);
   const run = tarmac(['install', '--yes'], home);
