@@ -1769,6 +1769,34 @@ test('a failed install takes back the state directory it created', () => {
   assert.equal(fs.existsSync(path.join(home, '.local', 'state', 'tarmac')), false, 'and the directory above it, which it also made');
 });
 
+// `mkdir -p` makes every missing rung, not only the two the unwind names (#315). Its answer
+// is the first one it made, and that is as far up as the unwind may go.
+test('a failed install takes back every directory above the snapshots that it made', () => {
+  const home = fakeHome();
+  danglingSettings(home);
+  const data = tempDir('tarmac-data-');
+  assert.throws(() => install({ home, snapshotsDir: path.join(data, 'a', 'b', 'snapshots') }), /ENOENT/);
+  assert.equal(fs.existsSync(path.join(data, 'a')), false, 'the rung above the state directory is gone');
+  assert.equal(fs.existsSync(data), true, 'the directory that was there before stays');
+
+  const missing = path.join(tempDir('tarmac-data-'), 'data');
+  assert.throws(() => install({ home, snapshotsDir: path.join(missing, 'a', 'b', 'snapshots') }), /ENOENT/);
+  assert.equal(fs.existsSync(missing), false, 'a missing root it made goes back too');
+  assert.equal(fs.existsSync(path.dirname(missing)), true, 'and nothing above it');
+});
+
+// The re-install branch makes the snapshots directory with the same `mkdir -p` and hands its
+// answer to the same `unwind`, so a refusal there takes back every rung it made too (#315).
+test('a re-install that refuses takes back every directory above the snapshots that it made', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.rmSync(path.join(home, '.local'), { recursive: true });
+  fs.rmSync(paths(home).wrapper);
+  fs.mkdirSync(paths(home).wrapper);
+  assert.throws(() => install({ home }), /statusline\.sh is not a regular file/);
+  assert.equal(fs.existsSync(path.join(home, '.local')), false, 'the rungs it made on the way are gone');
+});
+
 // ── the payloads an older tarmac left inside `.claude` ─────────────────────────────────
 // Moving the directory is only half of #20: the machines that hit the bug already have the
 // files, in the repo, and nothing would ever remove them. They are PURGED rather than moved
