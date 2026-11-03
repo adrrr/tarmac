@@ -1197,7 +1197,11 @@ export function uninstall({ home, expect, snapshots: planned, marker }: Uninstal
   if (currentText === backup.installedText) {
     // untouched since install → put the original bytes back, or remove the file we created
     if (backup.originalText === null) {
-      fs.rmSync(p.settings, { force: true });
+      // The file install created, which a dangling link sent to its far end: the link stays
+      // (#318). `realpath`, not `resolveWriteTarget`: the link resolves now, and only the file
+      // whose bytes were just compared may go. A relative link read under a symlinked directory
+      // names, by its path, a file nobody read.
+      fs.rmSync(fs.realpathSync(p.settings), { force: true });
       mode = 'absent';
     } else {
       writeAtomic(p.settings, backup.originalText);
