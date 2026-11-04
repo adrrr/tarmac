@@ -174,7 +174,8 @@ export interface ReadRangeOptions {
   /**
    * How one local day is read back, `null` for a day there is nothing for. Defaults to the file
    * of that name in `dir`, which is what every real journal is — refusing anything that is not
-   * a regular file (#136), counted in `coverage.skipped`.
+   * a regular file (#136), counted in `coverage.skipped` as is a regular one that cannot be
+   * read (#322).
    *
    * The seam exists so a journal can be answered that was never written: `serve --demo` invents
    * a week of days in memory and hands them through here, so the aggregation below — hours,
@@ -268,18 +269,28 @@ export async function readRange({ dir, range, now, capped = false, readDay }: Re
   // directory somebody is racing — and `serve` answers 504 rather than waiting for it.
   const readDayFromDisk = async (date: string): Promise<string | null> => {
     const file = path.join(dir, `${date}.jsonl`);
+    let regular: boolean;
     try {
-      if (!(await fs.lstat(file)).isFile()) {
-        // Counted rather than passed over, and counted here: a day file that is not a file is
-        // a record this range could not read, which is the question `skipped` answers.
-        coverage.skipped += 1;
-        return null;
-      }
+      regular = (await fs.lstat(file)).isFile();
+    } catch {
+      // A day with no file is the normal case: `serve` was not running. `lstat` asks nothing of
+      // the file itself, only of the directories above it, so whatever else fails here is the
+      // journal path: a file where the directory was (ENOTDIR), or a directory that may not be
+      // searched (EACCES). Counting it would count every day of the range, file or not.
+      return null;
+    }
+    if (!regular) {
+      // Counted rather than passed over, and counted here: a day file that is not a file is
+      // a record this range could not read, which is the question `skipped` answers.
+      coverage.skipped += 1;
+      return null;
+    }
+    try {
       return await fs.readFile(file, 'utf8');
     } catch (err) {
-      // A day with no file is the normal case: `serve` was not running. A day whose file is there
-      // and cannot be read is a record this range could not read, counted like the refusal above
-      // (#322) — `serve` is not the process that fixes it, but nor may the day vanish unsaid.
+      // Gone since the `lstat` is a missing day like any other. Anything else is a day file that
+      // is there and cannot be read, a record this range could not read, counted like the
+      // refusal above (#322).
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') coverage.skipped += 1;
       return null;
     }

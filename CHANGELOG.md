@@ -35,8 +35,9 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **A day file that cannot be read is counted in `coverage.skipped`.** A day file that is there
   and cannot be opened, mode `0000` for one, read as a day with no file and dropped out of the
-  range with nothing counted. A missing day is still silent, since serve was not running; any
-  other read error now counts once, like a day file refused by kind (#322).
+  range with nothing counted. It now counts once, like a day file refused by kind (#322). A
+  missing day is still silent, since serve was not running, and so is a journal directory that
+  cannot be looked into, which would otherwise have counted every day of the range.
 
 - **A failed install takes back every directory it made for the snapshots.** The unwind
   removed the snapshots directory and the one above it, and left every rung `mkdir -p` had made

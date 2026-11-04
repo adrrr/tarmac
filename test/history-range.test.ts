@@ -240,6 +240,38 @@ test('a missing day is silent, and an unreadable one is counted', async (t) => {
   }
 });
 
+// What fails before a day file is reached is the journal path, not a day: `lstat` asks the
+// directories above the name and nothing of the file. Counted, that would put every day of the
+// range in `skipped`, whether a file was ever written for it or not.
+test('a journal path that is not a directory counts no day', async () => {
+  const file = path.join(path.dirname(journal()), 'history-file');
+  fs.writeFileSync(file, 'not a directory\n');
+
+  const range = await readRange({ dir: file, range: '30d', now: at(2026, 8, 7) });
+
+  assert.equal(range.coverage.skipped, 0, 'thirty days with no file, none of them unreadable');
+  assert.deepEqual(range.days, []);
+});
+
+test('a journal directory that may not be searched counts no day either', async (t) => {
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: a mode denies nothing, the case cannot be built here');
+    return;
+  }
+  const dir = journal();
+  day(dir, '2026-08-05', [rec(at(2026, 8, 5, 9), [sess()])]);
+  fs.chmodSync(dir, 0o600);
+
+  try {
+    const range = await readRange({ dir, range: '7d', now: at(2026, 8, 7) });
+
+    assert.equal(range.coverage.skipped, 0, 'seven days the reader could not look for, not seven unreadable ones');
+  } finally {
+    // Restored here, or the sandbox cannot remove what this test built.
+    fs.chmodSync(dir, 0o755);
+  }
+});
+
 // ── the hour ──────────────────────────────────────────────────────────────────────────
 
 test('an hour keeps the highest context it saw and the last cost and state it was left in', async () => {
