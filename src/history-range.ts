@@ -117,10 +117,10 @@ export interface RangeCoverage {
    * Lines that would not parse, or that parsed into something that is not a reading. This is
    * #134's number, and it is kept for that: a torn line is a filesystem event worth seeing.
    *
-   * And the one thing counted here that is not a line: a day file that is not a regular file,
-   * which is one whole day nothing could be read from (#136). The same fact in the same field
-   * rather than a second one, because it answers the same question a reader asks of a thin
-   * range — what did this read step over.
+   * And the one thing counted here that is not a line: a day file that is not a regular file
+   * (#136) or that could not be read (#322), which is one whole day nothing could be read from.
+   * The same fact in the same field rather than a second one, because it answers the same
+   * question a reader asks of a thin range — what did this read step over.
    */
   skipped: number;
   /** Lines that read cleanly and carry a clock outside the range. A different fact, counted apart. */
@@ -174,7 +174,8 @@ export interface ReadRangeOptions {
   /**
    * How one local day is read back, `null` for a day there is nothing for. Defaults to the file
    * of that name in `dir`, which is what every real journal is — refusing anything that is not
-   * a regular file (#136), counted in `coverage.skipped`.
+   * a regular file (#136), counted in `coverage.skipped` as is a regular one that cannot be
+   * read (#322).
    *
    * The seam exists so a journal can be answered that was never written: `serve --demo` invents
    * a week of days in memory and hands them through here, so the aggregation below — hours,
@@ -268,17 +269,29 @@ export async function readRange({ dir, range, now, capped = false, readDay }: Re
   // directory somebody is racing — and `serve` answers 504 rather than waiting for it.
   const readDayFromDisk = async (date: string): Promise<string | null> => {
     const file = path.join(dir, `${date}.jsonl`);
+    let regular: boolean;
     try {
-      if (!(await fs.lstat(file)).isFile()) {
-        // Counted rather than passed over, and counted here: a day file that is not a file is
-        // a record this range could not read, which is the question `skipped` answers.
-        coverage.skipped += 1;
-        return null;
-      }
-      return await fs.readFile(file, 'utf8');
+      regular = (await fs.lstat(file)).isFile();
     } catch {
-      // A day with no file is the normal case: `serve` was not running. A day whose file cannot
-      // be read is the same answer for this reader, and `serve` is not the process that fixes it.
+      // A day with no file is the normal case: `serve` was not running. `lstat` asks nothing of
+      // the file itself, only of the directories above it, so whatever else fails here is the
+      // journal path: a file where the directory was (ENOTDIR), or a directory that may not be
+      // searched (EACCES). Counting it would count every day of the range, file or not.
+      return null;
+    }
+    if (!regular) {
+      // Counted rather than passed over, and counted here: a day file that is not a file is
+      // a record this range could not read, which is the question `skipped` answers.
+      coverage.skipped += 1;
+      return null;
+    }
+    try {
+      return await fs.readFile(file, 'utf8');
+    } catch (err) {
+      // Gone since the `lstat` is a missing day like any other. Anything else is a day file that
+      // is there and cannot be read, a record this range could not read, counted like the
+      // refusal above (#322).
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') coverage.skipped += 1;
       return null;
     }
   };
@@ -304,8 +317,8 @@ export async function readRange({ dir, range, now, capped = false, readDay }: Re
 
   for (const date of days_) {
     // A day with nothing for it is the normal case: `serve` was not running. A day whose file
-    // cannot be read is the same answer for this reader — both readers swallow their own
-    // failure — and `serve` is not the process that fixes it.
+    // cannot be read is the same answer here — both readers swallow their own failure, and the
+    // disk one counts it in `coverage.skipped` first (#322).
     const text = await read(date);
     if (text === null) continue;
 
