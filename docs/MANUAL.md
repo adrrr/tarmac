@@ -1088,7 +1088,8 @@ clock while each line carries the reading's own, so a clock corrected overnight 
 `coverage.outOfRange` the ones whose clock puts them somewhere else.
 
 A whole day is skipped, and counted in `coverage.skipped` too, when the name a day file would
-have is not a regular file. The directory is yours and anything can land in it: reading a named
+have is not a regular file, or is one that cannot be read. A day with no file is not counted:
+`serve` was not running. The directory is yours and anything can land in it: reading a named
 pipe there waits for someone to write to the other end, which would hang the read, the request on
 it and every request sharing it. The kind is asked before the file is opened, and a symlink is
 refused with the rest — what the store writes is a file, so a link is a name somebody else put

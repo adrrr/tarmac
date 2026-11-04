@@ -117,10 +117,10 @@ export interface RangeCoverage {
    * Lines that would not parse, or that parsed into something that is not a reading. This is
    * #134's number, and it is kept for that: a torn line is a filesystem event worth seeing.
    *
-   * And the one thing counted here that is not a line: a day file that is not a regular file,
-   * which is one whole day nothing could be read from (#136). The same fact in the same field
-   * rather than a second one, because it answers the same question a reader asks of a thin
-   * range — what did this read step over.
+   * And the one thing counted here that is not a line: a day file that is not a regular file
+   * (#136) or that could not be read (#322), which is one whole day nothing could be read from.
+   * The same fact in the same field rather than a second one, because it answers the same
+   * question a reader asks of a thin range — what did this read step over.
    */
   skipped: number;
   /** Lines that read cleanly and carry a clock outside the range. A different fact, counted apart. */
@@ -276,9 +276,11 @@ export async function readRange({ dir, range, now, capped = false, readDay }: Re
         return null;
       }
       return await fs.readFile(file, 'utf8');
-    } catch {
-      // A day with no file is the normal case: `serve` was not running. A day whose file cannot
-      // be read is the same answer for this reader, and `serve` is not the process that fixes it.
+    } catch (err) {
+      // A day with no file is the normal case: `serve` was not running. A day whose file is there
+      // and cannot be read is a record this range could not read, counted like the refusal above
+      // (#322) — `serve` is not the process that fixes it, but nor may the day vanish unsaid.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') coverage.skipped += 1;
       return null;
     }
   };
@@ -304,8 +306,8 @@ export async function readRange({ dir, range, now, capped = false, readDay }: Re
 
   for (const date of days_) {
     // A day with nothing for it is the normal case: `serve` was not running. A day whose file
-    // cannot be read is the same answer for this reader — both readers swallow their own
-    // failure — and `serve` is not the process that fixes it.
+    // cannot be read is the same answer here — both readers swallow their own failure, and the
+    // disk one counts it in `coverage.skipped` first (#322).
     const text = await read(date);
     if (text === null) continue;
 

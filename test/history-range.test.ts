@@ -213,6 +213,33 @@ test('a day file that is a link is skipped too, whatever it points at', async ()
   );
 });
 
+// A missing day is the normal case: serve was not running, and there is nothing to count. A
+// day file that is there and cannot be read is the other answer the read used to give the same
+// way (#322): the range had a record it could not read, which is what `skipped` counts.
+test('a missing day is silent, and an unreadable one is counted', async (t) => {
+  if (process.getuid?.() === 0) {
+    t.skip('running as root: 0000 does not deny anything, the case cannot be built here');
+    return;
+  }
+  const dir = journal();
+  const now = at(2026, 8, 7);
+  day(dir, '2026-08-05', [rec(at(2026, 8, 5, 9), [sess()])]);
+  day(dir, '2026-08-06', [rec(at(2026, 8, 6, 9), [sess()])]);
+  const locked = path.join(dir, '2026-08-06.jsonl');
+  fs.chmodSync(locked, 0o000);
+
+  try {
+    const range = await readRange({ dir, range: '7d', now });
+
+    assert.equal(range.coverage.lines, 1, 'the readable day is read as it always was');
+    assert.equal(range.coverage.skipped, 1, 'the unreadable day once, and the five missing ones not at all');
+    assert.deepEqual(range.days.map((d) => d.date), ['2026-08-05']);
+  } finally {
+    // Restored here, or the sandbox cannot remove what this test built.
+    fs.chmodSync(locked, 0o644);
+  }
+});
+
 // ── the hour ──────────────────────────────────────────────────────────────────────────
 
 test('an hour keeps the highest context it saw and the last cost and state it was left in', async () => {
