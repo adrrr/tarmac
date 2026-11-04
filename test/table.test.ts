@@ -506,6 +506,11 @@ test('the width helpers answer the columns a terminal paints, glyph by glyph', (
   for (const [cp, expected] of EAW_POINTS) {
     assert.equal(widthOf(String.fromCodePoint(cp)), expected, `U+${cp.toString(16).toUpperCase()}`);
   }
+  // #319: a skin tone with no base is dropped before measuring, as #182 asked. string-width and
+  // wcwidth answer 2 for the first and a terminal may draw the colour square, so both values
+  // are pinned here: a change to either has to be a decision, not a side effect.
+  assert.equal(widthOf('\u{1f3fb}'), 0, 'a skin tone with no base paints nothing');
+  assert.equal(widthOf('\u{1f3fb}‍a'), 1, 'a skin tone and a joiner with no base leave the letter its one column');
   const flag = '\u{1f1eb}\u{1f1f7}';
   const scot = '\u{1f3f4}\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f}';
   const cases: Array<[string, string, string[], number]> = [
