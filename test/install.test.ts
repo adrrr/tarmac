@@ -292,7 +292,7 @@ test('uninstall refuses when the prune marker changed since the plan', () => {
   install({ home });
   const plan = planUninstall({ home });
   assert.equal(plan.marker, 'none');
-  fs.writeFileSync(path.join(paths(home).snapshots, PRUNE_MARKER), '');
+  fs.mkdirSync(path.join(paths(home).snapshots, PRUNE_MARKER));
   const before = settingsOf(home);
 
   assert.throws(
@@ -300,7 +300,41 @@ test('uninstall refuses when the prune marker changed since the plan', () => {
     /prune marker changed since the plan/,
   );
   assert.equal(settingsOf(home), before, 'and the refusal wrote nothing');
-  assert.equal(fs.existsSync(path.join(paths(home).snapshots, PRUNE_MARKER)), true);
+  assert.equal(fs.statSync(path.join(paths(home).snapshots, PRUNE_MARKER)).isDirectory(), true);
+});
+
+test('uninstall refuses when a plain file replaced a prune marker that was not one', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const marker = path.join(paths(home).snapshots, PRUNE_MARKER);
+  fs.mkdirSync(marker);
+  const plan = planUninstall({ home });
+  assert.equal(plan.marker, 'not-a-file');
+  fs.rmdirSync(marker);
+  fs.writeFileSync(marker, '');
+
+  assert.throws(
+    () => uninstall({ home, expect: plan.currentText, snapshots: plan.snapshots, marker: plan.marker }),
+    /prune marker changed since the plan/,
+  );
+  assert.equal(fs.existsSync(marker), true, 'a removal the plan did not print stays undone');
+});
+
+// The wrapper stamps the first marker on the first frame that sweeps, which can be the frame
+// drawn while the user reads the plan (#323). A plain file there is ours either way.
+test('uninstall goes through when the first prune marker lands between plan and confirm', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const plan = planUninstall({ home });
+  assert.equal(plan.marker, 'none');
+  const marker = path.join(paths(home).snapshots, PRUNE_MARKER);
+  fs.writeFileSync(marker, '');
+
+  const { mode } = uninstall({ home, expect: plan.currentText, snapshots: plan.snapshots, marker: plan.marker });
+  assert.equal(mode, plan.mode);
+  assert.equal(settingsOf(home), MINE);
+  assert.equal(fs.existsSync(marker), false, 'the marker the wrapper stamped goes with it');
+  assert.equal(fs.existsSync(paths(home).wrapper), false);
 });
 
 test('uninstall restores as planned when settings.json is the file the plan read', () => {

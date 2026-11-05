@@ -1189,7 +1189,10 @@ export function uninstall({ home, expect, snapshots: planned, marker }: Uninstal
   if (planned !== undefined && snapshots !== planned) {
     throw new Error(`the snapshots directory changed since the plan — nothing was written, run uninstall again`);
   }
-  if (marker !== undefined && (snapshots === null ? null : markerState(path.join(snapshots, PRUNE_MARKER))) !== marker) {
+  const markerNow = snapshots === null ? null : markerState(path.join(snapshots, PRUNE_MARKER));
+  // None to a plain file is the wrapper stamping its first marker while the plan was read: that
+  // file is ours to remove either way (#323). Any other change is one nobody was shown.
+  if (marker !== undefined && markerNow !== marker && !(marker === 'none' && markerNow === 'file')) {
     throw new Error(`the prune marker changed since the plan — nothing was written, run uninstall again`);
   }
   let mode: UninstallMode;
