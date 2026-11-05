@@ -440,9 +440,20 @@ function resolveWriteTarget(file: string): string {
     } catch {
       return current; // not a link (or unreadable): this is the file
     }
-    current = path.resolve(path.dirname(current), link);
+    // From the directory the link really is in, as the kernel does: under a symlinked `.claude`
+    // the path it was reached by names another file (#326).
+    current = path.resolve(realDir(path.dirname(current)), link);
   }
   return current; // a loop of links: stop somewhere rather than spin
+}
+
+/** The directory itself, or its path as given when it cannot be resolved: the write then fails there. */
+function realDir(dir: string): string {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return dir;
+  }
 }
 
 /** …and say so, when that is not the path the plan names. */

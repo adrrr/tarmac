@@ -975,6 +975,28 @@ test('uninstall removes the file it read, not the one a relative link names by i
   assert.equal(fs.existsSync(path.join(home, 'sub', 'store', 'settings.json')), false, 'the file that was read is gone');
 });
 
+// The install side of the same join (#326): it wrote its statusLine into an unrelated file the
+// link only names by the path it was reached through, and the plan's `writes` named that file too.
+test('install writes through a relative link from the directory the link really is in', () => {
+  const home = tempDir('tarmac-home-');
+  const real = path.join(home, 'real');
+  fs.mkdirSync(path.join(real, 'claude'), { recursive: true });
+  fs.mkdirSync(path.join(real, 'dotfiles'));
+  fs.symlinkSync(path.join('real', 'claude'), path.join(home, '.claude'));
+  fs.symlinkSync(path.join('..', 'dotfiles', 'settings.json'), path.join(real, 'claude', 'settings.json'));
+  const theirs = path.join(home, 'dotfiles', 'settings.json');
+  fs.mkdirSync(path.dirname(theirs));
+  fs.writeFileSync(theirs, MINE);
+  const reached = path.join(fs.realpathSync(path.join(real, 'dotfiles')), 'settings.json');
+
+  assert.equal(planInstall({ home }).writes, reached, 'the plan names the file the kernel reaches');
+  install({ home });
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file the link does not reach stays');
+  assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
+  assert.equal(uninstall({ home }).mode, 'absent');
+  assert.equal(fs.existsSync(reached), false);
+});
+
 test('install --yes installs into the home it runs under', () => {
   const home = fakeHome(MINE);
   const run = tarmac(['install', '--yes'], home);
