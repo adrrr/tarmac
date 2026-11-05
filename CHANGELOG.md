@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The first prune marker no longer cancels an uninstall.** A plan made before the wrapper
+  stamped its marker said none; if the first sweeping frame stamped it while the plan was read,
+  uninstall refused with "the prune marker changed since the plan". A plain file appearing there
+  now goes through and is removed with the rest; every other change still refuses (#323).
 - **A day file that cannot be read is counted in `coverage.skipped`.** A day file that is there
   and cannot be opened, mode `0000` for one, read as a day with no file and dropped out of the
   range with nothing counted. It now counts once, like a day file refused by kind (#322). A
