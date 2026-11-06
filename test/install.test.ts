@@ -1858,6 +1858,9 @@ test('a failed install takes back the state directory it created', () => {
   assert.throws(() => install({ home }), /ENOENT/);
   assert.equal(fs.existsSync(path.join(home, '.local', 'state', 'tarmac', 'snapshots')), false, 'ours to create, ours to take back');
   assert.equal(fs.existsSync(path.join(home, '.local', 'state', 'tarmac')), false, 'and the directory above it, which it also made');
+  assert.equal(fs.existsSync(path.join(home, '.local', 'state')), false, 'and every rung above that one');
+  assert.equal(fs.existsSync(path.join(home, '.local')), false, 'up to the first it made');
+  assert.equal(fs.existsSync(home), true, 'the home that was there before stays');
 });
 
 // `mkdir -p` makes every missing rung, not only the two the unwind names (#315). Its answer
