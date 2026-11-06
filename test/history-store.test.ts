@@ -349,6 +349,51 @@ test('a reading is not written through a link at today\'s name', () => {
   assert.equal(s.stats().misses, 1, 'and the reading is counted as lost');
 });
 
+// The writer's half of #159 (#331): `O_WRONLY` on a FIFO with no reader waits for one, and with a
+// reader the write waits once the pipe is full. `append` is synchronous and serve calls it from
+// the sampler, so either wait stopped the whole process. A pipe at today's name is a miss.
+//
+// In a child, where the wait is bounded: a regression reached from inside this process would
+// hang the file rather than fail it (#165). Once with nobody at the other end, and once with a
+// reader holding it open, which is the case the open alone lets through.
+for (const reader of [false, true]) {
+  test(`a reading is not written into a named pipe at today's name${reader ? ', even one someone reads' : ''}`, () => {
+    const dir = path.join(tempDir('tarmac-hist-'), 'history');
+    fs.mkdirSync(dir);
+    const now = at(2026, 8, 7);
+    const fifo = path.join(dir, `${dayOf(now)}.jsonl`);
+    const made = spawnSync('mkfifo', [fifo]);
+    assert.equal(made.status, 0, `mkfifo ${fifo}: ${made.error?.message ?? made.stderr}`);
+    const held = reader ? fs.openSync(fifo, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK) : null;
+    try {
+      const mod = new URL('../src/history-store.ts', import.meta.url).href;
+      const script = [
+        `import { createHistoryStore } from ${JSON.stringify(mod)};`,
+        `const s = createHistoryStore({ dir: ${JSON.stringify(dir)}, days: 30, now: () => ${now} });`,
+        `s.append(${JSON.stringify(sample(now))});`,
+        'process.stdout.write(JSON.stringify(s.stats()));',
+      ].join('\n');
+      const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 10_000 });
+      assert.equal(r.signal, null, 'append returned rather than waiting on the pipe');
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(JSON.parse(r.stdout).misses, 1, 'and the reading is counted as lost');
+      if (held !== null) {
+        const buf = Buffer.alloc(4096);
+        let got = 0;
+        try {
+          got = fs.readSync(held, buf);
+        } catch {
+          // EAGAIN: nothing in the pipe, which is the passing case.
+        }
+        assert.equal(got, 0, 'nothing went down the pipe');
+      }
+      assert.ok(fs.lstatSync(fifo).isFIFO(), 'and the pipe is where it was');
+    } finally {
+      if (held !== null) fs.closeSync(held);
+    }
+  });
+}
+
 // ── where it lives ────────────────────────────────────────────────────────────────────
 
 // A sibling of the snapshots, never a child of them. Three things already delete files under

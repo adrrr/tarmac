@@ -515,9 +515,13 @@ export function createHistoryStore({
         // what is already there. This process is the only writer, and the flag says so anyway.
         // `O_NOFOLLOW`, because the cap and the reader both skip a linked day file: a line written
         // through one would be weighed by nothing and read by nothing, so it is a miss (#310).
-        const { O_WRONLY, O_CREAT, O_APPEND, O_NOFOLLOW } = fs.constants;
-        const fd = fs.openSync(path.join(dir, `${day}.jsonl`), O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW);
+        // `O_NONBLOCK` and the kind asked of the fd, because a FIFO at today's name waits for a
+        // reader on the open and for room on the write, and this call is synchronous: nothing
+        // could fire through either wait. Anything but a regular file is a miss (#331).
+        const { O_WRONLY, O_CREAT, O_APPEND, O_NOFOLLOW, O_NONBLOCK } = fs.constants;
+        const fd = fs.openSync(path.join(dir, `${day}.jsonl`), O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_NONBLOCK);
         try {
+          if (!fs.fstatSync(fd).isFile()) throw new Error('not a regular file');
           fs.appendFileSync(fd, line);
         } finally {
           fs.closeSync(fd);

@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A named pipe at today's day file no longer hangs `serve`.** The journal's append opened it
+  write-only, which waits for a reader, and wrote to it, which waits once the pipe is full. Both
+  were synchronous, so the sampler and the whole process waited with them. The open no longer
+  blocks and only a regular file is written; anything else is counted as a missed reading (#331).
 - **The first prune marker no longer cancels an uninstall.** A plan made before the wrapper
   stamped its marker said none; if the first sweeping frame stamped it while the plan was read,
   uninstall refused with "the prune marker changed since the plan". A plain file appearing there
