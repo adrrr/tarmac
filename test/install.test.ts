@@ -1931,6 +1931,21 @@ test('a re-install that stops half way through mkdir -p takes back the rungs it 
   assert.equal(fs.existsSync(path.join(home, '.local')), false, 'the rung made before the disk filled is gone');
 });
 
+test('an install refuses a snapshots path that is there and is not a directory', () => {
+  const data = tempDir('tarmac-data-');
+  const cases: Array<[string, (at: string) => void, RegExp]> = [
+    ['a-file', (at) => fs.writeFileSync(at, 'x'), /EEXIST/],
+    ['a-dangling-link', (at) => fs.symlinkSync(path.join(data, 'nowhere'), at), /ENOENT/],
+  ];
+  for (const [name, make, code] of cases) {
+    const home = fakeHome('{}');
+    const at = path.join(data, name);
+    make(at);
+    assert.throws(() => install({ home, snapshotsDir: at }), code, name);
+    assert.equal(settingsOf(home), '{}', `${name}: settings.json is untouched`);
+  }
+});
+
 // ── the payloads an older tarmac left inside `.claude` ─────────────────────────────────
 // Moving the directory is only half of #20: the machines that hit the bug already have the
 // files, in the repo, and nothing would ever remove them. They are PURGED rather than moved

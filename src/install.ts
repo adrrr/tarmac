@@ -1013,6 +1013,13 @@ const readOrNull = (file: string): Buffer | null => {
 function mkdirRungs(dir: string, first: (made: string) => void): void {
   const missing: string[] = [];
   for (let d = dir; !isPresent(d); d = path.dirname(d)) missing.unshift(d);
+  // Present is not a directory yet. A file, a FIFO or a dangling link at `dir` is what `mkdir -p`
+  // refused (EEXIST, ENOENT, ELOOP) before the wrapper was pointed at it, and the recursive call
+  // on a name that is there makes nothing, so it still gives that answer.
+  if (missing.length === 0) {
+    fs.mkdirSync(dir, { recursive: true });
+    return;
+  }
   missing.forEach((d, i) => {
     fs.mkdirSync(d);
     if (i === 0) first(d);
