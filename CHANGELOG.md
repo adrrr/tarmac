@@ -33,6 +33,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An install that runs out of disk while making the snapshots directory takes back what it
+  made.** `mkdir -p` names the first directory it created only when it succeeds, so one stopped
+  half way by a full disk or a quota left the rungs it had made behind. The directories are now
+  made one at a time, and the unwind knows the first from the moment it exists (#336).
 - **A named pipe at today's day file no longer hangs `serve`.** The journal's append opened it
   write-only, which waits for a reader, and wrote to it, which waits once the pipe is full. Both
   were synchronous, so the sampler and the whole process waited with them. The open no longer
