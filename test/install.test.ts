@@ -1891,6 +1891,61 @@ test('a re-install that refuses takes back every directory above the snapshots t
   assert.equal(fs.existsSync(path.join(home, '.local')), false, 'the rungs it made on the way are gone');
 });
 
+// A full disk can stop `mkdir -p` half way. The recursive call names the first directory it made
+// only when it returns, so the rungs made before the throw had no name the unwind could use
+// (#336). Staged as every mkdir at or below `stop` throwing ENOSPC, after a recursive one has
+// made the rungs above it, as the real call would have.
+function mkdirStopsAt(stop: string, run: () => void): void {
+  const realMkdir = fs.mkdirSync;
+  fs.mkdirSync = ((dir: fs.PathLike, options?: fs.MakeDirectoryOptions) => {
+    if (typeof dir === 'string' && (dir === stop || dir.startsWith(stop + path.sep))) {
+      if (options?.recursive) realMkdir(path.dirname(stop), { recursive: true });
+      throw Object.assign(new Error(`ENOSPC: no space left on device, mkdir '${stop}'`), { code: 'ENOSPC' });
+    }
+    return realMkdir(dir, options);
+  }) as typeof fs.mkdirSync;
+  try {
+    run();
+  } finally {
+    fs.mkdirSync = realMkdir;
+  }
+}
+
+test('a failed install that stops half way through mkdir -p takes back the rungs it made', () => {
+  const home = fakeHome('{}');
+  const data = tempDir('tarmac-data-');
+  mkdirStopsAt(path.join(data, 'a', 'b'), () => {
+    assert.throws(() => install({ home, snapshotsDir: path.join(data, 'a', 'b', 'snapshots') }), /ENOSPC/);
+  });
+  assert.equal(fs.existsSync(path.join(data, 'a')), false, 'the rung made before the disk filled is gone');
+  assert.equal(fs.existsSync(data), true, 'the directory that was there before stays');
+});
+
+test('a re-install that stops half way through mkdir -p takes back the rungs it made', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  fs.rmSync(path.join(home, '.local'), { recursive: true });
+  mkdirStopsAt(path.join(home, '.local', 'state'), () => {
+    assert.throws(() => install({ home }), /ENOSPC/);
+  });
+  assert.equal(fs.existsSync(path.join(home, '.local')), false, 'the rung made before the disk filled is gone');
+});
+
+test('an install refuses a snapshots path that is there and is not a directory', () => {
+  const data = tempDir('tarmac-data-');
+  const cases: Array<[string, (at: string) => void, RegExp]> = [
+    ['a-file', (at) => fs.writeFileSync(at, 'x'), /EEXIST/],
+    ['a-dangling-link', (at) => fs.symlinkSync(path.join(data, 'nowhere'), at), /ENOENT/],
+  ];
+  for (const [name, make, code] of cases) {
+    const home = fakeHome('{}');
+    const at = path.join(data, name);
+    make(at);
+    assert.throws(() => install({ home, snapshotsDir: at }), code, name);
+    assert.equal(settingsOf(home), '{}', `${name}: settings.json is untouched`);
+  }
+});
+
 // ── the payloads an older tarmac left inside `.claude` ─────────────────────────────────
 // Moving the directory is only half of #20: the machines that hit the bug already have the
 // files, in the repo, and nothing would ever remove them. They are PURGED rather than moved

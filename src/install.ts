@@ -895,7 +895,7 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
     const before = whatIsThere([p.dir, p.stateDir, p.snapshots, p.wrapper, p.backup]);
     let made: string | undefined;
     try {
-      made = fs.mkdirSync(p.snapshots, { recursive: true });
+      mkdirRungs(p.snapshots, (first) => (made = first));
       writeWrapper(p, backup.previous?.command ?? null, root);
       // The update path never rewrites the backup, and every install before #303 left it 0644.
       fs.chmodSync(p.backup, 0o600);
@@ -924,7 +924,7 @@ export function install({ home, snapshotsDir }: HomeOptions): InstallResult {
   let made: string | undefined;
   try {
     fs.mkdirSync(p.dir, { recursive: true });
-    made = fs.mkdirSync(p.snapshots, { recursive: true });
+    mkdirRungs(p.snapshots, (first) => (made = first));
     writeWrapper(p, previous?.command ?? null, root);
 
     // Nothing on this path has read backup.json — the marker answered for it — so the kind is
@@ -1005,14 +1005,45 @@ const readOrNull = (file: string): Buffer | null => {
 };
 
 /**
+ * `mkdir -p`, one rung at a time. The recursive call names the first directory it made only when
+ * it returns: stopped half way by a full disk or a quota it throws, and the rungs it already made
+ * have no name the unwind could take back (#336). Here the first is handed over before the next
+ * mkdir can fail.
+ */
+function mkdirRungs(dir: string, first: (made: string) => void): void {
+  const missing: string[] = [];
+  for (let d = dir; !isPresent(d); d = path.dirname(d)) missing.unshift(d);
+  // Present is not a directory yet. A file, a FIFO or a dangling link at `dir` is what `mkdir -p`
+  // refused (EEXIST, ENOENT, ELOOP) before the wrapper was pointed at it, and the recursive call
+  // on a name that is there makes nothing, so it still gives that answer.
+  if (missing.length === 0) {
+    fs.mkdirSync(dir, { recursive: true });
+    return;
+  }
+  missing.forEach((d, i) => {
+    fs.mkdirSync(d);
+    if (i === 0) first(d);
+  });
+}
+
+const isPresent = (target: string): boolean => {
+  try {
+    fs.lstatSync(target);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Put the tree back as this run found it: remove what it created, newest first, and restore
  * what it overwrote. Both halves matter — a re-install that fails must not carry off the way
  * back from the install that succeeded, and leaving that backup in place with `previous:
  * null` written into it loses the user's statusline just as surely as deleting the file
  * would. A directory that holds the user's own config.json is not ours either way.
  *
- * `made` is what `mkdirSync(p.snapshots, { recursive: true })` answered: the first directory
- * it created, so the highest one this run may take back.
+ * `made` is the first directory `mkdirRungs` made on the way to `p.snapshots`, so the highest
+ * one this run may take back.
  */
 function unwind(p: TarmacPaths, before: Map<string, Buffer | null>, made?: string): void {
   const attempt = (undo: () => void): void => {
