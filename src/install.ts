@@ -448,19 +448,23 @@ function resolveWriteTarget(file: string): string {
 /**
  * Where the text of the link at `from` leads, one name at a time as the kernel walks it. From
  * the directory the link really is in: under a symlinked `.claude` the path it was reached by
- * names another file (#326). And each directory is resolved before the next name: `path.resolve`
- * folds `sym/..` by spelling, the kernel follows `sym` and climbs out of where it points (#337).
+ * names another file (#326). Then as spelled, which is what the plan names, except that a
+ * directory a `..` climbs out of is resolved first by the system's realpath: `path.resolve` and
+ * Node's JS `realpathSync` both fold `sym/..` by spelling, the kernel follows `sym` and climbs
+ * out of where it points (#337).
  */
 function followLinkText(from: string, link: string): string {
   const names = link.split(path.sep).filter((name) => name !== '' && name !== '.');
   let at = path.isAbsolute(link) ? path.parse(link).root : path.dirname(from);
   for (const [i, name] of names.entries()) {
-    try {
-      at = fs.realpathSync(at);
-    } catch {
-      // Not there, or not searchable: the kernel stops at this name, and so does the write. The
-      // rest stays as spelled, since folding a `..` past it would name a file the write reaches.
-      return [at, ...names.slice(i)].join(path.sep);
+    if (i === 0 || name === '..') {
+      try {
+        at = fs.realpathSync.native(at);
+      } catch {
+        // Not there, or not searchable: the kernel stops at this name, and so does the write. The
+        // rest stays as spelled, since folding a `..` past it would name a file the write reaches.
+        return [at, ...names.slice(i)].join(path.sep);
+      }
     }
     at = name === '..' ? path.dirname(at) : path.join(at, name);
   }
@@ -1257,7 +1261,7 @@ export function uninstall({ home, expect, snapshots: planned, marker }: Uninstal
       // (#318). `realpath`, not `resolveWriteTarget`: the link resolves now, and only the file
       // whose bytes were just compared may go. A relative link read under a symlinked directory
       // names, by its path, a file nobody read.
-      fs.rmSync(fs.realpathSync(p.settings), { force: true });
+      fs.rmSync(fs.realpathSync.native(p.settings), { force: true });
       mode = 'absent';
     } else {
       writeAtomic(p.settings, backup.originalText);

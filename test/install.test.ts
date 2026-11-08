@@ -1015,6 +1015,41 @@ test('install follows a symlink in the link text before the .. that comes after 
   install({ home });
   assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file the link does not reach stays');
   assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
+
+  assert.equal(uninstall({ home }).mode, 'absent');
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'uninstall leaves it alone too');
+  assert.equal(fs.existsSync(reached), false, 'and removes the file install created');
+});
+
+// A directory link on the way whose own text holds `sym/..`: Node's JS `realpathSync` folds it
+// by spelling as `path.resolve` does, the kernel follows `sym` first (#337).
+test('install follows a sym/.. in the text of a directory link on the way', () => {
+  const home = fakeHome();
+  fs.mkdirSync(path.join(home, 'a', 'b'), { recursive: true });
+  fs.mkdirSync(path.join(home, 'a', 'y'));
+  fs.mkdirSync(path.join(home, 'y'));
+  fs.symlinkSync(path.join('a', 'b'), path.join(home, 'sym'));
+  // Joined by hand: `path.join` would fold the very `sym/..` under test.
+  fs.symlinkSync(['sym', '..', 'y'].join(path.sep), path.join(home, 'd'));
+  fs.symlinkSync(['..', 'd', 'settings.json'].join(path.sep), paths(home).settings);
+  const theirs = path.join(home, 'y', 'settings.json');
+  fs.writeFileSync(theirs, MINE);
+  const reached = path.join(fs.realpathSync.native(path.join(home, 'a', 'y')), 'settings.json');
+
+  install({ home });
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file the link does not reach stays');
+  assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
+});
+
+// A directory the link text names but that is not there stops the kernel at that name: the `..`
+// after it is not folded away, so the write fails there and creates nothing.
+test('install stops at a missing directory in the link text instead of folding the .. after it', () => {
+  const home = fakeHome();
+  fs.mkdirSync(path.join(home, 'x'));
+  fs.symlinkSync(['..', 'missing', '..', 'x', 'settings.json'].join(path.sep), paths(home).settings);
+
+  assert.throws(() => install({ home }), /ENOENT/);
+  assert.equal(fs.existsSync(path.join(home, 'x', 'settings.json')), false);
 });
 
 test('install --yes installs into the home it runs under', () => {
