@@ -997,6 +997,83 @@ test('install writes through a relative link from the directory the link really 
   assert.equal(fs.existsSync(reached), false);
 });
 
+// `sym/..` in a link's text is the parent of where `sym` points, not the directory `sym` is
+// in: `path.resolve` folds it by spelling, the kernel follows `sym` first (#337).
+test('install follows a symlink in the link text before the .. that comes after it', () => {
+  const home = fakeHome();
+  fs.mkdirSync(path.join(home, 'a', 'b'), { recursive: true });
+  fs.mkdirSync(path.join(home, 'a', 'x'));
+  fs.symlinkSync(path.join('a', 'b'), path.join(home, 'sym'));
+  // Joined by hand: `path.join` would fold the very `sym/..` under test.
+  fs.symlinkSync(['..', 'sym', '..', 'x', 'settings.json'].join(path.sep), paths(home).settings);
+  const theirs = path.join(home, 'x', 'settings.json');
+  fs.mkdirSync(path.dirname(theirs));
+  fs.writeFileSync(theirs, MINE);
+  const reached = path.join(fs.realpathSync(path.join(home, 'a', 'x')), 'settings.json');
+
+  assert.equal(planInstall({ home }).writes, reached, 'the plan names the file the kernel reaches');
+  install({ home });
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file the link does not reach stays');
+  assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
+
+  assert.equal(uninstall({ home }).mode, 'absent');
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'uninstall leaves it alone too');
+  assert.equal(fs.existsSync(reached), false, 'and removes the file install created');
+});
+
+// A directory link on the way whose own text holds `sym/..`: Node's JS `realpathSync` folds it
+// by spelling as `path.resolve` does, the kernel follows `sym` first (#337).
+test('install follows a sym/.. in the text of a directory link on the way', () => {
+  const home = fakeHome();
+  fs.mkdirSync(path.join(home, 'a', 'b'), { recursive: true });
+  fs.mkdirSync(path.join(home, 'a', 'y'));
+  fs.mkdirSync(path.join(home, 'y'));
+  fs.symlinkSync(path.join('a', 'b'), path.join(home, 'sym'));
+  // Joined by hand: `path.join` would fold the very `sym/..` under test.
+  fs.symlinkSync(['sym', '..', 'y'].join(path.sep), path.join(home, 'd'));
+  fs.symlinkSync(['..', 'd', 'settings.json'].join(path.sep), paths(home).settings);
+  const theirs = path.join(home, 'y', 'settings.json');
+  fs.writeFileSync(theirs, MINE);
+  const reached = path.join(fs.realpathSync.native(path.join(home, 'a', 'y')), 'settings.json');
+
+  install({ home });
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file the link does not reach stays');
+  assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
+});
+
+// A `..` that climbs out of such a link: the directory is resolved by the system's realpath, which
+// follows `sym` first. Node's JS `realpathSync` would land in `y` and climb out of the wrong place.
+test('install climbs out of a directory link whose own text holds sym/..', () => {
+  const home = fakeHome();
+  for (const dir of [['a', 'b'], ['a', 'y'], ['a', 'z'], ['y'], ['z']]) {
+    fs.mkdirSync(path.join(home, ...dir), { recursive: true });
+  }
+  fs.symlinkSync(path.join('a', 'b'), path.join(home, 'sym'));
+  // Joined by hand: `path.join` would fold the very `sym/..` under test.
+  fs.symlinkSync(['sym', '..', 'y'].join(path.sep), path.join(home, 'd'));
+  fs.symlinkSync(['..', 'd', '..', 'z', 'settings.json'].join(path.sep), paths(home).settings);
+  const theirs = path.join(home, 'z', 'settings.json');
+  fs.writeFileSync(theirs, MINE);
+  const reached = path.join(fs.realpathSync.native(path.join(home, 'a', 'z')), 'settings.json');
+
+  assert.equal(planInstall({ home }).writes, reached, 'the plan names the file the kernel reaches');
+  install({ home });
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file the link does not reach stays');
+  assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
+});
+
+// A directory the link text names but that is not there stops the kernel at that name: the `..`
+// after it is not folded away, so the write fails there and creates nothing.
+test('install stops at a missing directory in the link text instead of folding the .. after it', () => {
+  const home = fakeHome();
+  fs.mkdirSync(path.join(home, 'x'));
+  fs.symlinkSync(['..', 'missing', '..', 'x', 'settings.json'].join(path.sep), paths(home).settings);
+
+  assert.equal(planInstall({ home }).writes, [fs.realpathSync.native(home), 'missing', '..', 'x', 'settings.json'].join(path.sep));
+  assert.throws(() => install({ home }), /ENOENT/);
+  assert.equal(fs.existsSync(path.join(home, 'x', 'settings.json')), false);
+});
+
 test('install --yes installs into the home it runs under', () => {
   const home = fakeHome(MINE);
   const run = tarmac(['install', '--yes'], home);
