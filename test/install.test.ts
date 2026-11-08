@@ -1041,6 +1041,27 @@ test('install follows a sym/.. in the text of a directory link on the way', () =
   assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
 });
 
+// A `..` that climbs out of such a link: the directory is resolved by the system's realpath, which
+// follows `sym` first. Node's JS `realpathSync` would land in `y` and climb out of the wrong place.
+test('install climbs out of a directory link whose own text holds sym/..', () => {
+  const home = fakeHome();
+  for (const dir of [['a', 'b'], ['a', 'y'], ['a', 'z'], ['y'], ['z']]) {
+    fs.mkdirSync(path.join(home, ...dir), { recursive: true });
+  }
+  fs.symlinkSync(path.join('a', 'b'), path.join(home, 'sym'));
+  // Joined by hand: `path.join` would fold the very `sym/..` under test.
+  fs.symlinkSync(['sym', '..', 'y'].join(path.sep), path.join(home, 'd'));
+  fs.symlinkSync(['..', 'd', '..', 'z', 'settings.json'].join(path.sep), paths(home).settings);
+  const theirs = path.join(home, 'z', 'settings.json');
+  fs.writeFileSync(theirs, MINE);
+  const reached = path.join(fs.realpathSync.native(path.join(home, 'a', 'z')), 'settings.json');
+
+  assert.equal(planInstall({ home }).writes, reached, 'the plan names the file the kernel reaches');
+  install({ home });
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file the link does not reach stays');
+  assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
+});
+
 // A directory the link text names but that is not there stops the kernel at that name: the `..`
 // after it is not folded away, so the write fails there and creates nothing.
 test('install stops at a missing directory in the link text instead of folding the .. after it', () => {
