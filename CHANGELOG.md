@@ -33,6 +33,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Install follows a symlink in a link's text before the `..` that comes after it.** A
+  settings.json link spelled `../sym/../x/settings.json` had `sym/..` folded away by spelling,
+  where the kernel follows `sym` first and climbs out of where it points: install wrote its
+  statusLine into a file the link does not reach, and the plan named it too. The link's text is
+  now walked one name at a time, each directory resolved before the next (#337).
 - **An install that runs out of disk while making the snapshots directory takes back what it
   made.** `mkdir -p` names the first directory it created only when it succeeds, so one stopped
   half way by a full disk or a quota left the rungs it had made behind. The directories are now

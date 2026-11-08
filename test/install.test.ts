@@ -997,6 +997,26 @@ test('install writes through a relative link from the directory the link really 
   assert.equal(fs.existsSync(reached), false);
 });
 
+// `sym/..` in a link's text is the parent of where `sym` points, not the directory `sym` is
+// in: `path.resolve` folds it by spelling, the kernel follows `sym` first (#337).
+test('install follows a symlink in the link text before the .. that comes after it', () => {
+  const home = fakeHome();
+  fs.mkdirSync(path.join(home, 'a', 'b'), { recursive: true });
+  fs.mkdirSync(path.join(home, 'a', 'x'));
+  fs.symlinkSync(path.join('a', 'b'), path.join(home, 'sym'));
+  // Joined by hand: `path.join` would fold the very `sym/..` under test.
+  fs.symlinkSync(['..', 'sym', '..', 'x', 'settings.json'].join(path.sep), paths(home).settings);
+  const theirs = path.join(home, 'x', 'settings.json');
+  fs.mkdirSync(path.dirname(theirs));
+  fs.writeFileSync(theirs, MINE);
+  const reached = path.join(fs.realpathSync(path.join(home, 'a', 'x')), 'settings.json');
+
+  assert.equal(planInstall({ home }).writes, reached, 'the plan names the file the kernel reaches');
+  install({ home });
+  assert.equal(fs.readFileSync(theirs, 'utf8'), MINE, 'a file the link does not reach stays');
+  assert.equal(JSON.parse(fs.readFileSync(reached, 'utf8')).statusLine.command, paths(home).wrapper);
+});
+
 test('install --yes installs into the home it runs under', () => {
   const home = fakeHome(MINE);
   const run = tarmac(['install', '--yes'], home);

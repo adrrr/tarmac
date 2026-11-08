@@ -440,20 +440,31 @@ function resolveWriteTarget(file: string): string {
     } catch {
       return current; // not a link (or unreadable): this is the file
     }
-    // From the directory the link really is in, as the kernel does: under a symlinked `.claude`
-    // the path it was reached by names another file (#326).
-    current = path.resolve(realDir(path.dirname(current)), link);
+    current = followLinkText(current, link);
   }
   return current; // a loop of links: stop somewhere rather than spin
 }
 
-/** The directory itself, or its path as given when it cannot be resolved: the write then fails there. */
-function realDir(dir: string): string {
-  try {
-    return fs.realpathSync(dir);
-  } catch {
-    return dir;
+/**
+ * Where the text of the link at `from` leads, one name at a time as the kernel walks it. From
+ * the directory the link really is in: under a symlinked `.claude` the path it was reached by
+ * names another file (#326). And each directory is resolved before the next name: `path.resolve`
+ * folds `sym/..` by spelling, the kernel follows `sym` and climbs out of where it points (#337).
+ */
+function followLinkText(from: string, link: string): string {
+  const names = link.split(path.sep).filter((name) => name !== '' && name !== '.');
+  let at = path.isAbsolute(link) ? path.parse(link).root : path.dirname(from);
+  for (const [i, name] of names.entries()) {
+    try {
+      at = fs.realpathSync(at);
+    } catch {
+      // Not there, or not searchable: the kernel stops at this name, and so does the write. The
+      // rest stays as spelled, since folding a `..` past it would name a file the write reaches.
+      return [at, ...names.slice(i)].join(path.sep);
+    }
+    at = name === '..' ? path.dirname(at) : path.join(at, name);
   }
+  return at;
 }
 
 /** …and say so, when that is not the path the plan names. */
