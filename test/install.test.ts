@@ -1069,6 +1069,7 @@ test('install stops at a missing directory in the link text instead of folding t
   fs.mkdirSync(path.join(home, 'x'));
   fs.symlinkSync(['..', 'missing', '..', 'x', 'settings.json'].join(path.sep), paths(home).settings);
 
+  assert.equal(planInstall({ home }).writes, [fs.realpathSync.native(home), 'missing', '..', 'x', 'settings.json'].join(path.sep));
   assert.throws(() => install({ home }), /ENOENT/);
   assert.equal(fs.existsSync(path.join(home, 'x', 'settings.json')), false);
 });

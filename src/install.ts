@@ -1260,7 +1260,8 @@ export function uninstall({ home, expect, snapshots: planned, marker }: Uninstal
       // The file install created, which a dangling link sent to its far end: the link stays
       // (#318). `realpath`, not `resolveWriteTarget`: the link resolves now, and only the file
       // whose bytes were just compared may go. A relative link read under a symlinked directory
-      // names, by its path, a file nobody read.
+      // names, by its path, a file nobody read. The system's realpath: Node's JS realpathSync folds
+      // sym/.. by spelling (#337).
       fs.rmSync(fs.realpathSync.native(p.settings), { force: true });
       mode = 'absent';
     } else {
