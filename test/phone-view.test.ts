@@ -283,6 +283,11 @@ test('while a replay is on, the scrubber pins to the foot of the window, at any 
   assert.ok(rule, 'no sticky rule for the scrubber outside a media block');
   assert.match(rule, /position:\s*sticky/);
   assert.match(rule, /bottom:\s*0/);
+  // The phone keeps its own rule for the same selector, and anything that rule says about the
+  // pin wins on a phone: the one width where the dials are always above the fold.
+  for (const prop of ['position', 'bottom', 'z-index', 'background']) {
+    assert.deepEqual(declaredEverywhere('body.replaying .replay:not([hidden])', prop, PHONE()), [], `the phone block does not undo ${prop}`);
+  }
 });
 
 // Sticky only acts on a row whose place is below the foot. A replayed map shorter than the
