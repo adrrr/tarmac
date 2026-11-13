@@ -312,10 +312,16 @@ test('the pinned scrubber is opaque and sits above what scrolls under it', () =>
 
 // Only while replaying. A scrubber pinned to the bottom of a live page is a permanent bar over
 // the fleet, offering a drag into a past nobody has asked for yet; a live page reserving a
-// window of height is a page with a blank screen under a short fleet.
+// window of height is a page with a blank screen under a short fleet. The reserve is read on
+// every rule, not on `#replay-view` alone: that one is hidden on a live page, so a reserve on it
+// shows nothing, and the blank screen would come from a reserve put on something else.
 test('nothing pins the scrubber or reserves height on a live page', () => {
   assert.deepEqual(declaredEverywhere('.replay:not([hidden])', 'position'), [], 'not on a live page');
-  assert.deepEqual(declaredEverywhere('#replay-view', 'min-height'), [], 'no reserve on a live page');
+  const live = [...sheet().matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, , declarations]) => /(?:^|;)\s*(?:min-)?height\s*:[^;]*\d[dsl]?vh/.test(declarations))
+    .flatMap(([, selectors]) => selectors.split(',').map((s) => s.trim()))
+    .filter((selector) => !selector.startsWith('body.replaying '));
+  assert.deepEqual(live, [], 'a window of height is reserved during a replay only');
 });
 
 // The line under the handle is not hidden on a phone, and this test is why rather than an
