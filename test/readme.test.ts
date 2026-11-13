@@ -136,6 +136,23 @@ test('every frame of a GIF declares a delay a browser will honour', () => {
   }
 });
 
+// The opposite failure, and the one that shipped (#313): nineteen frames of half a second each,
+// every one of them a new state of the fleet. Nothing was wrong with any single frame, and a
+// first-time reader still could not say what they had watched. A scene somebody is meant to
+// read holds still for two seconds, and the GIF shows at least three of them.
+const READ_HOLD_CS = 200;
+const READ_SCENES = 3;
+
+test('every GIF holds still long enough for a first-time reader to follow it', () => {
+  for (const name of captures().filter((n) => n.endsWith('.gif'))) {
+    const held = delays(path.join(repo, MEDIA, name)).filter((cs) => cs >= READ_HOLD_CS).length;
+    assert.ok(
+      held >= READ_SCENES,
+      `${MEDIA}/${name}: ${held} frames hold ${READ_HOLD_CS / 100}s or more, want at least ${READ_SCENES}`,
+    );
+  }
+});
+
 // Captures are replaced, not appended: an image nothing points at is weight in the clone and
 // in every fetch of the repo, and it is the kind of thing a rename leaves behind.
 test('nothing sits in docs/media that the README does not show', () => {

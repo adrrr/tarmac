@@ -31,6 +31,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   (#140). The move out of `.claude` still needs no flag: it is the migration, and it was always
   announced and collected.
 
+- **The README's GIF tours the dashboard, slowly enough to follow.** It was 19 frames of the
+  map replay at half a second each. It now holds the table, the map and the history tab for 3
+  seconds or more each, and walks the replay in between, about 24 seconds in all.
+  `node scripts/capture-demo.ts` takes it again on `serve --demo`, with the clock pinned so no
+  frame carries the time it was taken at. (#313)
+
 ### Fixed
 
 - **The replay's scrubber holds still on a laptop.** The row sits at the foot of the replayed

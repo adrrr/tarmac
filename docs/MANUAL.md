@@ -1216,7 +1216,8 @@ Two edges worth knowing:
 ```bash
 npm test                       # typecheck (src + test + scripts), then run the suite
 npm run build                  # flat JavaScript into dist/
-node scripts/demo-fleet.ts     # the invented fleet the README's captures are taken of
+node scripts/demo-fleet.ts     # a second invented fleet, served on a port
+node scripts/capture-demo.ts   # take the README's GIF again (needs Chrome and ffmpeg)
 ```
 
 `demo-fleet` plays an invented day into a real `serve`, with the real collector, the real

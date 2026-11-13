@@ -13,7 +13,7 @@ documented surfaces only, never an internal format.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/replay-dark.gif">
   <img src="docs/media/replay-light.gif" width="1100"
-       alt="The tarmac map, live and then replayed. It opens on the live fleet: nodes grouped into a frame per working directory, each frame labelled with its project, sessions drawn as dials whose arc is the context window, background agents docked under the cards as strips of text, and the account's five-hour and seven-day gauges in the header. As the scrubber under the fleet is dragged the frames give way to the flat record, every node in a cell of one size, sessions still dials and agents still strips, each with its project and what it has cost. Sessions appear as the day walks past and the grid gains a cell for each, the arcs fill, the five-hour gauge fills and rolls over to zero, and a banner names the minute being replayed until Back to live is pressed and the frames come back.">
+       alt="A tour of the dashboard on the invented demo fleet. It opens on the table, one row per session with its project, state, context, model, effort, cost and uptime. Then the map of the same fleet, sessions as dials grouped by project and background agents docked under them. The replay scrubber then walks through the past day: the banner names the minute being replayed, sessions appear and leave, the arcs fill and the five-hour gauge rolls over. It ends on the history tab, the context, cost and quota curves over 24 hours and then over 7 days.">
 </picture>
 
 [Quickstart](#quickstart) · [The map](#the-map) · [The curves](#the-curves) · [Install](#install) ·
@@ -244,6 +244,7 @@ git fetch --tags               # a clone with no tags fails the changelog guards
 npm test                       # typecheck (src + test + scripts), then run the suite
 npm run build                  # flat JavaScript into dist/
 node scripts/demo-fleet.ts     # a second invented fleet, served on a port
+node scripts/capture-demo.ts   # take the README's GIF again (needs Chrome and ffmpeg)
 ```
 
 Every capture on this page is taken of `serve --demo`, a fleet that does not exist. A
