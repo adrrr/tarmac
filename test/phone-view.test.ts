@@ -283,10 +283,17 @@ test('while a replay is on, the scrubber pins to the foot of the window, at any 
   assert.ok(rule, 'no sticky rule for the scrubber outside a media block');
   assert.match(rule, /position:\s*sticky/);
   assert.match(rule, /bottom:\s*0/);
-  // The phone keeps its own rule for the same selector, and anything that rule says about the
-  // pin wins on a phone: the one width where the dials are always above the fold.
-  for (const prop of ['position', 'bottom', 'z-index', 'background']) {
-    assert.deepEqual(declaredEverywhere('body.replaying .replay:not([hidden])', prop, PHONE()), [], `the phone block does not undo ${prop}`);
+  // The phone keeps its own rule for the same selector, and a media block that says anything
+  // about the pin wins wherever it applies. So the pin is said once, above, and in no block.
+  const once: Array<[string, string[]]> = [
+    ['position', ['sticky']],
+    ['bottom', ['0']],
+    ['z-index', ['3']],
+    ['background', ['var(--bg)']],
+    ['background-color', []],
+  ];
+  for (const [prop, values] of once) {
+    assert.deepEqual(declaredEverywhere('body.replaying .replay:not([hidden])', prop, sheet()), values, `no media block says ${prop} for the pinned row`);
   }
 });
 
@@ -294,7 +301,7 @@ test('while a replay is on, the scrubber pins to the foot of the window, at any 
 // window leaves the row above it, and the row moves with the map: the reserve is what puts it
 // at the foot, where the sticky offset holds it for every minute of the day.
 test('while a replay is on, the replayed view takes at least a window of height', () => {
-  assert.deepEqual(declaredEverywhere('body.replaying #replay-view', 'min-height', cssOutsideMedia()), ['100vh']);
+  assert.deepEqual(declaredEverywhere('body.replaying #replay-view', 'min-height', sheet()), ['100vh']);
 });
 
 // It is pinned OVER the map, so it has to be opaque and it has to win: left transparent, the
