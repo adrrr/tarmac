@@ -37,9 +37,9 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
   map, and a replayed fleet is often shorter than the window, so every minute whose fleet is
   another height lifted or dropped it mid-drag. While a replay is on, the replayed view now takes
   at least a window of height and the row is held at the foot of the window, as it already was
-  on a phone. Going into a replay scrolls back to the top, so the replayed dials are on screen
-  above the row. The first drag can still move the row once, down to the foot of the window.
-  After that it stays put for the rest of the replay (#339).
+  on a phone. Going into a replay scrolls back to the top, so on a laptop the replayed dials are
+  on screen above the row. The first drag can still move the row once, down to the foot of the
+  window. After that it stays put for the rest of the replay (#339).
 - **Install and uninstall follow a symlink in a link's text before the `..` that comes after
   it.** A settings.json link spelled `../sym/../x/settings.json` had `sym/..` folded away by
   spelling, where the kernel follows `sym` first and climbs out of where it points: install wrote
