@@ -1288,6 +1288,15 @@ ${HISTORY_CSS}
      beats it: unguarded, this page came up announcing a replay nobody had asked for. */
   .replay:not([hidden]) { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-top:1rem;
             padding-top:.7rem; border-top:1px solid var(--line); }
+  /* The handle stays under the hand. The scrubber sits at the FOOT of the map, so whatever
+     changes the map's height moves it: on a phone the map is several screens tall and the dials
+     being dragged are above the fold; on a laptop a replayed fleet is often shorter than the
+     window, and every minute whose fleet is another height lifts or drops the row mid-drag.
+     Sticky holds a row whose place is below the foot, and only that — so the replay also
+     reserves a window of height, which puts the row at the foot for every minute of the day.
+     Opaque and above the banner, or the dials scroll through the slider dragging them. */
+  body.replaying #replay-view { min-height:100vh; }
+  body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3; background:var(--bg); }
   /* The pair gets a name. A button reading "Play" and a slider under a map, with nothing
      saying what they move, is a control nobody dares touch — which on a phone is most of what
      is on screen. Its own line above them, because dropped into the row it would read as a
@@ -1656,14 +1665,9 @@ ${HISTORY_CSS}
        counted by the shell whether or not a poll ever lands. Hidden rather than dropped: the
        fragment still carries the exact second for anyone who goes looking for it. */
     .meta .stamp { display:none; }
-    /* The handle, pinned under the thumb. The scrubber sits at the FOOT of the map and a map on
-       a phone is several screens tall: dragging it means the dials it moves are above the fold,
-       so the reader scrubs blind, lets go, scrolls up to see what changed and scrolls back. Held
-       at the bottom of the viewport, the hand and the thing it is changing are on screen at once.
-
-       Opaque and above what passes under it, or the dials scroll through the slider dragging
-       them. The negative margin gives it the page's own gutters back, so the bar reaches the
-       edges of the phone and the rule above it reads as an edge rather than a floating line.
+    /* The handle, pinned under the thumb, as on every width (see the scrubber above). The
+       negative margin gives it the page's own gutters back, so the bar reaches the edges of
+       the phone and the rule above it reads as an edge rather than a floating line.
 
        The line under the handle stays. Hiding it for the length of a replay was the obvious way
        to keep the bar short, and it silently undid the fix coversRange and KEEPS argue for
@@ -1673,8 +1677,7 @@ ${HISTORY_CSS}
        an ungrouped map reads as a rendering that broke. A phone replaying is exactly when a
        reader is staring at one, and a phone has no hover to reach a title with: the two words
        are on the line itself for that reason, and only their paragraph is behind it. */
-    body.replaying .replay:not([hidden]) { position:sticky; bottom:0; z-index:3;
-         background:var(--bg); border-top:1px solid var(--line);
+    body.replaying .replay:not([hidden]) { border-top:1px solid var(--line);
          padding:.55rem .75rem .8rem; margin:1rem -.75rem 0; }
     /* The panel goes with the table. Below this width the rows ARE cards, and a panel around
        a column of cards is a frame drawn round a frame — the thing the two planes were
@@ -2490,6 +2493,7 @@ function pageScript(view: View): string {
   function draw(i) {
     var s = record && record.samples[i];
     if (!s) return;
+    var entering = !replaying;
     at = i;
     replaying = true;
     scrub.value = String(i);
@@ -2509,6 +2513,9 @@ function pageScript(view: View): string {
     note.hidden = false;
     rview.hidden = false;
     document.body.classList.toggle('replaying', true);
+    // Reached by scrolling down, the scrubber leaves the window at the foot of the reserve below
+    // and the replayed dials above it. Once on the way in, so a reader who scrolls stays put.
+    if (entering) scrollTo(0, 0);
   }
 
   function stopPlay() {

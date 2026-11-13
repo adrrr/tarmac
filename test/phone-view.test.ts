@@ -270,20 +270,44 @@ test('the freshness the stamp repeats keeps being said in words, with no answer 
 // it means the dials it moves are somewhere above the fold: the reader scrubs blind, lets go,
 // scrolls up to see what changed, scrolls back down. Pinned to the bottom of the viewport, the
 // hand and the thing the hand is changing are on screen at once.
+//
+// A laptop has the opposite map and the same fault (#339): a replayed fleet is often SHORTER
+// than the window, so the row sits right under it and rises or drops with every minute whose
+// fleet is another height — the handle leaves the hand mid-drag. Sticky alone cannot hold a row
+// that is already above the foot, so the replay also reserves a viewport of height.
 const PHONE = (): string => atMedia('(max-width: 46rem)');
 const STICKY = /body\.replaying \.replay:not\(\[hidden\]\)\s*\{([^}]*)\}/;
 
-test('while a replay is on, the scrubber pins to the foot of a phone', () => {
-  const rule = STICKY.exec(PHONE())?.[1];
-  assert.ok(rule, 'no sticky rule for the scrubber in the phone block');
+test('while a replay is on, the scrubber pins to the foot of the window, at any width', () => {
+  const rule = STICKY.exec(cssOutsideMedia())?.[1];
+  assert.ok(rule, 'no sticky rule for the scrubber outside a media block');
   assert.match(rule, /position:\s*sticky/);
   assert.match(rule, /bottom:\s*0/);
+  // The phone keeps its own rule for the same selector, and a media block that says anything
+  // about the pin wins wherever it applies. So the pin is said once, above, and in no block.
+  const once: Array<[string, string[]]> = [
+    ['position', ['sticky']],
+    ['bottom', ['0']],
+    ['z-index', ['3']],
+    ['background', ['var(--bg)']],
+    ['background-color', []],
+  ];
+  for (const [prop, values] of once) {
+    assert.deepEqual(declaredEverywhere('body.replaying .replay:not([hidden])', prop, sheet()), values, `no media block says ${prop} for the pinned row`);
+  }
+});
+
+// Sticky only acts on a row whose place is below the foot. A replayed map shorter than the
+// window leaves the row above it, and the row moves with the map: the reserve is what puts it
+// at the foot, where the sticky offset holds it for every minute of the day.
+test('while a replay is on, the replayed view takes at least a window of height', () => {
+  assert.deepEqual(declaredEverywhere('body.replaying #replay-view', 'min-height', sheet()), ['100vh']);
 });
 
 // It is pinned OVER the map, so it has to be opaque and it has to win: left transparent, the
 // dials scroll through the slider they are being dragged by.
 test('the pinned scrubber is opaque and sits above what scrolls under it', () => {
-  const rule = STICKY.exec(PHONE())![1];
+  const rule = STICKY.exec(cssOutsideMedia())![1];
   assert.match(rule, /background:\s*var\(--bg\)/, 'the map must not read through the handle');
   // Above the banner, not merely above zero: `.replaying-note` is sticky too, at the top of the
   // same screen, and a bar that only cleared the default layer would be under it wherever the
@@ -293,11 +317,18 @@ test('the pinned scrubber is opaque and sits above what scrolls under it', () =>
   assert.ok(above > note, `the pinned bar sits at ${above}, the banner at ${note}`);
 });
 
-// Only while replaying, and only on a phone. A scrubber pinned to the bottom of a live page
-// is a permanent bar over the fleet, offering a drag into a past nobody has asked for yet.
-test('nothing pins the scrubber on a live page, or on a laptop', () => {
+// Only while replaying. A scrubber pinned to the bottom of a live page is a permanent bar over
+// the fleet, offering a drag into a past nobody has asked for yet; a live page reserving a
+// window of height is a page with a blank screen under a short fleet. The reserve is read on
+// every rule, not on `#replay-view` alone: that one is hidden on a live page, so a reserve on it
+// shows nothing, and the blank screen would come from a reserve put on something else.
+test('nothing pins the scrubber or reserves height on a live page', () => {
   assert.deepEqual(declaredEverywhere('.replay:not([hidden])', 'position'), [], 'not on a live page');
-  assert.doesNotMatch(cssOutsideMedia(), /body\.replaying \.replay[^{]*\{[^}]*position:\s*sticky/, 'not on a laptop');
+  const live = [...sheet().matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, , declarations]) => /(?:^|;)\s*(?:min-)?(?:height|block-size)\s*:[^;]*\d[dsl]?vh/.test(declarations))
+    .flatMap(([, selectors]) => selectors.split(',').map((s) => s.trim()))
+    .filter((selector) => !selector.startsWith('body.replaying '));
+  assert.deepEqual(live, [], 'a window of height is reserved during a replay only');
 });
 
 // The line under the handle is not hidden on a phone, and this test is why rather than an
