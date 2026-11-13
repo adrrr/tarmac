@@ -277,6 +277,23 @@ test('dragging the handle draws that minute, and the page says which minute it i
   assert.equal(page.body.classes.has('replaying'), true, 'and the live map is hidden by the body class');
 });
 
+// A reader scrolls down to reach the scrubber, and the replay reserves a window of height under
+// the map. Left where the live page had it, the window shows the foot of that reserve: the top of
+// the replayed map and its dials are above it, so the hand drags a fleet it cannot see. Once on
+// the way in, and not on every minute, or the page jumps under a reader who scrolled on purpose.
+test('going into a replay brings the top of the page back, once', async () => {
+  const page = mount(record(10));
+  await page.advance(0);
+  page.el('scrub').drag(3);
+  assert.deepEqual(page.scrolls, [[0, 0]], 'the first minute scrolls to the top');
+  page.el('scrub').drag(5);
+  assert.deepEqual(page.scrolls, [[0, 0]], 'the next one leaves the page where the reader put it');
+  page.el('to-live').fire('click');
+  assert.deepEqual(page.scrolls, [[0, 0]], 'going back to now does not scroll');
+  page.el('scrub').drag(4);
+  assert.deepEqual(page.scrolls, [[0, 0], [0, 0]], 'a second replay scrolls again');
+});
+
 // The banner is a yellow box, which is nothing at all to the one audience that cannot see it.
 // The handle's own value is an index — "3" — so the minute has to travel with it, or a reader
 // can drag the fleet three hours into the past and be told a number that means nothing.

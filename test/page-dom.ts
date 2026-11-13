@@ -153,6 +153,8 @@ export interface Page {
   advance(ms: number): Promise<void>;
   /** How many requests the script has issued — the count that proves a poll is not stuck. */
   calls: number;
+  /** Every `scrollTo(x, y)` the script asked for, in order. */
+  scrolls: Array<[number, number]>;
   hide(): void;
   show(): Promise<void>;
 }
@@ -235,6 +237,7 @@ export function mountPage(
   let hidden = false;
   const page = {
     calls: 0,
+    scrolls: [] as Array<[number, number]>,
   } as Page & { calls: number };
 
   const el = (id: string): El => {
@@ -301,16 +304,21 @@ export function mountPage(
     matches: reducedMotion && query.includes('reduced-motion'),
   });
 
+  const scrollToStub = (x: number, y: number): void => {
+    page.scrolls.push([x, y]);
+  };
+
   // The script is an IIFE over bare globals; naming them as parameters shadows the real ones,
   // so nothing here can reach the actual document, fetch or clock.
   // eslint-disable-next-line no-new-func
-  new Function('document', 'fetch', 'setInterval', 'clearInterval', 'Date', 'matchMedia', script)(
+  new Function('document', 'fetch', 'setInterval', 'clearInterval', 'Date', 'matchMedia', 'scrollTo', script)(
     document,
     fetchStub,
     setIntervalStub,
     clearIntervalStub,
     DateStub,
     matchMediaStub,
+    scrollToStub,
   );
 
   const settle = async (): Promise<void> => {

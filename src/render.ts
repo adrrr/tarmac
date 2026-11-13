@@ -2493,6 +2493,7 @@ function pageScript(view: View): string {
   function draw(i) {
     var s = record && record.samples[i];
     if (!s) return;
+    var entering = !replaying;
     at = i;
     replaying = true;
     scrub.value = String(i);
@@ -2512,6 +2513,9 @@ function pageScript(view: View): string {
     note.hidden = false;
     rview.hidden = false;
     document.body.classList.toggle('replaying', true);
+    // Reached by scrolling down, the scrubber leaves the window at the foot of the reserve below
+    // and the replayed dials above it. Once on the way in, so a reader who scrolls stays put.
+    if (entering) scrollTo(0, 0);
   }
 
   function stopPlay() {
