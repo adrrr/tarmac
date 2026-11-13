@@ -59,7 +59,7 @@ export interface Scrub {
 
 export type Scene = Still | Scrub;
 
-// Table, map, the map's day replayed, the curves at a day and at a week. About 25 seconds: a
+// Table, map, the map's day replayed, the curves at a day and at a week. About 24 seconds: a
 // GIF loops, and a reader who missed the table catches it on the next pass.
 export const STORYBOARD: Scene[] = [
   { kind: 'still', path: '/', hold: 3.5 },
@@ -230,7 +230,7 @@ async function main(): Promise<void> {
     stop();
     fs.rmSync(tmp, { recursive: true, force: true });
   });
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => process.exit(1));
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => process.exit(1));
 
   const home = path.join(tmp, 'home');
   fs.mkdirSync(home);
