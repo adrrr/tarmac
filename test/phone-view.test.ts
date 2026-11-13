@@ -325,7 +325,7 @@ test('the pinned scrubber is opaque and sits above what scrolls under it', () =>
 test('nothing pins the scrubber or reserves height on a live page', () => {
   assert.deepEqual(declaredEverywhere('.replay:not([hidden])', 'position'), [], 'not on a live page');
   const live = [...sheet().matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-    .filter(([, , declarations]) => /(?:^|;)\s*(?:min-)?height\s*:[^;]*\d[dsl]?vh/.test(declarations))
+    .filter(([, , declarations]) => /(?:^|;)\s*(?:min-)?(?:height|block-size)\s*:[^;]*\d[dsl]?vh/.test(declarations))
     .flatMap(([, selectors]) => selectors.split(',').map((s) => s.trim()))
     .filter((selector) => !selector.startsWith('body.replaying '));
   assert.deepEqual(live, [], 'a window of height is reserved during a replay only');
