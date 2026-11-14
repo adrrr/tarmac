@@ -19,9 +19,12 @@ file through trusted publishing, set once on npmjs.com.
      tags, the job fails and nothing is sent.
    - `npm stage publish` runs the hooks below and puts the version in npm's staging area.
    - The `tag` job then creates `vX.Y.Z` on the merged commit.
-3. Approve it with `npm stage list @adrrr/tarmac`, then `npm stage approve <stage-id>`, or from
-   the Staged Packages tab on npmjs.com. Both ask for the 2FA code. Only then is the version on
-   the registry.
+3. Approve it once two things hold. The Release run of that merge is green. And the Staged
+   Packages tab on npmjs.com, or `npm stage list @adrrr/tarmac`, shows that version and no
+   other, with the shasum the run printed. npm keeps one staged copy of a version, so a green
+   run means the copy in the queue is the one it built. Then Approve, or
+   `npm stage approve <stage-id>`. Both ask for 2FA. Anything else in the queue is rejected,
+   never approved: any run of a file named `release.yml` in this repository can stage.
 
 `npm stage publish` runs the same hooks as `npm publish`, in this order, before anything leaves
 the runner:
@@ -60,11 +63,11 @@ abandoned and squatted. The command is `tarmac` either way, and the README insta
 
 - **`release-check.sh` refused.** Its message names the reason. Nothing was staged and nothing
   was tagged.
-- **The stage failed** (red suite, registry down). Fix it, then re-run the failed jobs from the
-  Actions tab. No tag was made, so the guard lets the version through again.
-- **The tag failed after the stage.** Re-run that job alone. Re-running the stage would queue
-  the version a second time. Only one of the two could be approved, and the other one would
-  have to be rejected by hand.
+- **The stage failed.** Registry down or a flaky test: re-run the failed jobs. A failure that
+  needs a fix needs a new release pull request: the fix, the next patch version, and the dated
+  heading renamed to it.
+- **The tag failed after the stage.** Re-run that job alone. Re-running the stage would fail:
+  npm keeps one staged copy of a version and refuses a second.
 
 ## After it lands
 

@@ -10,7 +10,7 @@
 # with `release=yes`: the version is above every vX.Y.Z tag and absent from the registry.
 # Exit 1, with no `release=` line: anything that would publish what should not be, or publish a
 # version twice. No tags at all, a version at or below the last tag, a version the registry
-# already has, a registry that cannot be read.
+# already has, a registry that cannot be read or answers nothing.
 set -u
 
 name="$(node -p "require('./package.json').name")" || exit 1
@@ -42,6 +42,10 @@ fi
 # a go.
 if ! published="$(npm view "$name" versions --json)"; then
   echo "could not read the versions of $name from the registry: refusing to publish blind" >&2
+  exit 1
+fi
+if [ -z "$published" ]; then
+  echo "the registry answered nothing for $name: refusing to publish blind" >&2
   exit 1
 fi
 if printf '%s\n' "$published" | grep -Fq "\"$version\""; then

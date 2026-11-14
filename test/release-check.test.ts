@@ -43,12 +43,17 @@ function repo(tags: string[], head: string): string {
   return dir;
 }
 
-/** A fake npm that prints `published` as the registry's version list, or fails like a network error. */
-function fakeNpm(published: string[] | 'offline'): string {
+/**
+ * A fake npm that prints `published` as the registry's version list, fails like a network error
+ * (`offline`), or exits 0 having printed nothing (`silent`).
+ */
+function fakeNpm(published: string[] | 'offline' | 'silent'): string {
   const bin = tempDir('tarmac-fake-npm-');
   const body =
     published === 'offline'
       ? 'echo "npm error code ECONNRESET" >&2\nexit 1\n'
+      : published === 'silent'
+      ? 'exit 0\n'
       : `[ "$1 $3 $4" = "view versions --json" ] || { echo "unexpected: npm $*" >&2; exit 9; }\ncat <<'EOF'\n${JSON.stringify(published, null, 2)}\nEOF\n`;
   fs.writeFileSync(path.join(bin, 'npm'), `#!/bin/sh\n${body}`, { mode: 0o755 });
   return bin;
@@ -116,6 +121,16 @@ test('a registry that cannot be read is a refusal, never a release', () => {
   const { status, stdout, out } = run(dir, fakeNpm('offline'));
   assert.equal(status, 1, out);
   assert.doesNotMatch(stdout, /release=yes/);
+});
+
+// An exit 0 with nothing on stdout says nothing about the version either. Read as a list with
+// the candidate missing from it, it would be a release.
+test('a registry that answers nothing is a refusal, never a release', () => {
+  const dir = repo(['0.10.0'], '0.11.0');
+  const { status, stdout, out } = run(dir, fakeNpm('silent'));
+  assert.equal(status, 1, out);
+  assert.doesNotMatch(stdout, /release=yes/);
+  assert.match(out, /answered nothing/);
 });
 
 // A shallow checkout has no tags, and every version would then look new.
