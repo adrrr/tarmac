@@ -273,6 +273,24 @@ test('every published CHANGELOG section still says what it said when it was tagg
 // the commit it downloaded — which, on a push to `main` straight after a release, is the tag just
 // created. The cheap-looking workflow fix would therefore have produced this state, and it is
 // worse than fetching nothing: zero tags fails loudly, one tag passes quietly.
+/**
+ * The dated sections at or above the floor that no tag vouches for, the release in flight
+ * excepted: the newest section, when it is the version package.json names. The release workflow
+ * tags that version once its commit is on main, so until then its section is dated and untagged
+ * by design. Any other untagged section is a release nothing records.
+ *
+ * The floor is a fact about this project's history, not about this checkout, and that is the
+ * whole point. Deriving it from the tags present would be circular: a checkout carrying only
+ * `v0.5.0` would set the floor at 0.5.0, excuse the four sections below it, and report success
+ * on precisely the partial fetch the test below exists to catch. Written down, it cannot move
+ * when the evidence does. It only ever needs lowering — a version released after 0.2.0 is
+ * covered by construction.
+ */
+const TAGGING_BEGAN_AT = '0.2.0';
+function untagged(dated: string[], tagged: Set<string>, inFlight: string): string[] {
+  return dated.filter((v, i) => atLeast(v, TAGGING_BEGAN_AT) && !tagged.has(v) && !(i === 0 && v === inFlight));
+}
+
 test('every dated section since tagging began carries the tag that published it', () => {
   const releases = taggedReleases();
   assert.ok(releases.length > 0, 'no vX.Y.Z tags in this checkout, so nothing can be said about which sections are covered. Run `git fetch --tags` (a shallow clone has none).');
@@ -292,19 +310,12 @@ test('every dated section since tagging began carries the tag that published it'
   const duplicated = [...counted].filter(([, n]) => n > 1).map(([v]) => v);
   assert.deepEqual(duplicated, [], `versions with more than one dated section: ${duplicated.join(', ')} — only the first is ever read`);
 
-  // The floor is a fact about this project's history, not about this checkout, and that is the
-  // whole point. Deriving it from the tags present would be circular: a checkout carrying only
-  // `v0.5.0` would set the floor at 0.5.0, excuse the four sections below it, and report success
-  // on precisely the partial fetch this test exists to catch. Written down, it cannot move when
-  // the evidence does. It only ever needs lowering — a version released after 0.2.0 is covered
-  // by construction.
-  const TAGGING_BEGAN_AT = '0.2.0';
-  const tagged = new Set(releases.map((r) => r.version));
-  const unvouched = dated.filter((v) => atLeast(v, TAGGING_BEGAN_AT) && !tagged.has(v));
+  const inFlight = JSON.parse(read('package.json')).version as string;
+  const unvouched = untagged(dated, new Set(releases.map((r) => r.version)), inFlight);
   assert.deepEqual(
     unvouched,
     [],
-    `dated sections at or above ${TAGGING_BEGAN_AT} with no matching tag: ${unvouched.join(', ')} — nothing records what they published, so the comparison above skips them in silence. Either the tag is missing from this checkout (\`git fetch --tags\`), or you are mid-release — the changelog is dated and \`npm version\` has not run yet (finish the release) — or the release was never tagged.`,
+    `dated sections at or above ${TAGGING_BEGAN_AT} with no matching tag: ${unvouched.join(', ')} — nothing records what they published, so the comparison above skips them in silence. Either the tag is missing from this checkout (\`git fetch --tags\`), or the release was never tagged. A release in flight is excused only as the newest dated section, at the version package.json names.`,
   );
 });
 
@@ -432,4 +443,28 @@ test('a CHANGELOG with an open code fence is refused by name', () => {
   const open = ['## [Unreleased]', '', '```', '- a sample left open', '', '## [9.9.9] — 2026-01-01', '- a bullet'].join('\n');
 
   assert.throws(() => currentChangelog(open), /leaves a code fence open/);
+});
+
+// The release workflow tags a version AFTER the commit that dates it has landed on main, so
+// for a few minutes that commit carries a dated section with no tag, and the pull request
+// that brings it carries one for as long as it is open. That section, and only that one, is
+// excused: it is the newest, and it is the version package.json names. Anything else untagged
+// is still a release nothing records.
+test('the release in flight is the one untagged section excused, and only while it is the newest', () => {
+  const tagged = new Set(['0.9.0', '0.10.0']);
+  assert.deepEqual(untagged(['0.11.0', '0.10.0', '0.9.0'], tagged, '0.11.0'), [], 'package.json names it: in flight');
+  assert.deepEqual(untagged(['0.11.0', '0.10.0', '0.9.0'], tagged, '0.10.0'), ['0.11.0'], 'package.json does not: never tagged');
+  assert.deepEqual(untagged(['0.12.0', '0.11.0', '0.10.0'], tagged, '0.11.0'), ['0.12.0', '0.11.0'], 'not the newest: not in flight');
+  assert.deepEqual(untagged(['0.1.2', '0.10.0'], tagged, '0.10.0'), [], 'below the floor, as before');
+});
+
+// The other half of that excuse: a version bump with no dated section would publish a tarball
+// whose npm page says nothing about it. The release workflow publishes whatever package.json
+// says, so this is the last thing between a bare bump and the registry.
+test('the version package.json carries owns a dated section', () => {
+  const version = JSON.parse(read('package.json')).version as string;
+  assert.ok(
+    datedVersions(currentChangelog()).includes(version),
+    `package.json says ${version} and the CHANGELOG has no dated \`## [${version}]\` section: date the release before bumping the version`,
+  );
 });
