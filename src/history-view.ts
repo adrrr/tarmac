@@ -339,8 +339,11 @@ export function foldShort(rows: Series[]): { rows: Series[]; short: Series[] } {
   for (var i = 0; i < rows.length; i++) {
     var n = 0;
     for (var j = 0; j < rows[i].v.length; j++) if (rows[i].v[j] !== null) n++;
-    (n < SHORT_LIVED ? short : kept).push(rows[i]);
+    (n < SHORT_LIVED && !rising(rows[i]) ? short : kept).push(rows[i]);
   }
+  // A fold of one band frees no room and takes its name and its reading; a fold of every band
+  // leaves no project standing and calls the projects of a journal two hours old short-lived.
+  if (short.length < 2 || kept.length === 0) return { rows: rows.slice(), short: [] };
   return { rows: kept, short: short };
 }
 
@@ -1346,7 +1349,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       box.hidden = fold.short.length === 0;
       box.classList.toggle('muted', false); box.classList.toggle('at', false);
       box.innerHTML = fold.short.length === 0 ? '' : '<button type="button" class="key" data-fold="1" aria-expanded="' + (state.unfold ? 'true' : 'false') + '">'
-        + '<span class="k-name">short-lived (' + fold.short.length + ')</span><span class="k-val">' + (state.unfold ? 'fold' : 'show') + '</span></button>';
+        + '<span class="k-name">short-lived (' + fold.short.length + ')</span><span class="k-val">' + (state.unfold ? 'hide' : 'show') + '</span></button>';
     }
   }
 

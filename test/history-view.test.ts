@@ -411,10 +411,16 @@ test('a row with fewer than three readings folds, and the rest keep their rows a
     series('alpha', [10, null, 20, 30]),
     series('probe', [50, null, null, null]),
     series('beta', [10, 20, 30, null]),
-    series('tmp', [null, 40, 60, null]),
+    series('tmp', [null, 40, 45, null]),
   ]);
   assert.deepEqual(f.rows.map((r) => r.name), ['alpha', 'beta']);
   assert.deepEqual(f.short.map((r) => r.name), ['probe', 'tmp']);
+});
+
+test('one short row, or nothing but short rows, is not folded', () => {
+  const series = (name: string, v: (number | null)[]) => ({ name, slot: 0, t0: 0, step: HOUR, v });
+  assert.deepEqual(foldShort([series('alpha', [10, 20, 30]), series('probe', [50, null, null])]).short, []);
+  assert.deepEqual(foldShort([series('alpha', [10, null, null]), series('beta', [null, 20, null])]).short, []);
 });
 
 test('three readings are enough to keep a row', () => {

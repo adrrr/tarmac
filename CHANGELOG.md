@@ -15,10 +15,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **Projects that came and went fold into one band on the 7d and 30d context chart.** A probe
   run once in a temp dir took a band of its own holding a single dot, and enough of them pushed
-  the projects in daily use out of view. A project with fewer than three readings in the range
+  the projects in daily use out of view. A project read in fewer than three hours of the range
   now shares one band, `short-lived (n)`, drawn last and closed by default; the button under the
   chart opens it into one band each and folds it back. The other projects keep their bands and
-  their order, and the journal is untouched. (#330)
+  their order, and the journal is untouched. One such project on its own keeps its band, and so
+  does a range where every project is one. (#330)
 
 - **The snapshots directory moves when you say so, and not when a shell does.** `install` derived
   that path from its own environment and froze the result, so an install from a terminal that

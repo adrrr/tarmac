@@ -1320,7 +1320,9 @@ test('a project read fewer than three times folds into one band, closed until a 
   assert.equal(legend.hidden, false, 'the fold has a control to open it');
   assert.match(legend.innerHTML, /data-fold="1" aria-expanded="false"><span class="k-name">short-lived \(2\)</);
 
-  const fold = { getAttribute: (n: string): string | null => (n === 'data-fold' ? '1' : null), parentNode: null };
+  const box = { getAttribute: (): string | null => null, parentNode: null };
+  const button = { getAttribute: (n: string): string | null => (n === 'data-fold' ? '1' : null), parentNode: box };
+  const fold = { getAttribute: (): string | null => null, parentNode: button };
   legend.fire('click', { target: fold });
   await settle(m);
   assert.deepEqual(bandNames(m.p), ['alpha', 'probe-1', 'probe-2']);
@@ -1345,7 +1347,9 @@ test('the fold closes again on a change of range', async () => {
   await settle(m);
   m.p.el('range-7d').fire('click');
   await settle(m);
-  const fold = { getAttribute: (n: string): string | null => (n === 'data-fold' ? '1' : null), parentNode: null };
+  const box = { getAttribute: (): string | null => null, parentNode: null };
+  const button = { getAttribute: (n: string): string | null => (n === 'data-fold' ? '1' : null), parentNode: box };
+  const fold = { getAttribute: (): string | null => null, parentNode: button };
   m.p.el('ctx-legend').fire('click', { target: fold });
   await settle(m);
   m.p.el('range-30d').fire('click');
