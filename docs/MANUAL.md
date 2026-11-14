@@ -828,11 +828,15 @@ gained fifteen points or more over the last three hours are drawn full and label
 the fleet stays behind them as context. At 7d and 30d it is one band per project instead, each on
 its own scale, carrying the highest any of its sessions reached in each hour. A project the
 range has no context for at all gets no band: a row of nothing under a name reads as missing
-data rather than as data there never was. Background agents are off this chart, at both ranges,
-for the reason they get a strip and not a dial on the map: no terminal behind one to draw a
-statusline frame with, so no context to plot. The exception is the same one the map makes, and
-it is the honest one: until something in the range calls itself interactive, nothing is treated
-as background, because a fleet of agents alone would otherwise draw an empty chart.
+data rather than as data there never was. A project read in fewer than three hours of the range
+shares one band, `short-lived (n)`, with the others like it, drawn last and closed until the
+button under the chart opens it; the rest keep their bands and their order. One such project on
+its own keeps its band, and so does a range where every project is one. Background agents are
+off this chart, at both ranges, for the reason they get a strip and not a dial on the map: no
+terminal behind one to draw a statusline frame with, so no context to plot. The exception is the
+same one the map makes, and it is the honest one: until something in the range calls itself
+interactive, nothing is treated as background, because a fleet of agents alone would otherwise
+draw an empty chart.
 
 Climbing is fifteen points or more against the oldest reading in the last three hours, not
 against the reading exactly three hours back. Those are the same number for a session that has
