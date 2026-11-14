@@ -283,7 +283,7 @@ test('every published CHANGELOG section still says what it said when it was tagg
  * whole point. Deriving it from the tags present would be circular: a checkout carrying only
  * `v0.5.0` would set the floor at 0.5.0, excuse the four sections below it, and report success
  * on precisely the partial fetch the test below exists to catch. Written down, it cannot move
- * when the evidence does. It only ever needs lowering — a version released after 0.2.0 is
+ * when the evidence does. It only ever needs lowering. A version released after 0.2.0 is
  * covered by construction.
  */
 const TAGGING_BEGAN_AT = '0.2.0';
@@ -315,7 +315,7 @@ test('every dated section since tagging began carries the tag that published it'
   assert.deepEqual(
     unvouched,
     [],
-    `dated sections at or above ${TAGGING_BEGAN_AT} with no matching tag: ${unvouched.join(', ')} — nothing records what they published, so the comparison above skips them in silence. Either the tag is missing from this checkout (\`git fetch --tags\`), or the release was never tagged. A release in flight is excused only as the newest dated section, at the version package.json names.`,
+    `dated sections at or above ${TAGGING_BEGAN_AT} with no matching tag: ${unvouched.join(', ')}. Nothing records what they published, so the comparison above skips them in silence. Either the tag is missing from this checkout (\`git fetch --tags\`), or the release was never tagged. A release in flight is excused only as the newest dated section, at the version package.json names.`,
   );
 });
 
