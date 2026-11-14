@@ -25,6 +25,7 @@ import {
   ctxLines,
   ctxRows,
   decimate,
+  foldShort,
   fillAlpha,
   gridLen,
   historyScript,
@@ -400,6 +401,25 @@ test('a background agent is left off the bands too, not only off the 24h lines',
     rows.map((r) => r.name),
     ['alpha'],
   );
+});
+
+// A probe in a temp dir runs one session and leaves one dot. On a month those rows outnumber
+// the projects in daily use, so a row with fewer than three readings in the range folds (#330).
+test('a row with fewer than three readings folds, and the rest keep their rows and their order', () => {
+  const series = (name: string, v: (number | null)[]) => ({ name, slot: 0, t0: 0, step: HOUR, v });
+  const f = foldShort([
+    series('alpha', [10, null, 20, 30]),
+    series('probe', [50, null, null, null]),
+    series('beta', [10, 20, 30, null]),
+    series('tmp', [null, 40, 60, null]),
+  ]);
+  assert.deepEqual(f.rows.map((r) => r.name), ['alpha', 'beta']);
+  assert.deepEqual(f.short.map((r) => r.name), ['probe', 'tmp']);
+});
+
+test('three readings are enough to keep a row', () => {
+  const f = foldShort([{ name: 'alpha', slot: 0, t0: 0, step: HOUR, v: [10, null, 20, 30] }]);
+  assert.deepEqual(f.short, []);
 });
 
 // The columns are the SPAN, not the hours that had readings. An hour the fleet was quiet in has
@@ -812,7 +832,7 @@ test('and the two charts that fill anything actually spend it', () => {
 
 test('the shipped script carries the transforms this file just tested, not a copy of them', () => {
   const script = historyScript();
-  for (const fn of [decimate, ctxLines, ctxRows, costHourly, costDaily, legendByCost, quotaOfSamples, quotaOfHours, rising, rosterOf, fillAlpha]) {
+  for (const fn of [decimate, ctxLines, ctxRows, foldShort, costHourly, costDaily, legendByCost, quotaOfSamples, quotaOfHours, rising, rosterOf, fillAlpha]) {
     assert.equal(script.includes(String(fn)), true, `${fn.name} is not the source the page runs`);
   }
 });

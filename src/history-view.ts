@@ -323,6 +323,27 @@ export function ctxRows(hours: any[], roster: Slot[], from: number, to: number):
   return kept;
 }
 
+/** Fewer readings than this in the range and a project's band folds (#330). */
+export const SHORT_LIVED = 3;
+
+/**
+ * 7d and 30d context: the bands that keep a row, and the ones folded into a single row.
+ *
+ * A probe run once in a temp dir is a band holding one dot, and on a month those outnumber the
+ * projects in daily use. Counted in readings rather than in time: a project read for three
+ * hours of one day is a project the reader watched, one read twice over a week is not. Nothing
+ * is dropped, the fold only changes which rows are drawn.
+ */
+export function foldShort(rows: Series[]): { rows: Series[]; short: Series[] } {
+  var kept: Series[] = [], short: Series[] = [];
+  for (var i = 0; i < rows.length; i++) {
+    var n = 0;
+    for (var j = 0; j < rows[i].v.length; j++) if (rows[i].v[j] !== null) n++;
+    (n < SHORT_LIVED ? short : kept).push(rows[i]);
+  }
+  return { rows: kept, short: short };
+}
+
 /**
  * The start of the local hour a moment falls in.
  *
@@ -753,6 +774,7 @@ const PURE = [
   pctOf,
   ctxLines,
   ctxRows,
+  foldShort,
   hourOf,
   hourSpan,
   minuteAt,
@@ -991,7 +1013,7 @@ export function historyScript(): string {
   return `
 (function () {
   var INTERACTIVE = ${JSON.stringify(INTERACTIVE)};
-  var SLOTS = ${SLOTS}, RESET_WATCHED_MS = ${RESET_WATCHED_MS}, MIN = ${MIN}, HOUR = ${HOUR}, MAX_DAYS = ${MAX_DAYS};
+  var SLOTS = ${SLOTS}, SHORT_LIVED = ${SHORT_LIVED}, RESET_WATCHED_MS = ${RESET_WATCHED_MS}, MIN = ${MIN}, HOUR = ${HOUR}, MAX_DAYS = ${MAX_DAYS};
   var H = ${JSON.stringify(HEIGHTS)};
   var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1025,7 +1047,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
   // per range, and where a day came from is no more this page's answer there than it is here.
   // Absent is what every serve that reads its journal off a disk says, which is most of them.
   var daysWord = covers.getAttribute('data-days') || 'days on disk';
-  var state = { range: '24h', data: null, err: null, iso: {}, cursor: {}, loading: false, gen: 0 };
+  var state = { range: '24h', data: null, err: null, iso: {}, cursor: {}, unfold: false, loading: false, gen: 0 };
   // Which series a chart is isolated on, or null. Read through a function and compared against
   // null rather than tested for truth: a falsy key is a key that isolates nothing while its own
   // button says it is pressed. No reader sends a project named '' since #246, and this does not
@@ -1285,19 +1307,32 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     } else {
       // Eight lines on one plot over a month is a wall. One band per project instead, each on
       // its own 0–100 scale with its name and its last reading on it, so no legend is needed.
-      var n = series.length, rowH = (b.b - b.t) / n;
+      // A project read fewer than SHORT_LIVED times shares one band with the others like it,
+      // last and closed until the reader opens it (#330).
+      var fold = foldShort(series), bands = [];
+      fold.rows.forEach(function (s) { bands.push({ name: s.name === null ? '—' : s.name, members: [s], one: true }); });
+      if (fold.short.length > 0) {
+        if (state.unfold) fold.short.forEach(function (s) { bands.push({ name: s.name === null ? '—' : s.name, members: [s], one: true }); });
+        else bands.push({ name: 'short-lived (' + fold.short.length + ')', members: fold.short, one: false });
+      }
+      var n = bands.length, rowH = (b.b - b.t) / n;
       timeTicks(g, b, t0, t1, state.range);
-      series.forEach(function (s, i2) {
-        var top = b.t + i2 * rowH, base = top + rowH - 2, up = rising(s), color = slotColor(s.slot);
+      bands.forEach(function (bd, i2) {
+        var top = b.t + i2 * rowH, base = top + rowH - 2;
         var rowY = function (v) { return base - (v / 100) * (rowH - 12); };
         hair(g, b.l, base, b.r, base, g.line);
-        g.c.save(); g.c.strokeStyle = color; g.c.lineWidth = up ? 2 : 1.5; g.c.lineJoin = 'round'; g.c.lineCap = 'round';
-        var end = polyline(g, s, b, t0, t1, rowY); g.c.restore();
-        if (end) dot(g, end.x, end.y, color, up ? 3.5 : 2.5);
-        label(g, s.name === null ? '—' : s.name, b.l + 2, top + 9, { size: 9.5 });
-        var v = idx === null ? lastOf(s.v) : s.v[idx];
-        label(g, (v === null ? '—' : Math.round(v) + '%') + (idx === null && up ? ' ↑' : ''), b.r - 2, top + 9, { align: 'right', size: 10, weight: 600, color: g.fg });
-        if (idx !== null && s.v[idx] !== null) dot(g, xOf(b, cur), rowY(s.v[idx]), color, 3);
+        bd.members.forEach(function (s) {
+          var up = rising(s), color = slotColor(s.slot);
+          g.c.save(); g.c.strokeStyle = color; g.c.lineWidth = up ? 2 : 1.5; g.c.lineJoin = 'round'; g.c.lineCap = 'round';
+          var end = polyline(g, s, b, t0, t1, rowY); g.c.restore();
+          if (end) dot(g, end.x, end.y, color, up ? 3.5 : 2.5);
+          if (idx !== null && s.v[idx] !== null) dot(g, xOf(b, cur), rowY(s.v[idx]), color, 3);
+        });
+        label(g, bd.name, b.l + 2, top + 9, { size: 9.5 });
+        // The folded band prints no reading: the last of several projects is none of theirs.
+        if (!bd.one) return;
+        var s1 = bd.members[0], v = idx === null ? lastOf(s1.v) : s1.v[idx];
+        label(g, (v === null ? '—' : Math.round(v) + '%') + (idx === null && rising(s1) ? ' ↑' : ''), b.r - 2, top + 9, { align: 'right', size: 10, weight: 600, color: g.fg });
       });
       // After the bands, never before: each row rules its own baseline straight through the
       // sentence, and the sentence is what explains the space those baselines cross.
@@ -1305,7 +1340,13 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       if (idx !== null) { var x2 = xOf(b, cur); hair(g, x2, b.t, x2, b.b, g.fg, .5); }
       head('ctx', idx === null ? subOf('ctx') : dayWord(t0 + idx * HOUR) + ' ' + minuteAt(t0 + idx * HOUR),
            climbing ? climbing + ' climbing' : 'nothing climbing', idx !== null);
-      el('ctx-legend').hidden = true;
+      // The one control the bands need, and only when something is folded: a button, so the
+      // fold opens from a keyboard as well as from a finger.
+      var box = el('ctx-legend');
+      box.hidden = fold.short.length === 0;
+      box.classList.toggle('muted', false); box.classList.toggle('at', false);
+      box.innerHTML = fold.short.length === 0 ? '' : '<button type="button" class="key" data-fold="1" aria-expanded="' + (state.unfold ? 'true' : 'false') + '">'
+        + '<span class="k-name">short-lived (' + fold.short.length + ')</span><span class="k-val">' + (state.unfold ? 'fold' : 'show') + '</span></button>';
     }
   }
 
@@ -1564,8 +1605,12 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     canvas.addEventListener('pointercancel', function () { down = false; });
     el(id + '-now').addEventListener('click', function () { state.cursor[id] = null; redraw(); });
     el(id + '-legend').addEventListener('click', function (ev) {
-      var t = ev && ev.target, key = null;
-      while (t && key === null) { if (t.getAttribute) key = t.getAttribute('data-key'); t = t.parentNode; }
+      var t = ev && ev.target, key = null, fold = null;
+      while (t && key === null && fold === null) {
+        if (t.getAttribute) { key = t.getAttribute('data-key'); fold = t.getAttribute('data-fold'); }
+        t = t.parentNode;
+      }
+      if (fold !== null) { state.unfold = !state.unfold; redraw(); return; }
       if (key === null) return;
       state.iso[id] = isoOf(id) === key ? null : key;
       redraw();
@@ -1600,7 +1645,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     // as the read takes. A month of files is documented as being read a file at a time, so that
     // is not a window measured in microseconds, and a resize or a finger is all it takes.
     state.range = r; state.data = null; state.err = null; state.loading = true;
-    state.cursor = {}; state.iso = {};
+    state.cursor = {}; state.iso = {}; state.unfold = false;
     RANGES.forEach(function (x) { el('range-' + x).setAttribute('aria-pressed', x === r ? 'true' : 'false'); });
     // Session lines are a 24h thing: the long ranges draw one band per project.
     el('note-24h').hidden = r !== '24h';

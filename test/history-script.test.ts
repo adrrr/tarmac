@@ -1284,3 +1284,71 @@ test('on the cost chart, the nameless project and a project named null each isol
   assert.deepEqual(await bars(keyOf['null']), ['on', 'faded']);
   assert.deepEqual(await bars(keyOf['—']), ['faded', 'on']);
 });
+
+// ── projects that came and went (#330) ───────────────────────────────────────────────────
+//
+// A probe run once in a temp dir took a band of its own on the month, holding one dot, and
+// enough of them pushed the projects in daily use out of view. Fewer than three readings in
+// the range and a project folds into one band, closed until the reader opens it.
+
+/** A week in which alpha is read three hours running and two probes once each. */
+const probes = (): unknown => ({
+  ...(stub() as Record<string, unknown>),
+  hours: [0, 1, 2].map((i) => ({
+    t: T0 + i * HOUR,
+    n: 60,
+    sessions: [
+      session({ ctxPct: 20 + i * 10 }),
+      ...(i === 0 ? [session({ sid: 'p', project: 'probe-1', ctxPct: 15 })] : []),
+      ...(i === 2 ? [session({ sid: 'q', project: 'probe-2', ctxPct: 25 })] : []),
+    ],
+    rateLimits: { five_hour: 40 + i, seven_day: 20 },
+  })),
+});
+
+const bandNames = (p: Page): string[] =>
+  drew(p, 'ctx', 'fillText').map((a) => String(a[0])).filter((t) => /^(alpha|probe-\d|short-lived)/.test(t));
+
+test('a project read fewer than three times folds into one band, closed until a tap opens it', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : probes()));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+
+  assert.deepEqual(bandNames(m.p), ['alpha', 'short-lived (2)']);
+  const legend = m.p.el('ctx-legend');
+  assert.equal(legend.hidden, false, 'the fold has a control to open it');
+  assert.match(legend.innerHTML, /data-fold="1" aria-expanded="false"><span class="k-name">short-lived \(2\)</);
+
+  const fold = { getAttribute: (n: string): string | null => (n === 'data-fold' ? '1' : null), parentNode: null };
+  legend.fire('click', { target: fold });
+  await settle(m);
+  assert.deepEqual(bandNames(m.p), ['alpha', 'probe-1', 'probe-2']);
+  assert.match(legend.innerHTML, /aria-expanded="true"/);
+
+  legend.fire('click', { target: fold });
+  await settle(m);
+  assert.deepEqual(bandNames(m.p), ['alpha', 'short-lived (2)']);
+});
+
+test('a range that folds nothing has no control for a fold', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : stub()));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+  assert.deepEqual(bandNames(m.p), ['alpha']);
+  assert.equal(m.p.el('ctx-legend').hidden, true);
+});
+
+test('the fold closes again on a change of range', async () => {
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : probes()));
+  await settle(m);
+  m.p.el('range-7d').fire('click');
+  await settle(m);
+  const fold = { getAttribute: (n: string): string | null => (n === 'data-fold' ? '1' : null), parentNode: null };
+  m.p.el('ctx-legend').fire('click', { target: fold });
+  await settle(m);
+  m.p.el('range-30d').fire('click');
+  await settle(m);
+  assert.deepEqual(bandNames(m.p), ['alpha', 'short-lived (2)']);
+});
