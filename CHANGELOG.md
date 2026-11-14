@@ -11,6 +11,8 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-14
+
 ### Changed
 
 - **Projects that came and went fold into one band on the 7d and 30d context chart.** A probe
