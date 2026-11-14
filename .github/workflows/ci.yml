@@ -69,7 +69,7 @@ jobs:
 
       # The runner has shellcheck preinstalled, and dash mode is the shell CI runs it under.
       - name: the guards parse where they will run
-        run: shellcheck --shell=dash scripts/no-session-links.sh scripts/settings-attribution-only.sh
+        run: shellcheck --shell=dash scripts/no-session-links.sh scripts/settings-attribution-only.sh scripts/release-check.sh
 
       # On a push, `before` is the sha main stood at. It is the null sha on the first push to a
       # branch, and a collected object after a force-push; the script reads the last commit alone

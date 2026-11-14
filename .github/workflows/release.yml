@@ -1,0 +1,82 @@
+# A release is a version bump landing on main. This workflow stages it on npm and tags the
+# commit; a maintainer then approves the staged version with their 2FA, and only that makes it
+# public. See PUBLISHING.md.
+#
+# No token anywhere. npm's trusted publishing trusts this repository and this file name, and
+# trades the job's OIDC identity for a credential that lives for one publish. The trusted
+# publisher on npmjs.com allows `npm stage publish` alone, so a push to main, whoever makes it,
+# can at most put a version in the queue. Provenance is attached by npm on that path.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    # A version lives in package.json. Most pushes that touch it are dev-dependency bumps,
+    # which release-check.sh answers with release=no.
+    paths: [package.json]
+
+permissions: {}
+
+# Two releases racing would be two runs of the guard reading the same tags.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    name: stage · the version package.json names
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      # `fetch-depth: 0` for the tags: release-check.sh compares the version against them, and
+      # `prepublishOnly` runs the changelog suite, which compares every published section.
+      # `persist-credentials: false`: nothing in this job pushes, and `npm ci` runs other
+      # people's code.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - id: check
+        name: is this push a release?
+        run: sh scripts/release-check.sh >> "$GITHUB_OUTPUT"
+
+      # `npm stage` needs npm 11.15.0 or later; the one Node ships may be older.
+      - if: steps.check.outputs.release == 'yes'
+        run: npm install -g npm@11.21.2
+      - if: steps.check.outputs.release == 'yes'
+        run: npm ci
+
+      # `prepublishOnly` runs here, as it does for `npm publish`: the build, the suite with dash
+      # required (Ubuntu's /bin/sh), and the built CLI. A red suite stages nothing.
+      - if: steps.check.outputs.release == 'yes'
+        run: npm stage publish
+
+  tag:
+    name: tag · v${{ needs.stage.outputs.version }}
+    needs: stage
+    if: needs.stage.outputs.release == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # After the stage, never before: the tag is what tells release-check.sh this version is
+      # done, so a tag over a failed stage would close the release with nothing sent. If this job
+      # fails, re-run it; the stage is not repeated.
+      - name: tag the commit that was staged
+        run: gh api "repos/$REPO/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ needs.stage.outputs.version }}
