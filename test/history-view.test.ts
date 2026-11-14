@@ -423,6 +423,20 @@ test('one short row, or nothing but short rows, is not folded', () => {
   assert.deepEqual(foldShort([series('alpha', [10, null, null]), series('beta', [null, 20, null])]).short, []);
 });
 
+// A project that started an hour ago and is already climbing is the one this chart exists to
+// surface. Folded, it would lose its reading and its arrow.
+test('a short row that is climbing keeps its band', () => {
+  const series = (name: string, v: (number | null)[]) => ({ name, slot: 0, t0: 0, step: HOUR, v });
+  const f = foldShort([
+    series('alpha', [10, 20, 30, 40]),
+    series('fresh', [null, null, 10, 40]),
+    series('probe', [50, null, null, null]),
+    series('tmp', [null, 20, null, null]),
+  ]);
+  assert.deepEqual(f.rows.map((r) => r.name), ['alpha', 'fresh']);
+  assert.deepEqual(f.short.map((r) => r.name), ['probe', 'tmp']);
+});
+
 test('three readings are enough to keep a row', () => {
   const f = foldShort([{ name: 'alpha', slot: 0, t0: 0, step: HOUR, v: [10, null, 20, 30] }]);
   assert.deepEqual(f.short, []);
