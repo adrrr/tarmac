@@ -1232,7 +1232,8 @@ prompts and costs, and nothing real enters this repo.
 CI runs the suite on Node 22 and 24, on Linux and macOS, with `TARMAC_REQUIRE_DASH=1` so a
 machine without dash cannot report a green build it did not earn. A separate job builds `dist/`
 and runs it on Node 20, the oldest version `engines` promises, and the only place the published
-artefact is ever executed. Releases are cut by hand ([`PUBLISHING.md`](../PUBLISHING.md)).
+artefact is ever executed. A release is a version bump merged to main, which CI stages on npm
+for a maintainer to approve ([`PUBLISHING.md`](../PUBLISHING.md)).
 
 The suite runs the TypeScript sources directly through Node's type stripping, so it needs
 Node ≥ 22.18 to *develop*. What ships in `dist/` is plain ES2022 and runs on Node ≥ 20.

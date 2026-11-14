@@ -78,3 +78,19 @@ test('every CI job carries a deadline, so a hang fails instead of waiting', () =
   const naked = blocks.filter((b) => !/^ {4}timeout-minutes:/m.test(b)).map((b) => b.slice(0, b.indexOf(':')));
   assert.deepEqual(naked, [], `CI jobs carrying no timeout-minutes: ${naked.join(', ')} — a job without one waits out a hang instead of failing it`);
 });
+
+// The release workflow publishes with no token at all: npm's trusted publishing trades the
+// job's OIDC identity for a one-off credential, and only `npm stage publish` is let through, so
+// nothing reaches the registry before a maintainer approves it with their second factor. Each
+// assertion below is one line a tidy-up could take out without anything else going red.
+test('the release workflow stages from CI with no stored credential, and tags only after', () => {
+  const wf = read('.github/workflows/release.yml');
+  assert.doesNotMatch(wf, /secrets\.|NPM_TOKEN|NODE_AUTH_TOKEN/, 'a token in the workflow is the thing trusted publishing removes');
+  assert.match(wf, /^permissions: \{\}$/m, 'nothing granted by default; each job asks for its own');
+  assert.equal(wf.match(/id-token: write/g)?.length, 1, 'one job, and one only, may mint the OIDC token npm trusts');
+  assert.match(wf, /run: npm stage publish\b/, 'staged, so a release waits for a maintainer\'s 2FA');
+  assert.doesNotMatch(wf, /run: npm publish\b/, 'never a direct publish');
+  assert.match(wf, /sh scripts\/release-check\.sh/, 'the guard decides, before npm is called');
+  assert.match(wf, /^ +fetch-depth: 0$/m, 'the guard and the changelog suite read every tag');
+  assert.match(wf, /needs: stage/, 'the tag is cut once the version is staged, never before');
+});
