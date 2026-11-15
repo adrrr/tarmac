@@ -454,6 +454,12 @@ function resolveWriteTarget(file: string): string {
  * out of where it points (#337).
  */
 function followLinkText(from: string, link: string): string {
+  // A trailing separator makes the kernel demand a directory there: settings.json through it is
+  // ENOTDIR for Claude Code and for uninstall. Dropping it with the empty names below would write
+  // a file nothing reads (#343).
+  if (link.endsWith(path.sep)) {
+    throw new Error(`${from} links to ${link}, which ends in a separator — refusing to write through it`);
+  }
   const names = link.split(path.sep).filter((name) => name !== '' && name !== '.');
   let at = path.isAbsolute(link) ? path.parse(link).root : path.dirname(from);
   for (const [i, name] of names.entries()) {

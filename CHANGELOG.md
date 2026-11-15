@@ -11,6 +11,13 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Install refuses a settings.json link whose text ends in a separator.** A link spelled
+  `../x/settings.json/` had its trailing `/` dropped: install created `x/settings.json`, while
+  the kernel answers ENOTDIR through that link, so Claude Code read no settings and uninstall
+  refused. Install now stops before writing anything and names the link (#343).
+
 ## [0.11.0] - 2026-11-14
 
 ### Changed

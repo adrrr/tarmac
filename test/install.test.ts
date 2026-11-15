@@ -1074,6 +1074,18 @@ test('install stops at a missing directory in the link text instead of folding t
   assert.equal(fs.existsSync(path.join(home, 'x', 'settings.json')), false);
 });
 
+// A trailing separator makes the kernel demand a directory: settings.json through such a link is
+// ENOTDIR, so Claude Code reads no settings. Dropping it wrote a file nothing would ever read (#343).
+test('install refuses a link text that ends in a separator, and creates nothing', () => {
+  const home = fakeHome();
+  fs.mkdirSync(path.join(home, 'x'));
+  fs.symlinkSync(['..', 'x', 'settings.json', ''].join(path.sep), paths(home).settings);
+
+  assert.throws(() => planInstall({ home }), /ends in a separator/);
+  assert.throws(() => install({ home }), /ends in a separator/);
+  assert.equal(fs.existsSync(path.join(home, 'x', 'settings.json')), false);
+});
+
 test('install --yes installs into the home it runs under', () => {
   const home = fakeHome(MINE);
   const run = tarmac(['install', '--yes'], home);
