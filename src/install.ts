@@ -454,6 +454,14 @@ function resolveWriteTarget(file: string): string {
  * out of where it points (#337).
  */
 function followLinkText(from: string, link: string): string {
+  // A link text whose last name is empty, `.` or `..` (`x/`, `x/.`, `x/..`) can only name a
+  // directory, never a settings.json Claude Code or uninstall can read. The walk below drops the
+  // first two and would write a file nothing reads; with the third the plan names a path ending
+  // in `..` and the write fails on a raw ENOENT (#343).
+  const last = link.slice(link.lastIndexOf(path.sep) + 1);
+  if (last === '' || last === '.' || last === '..') {
+    throw new Error(`${from} links to ${link}, which can only name a directory — refusing to write through it`);
+  }
   const names = link.split(path.sep).filter((name) => name !== '' && name !== '.');
   let at = path.isAbsolute(link) ? path.parse(link).root : path.dirname(from);
   for (const [i, name] of names.entries()) {

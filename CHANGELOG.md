@@ -11,6 +11,15 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Install refuses a settings.json link whose text ends in a separator, `.` or `..`.** A link
+  spelled `../x/settings.json/` or `../x/settings.json/.` lost that last name: install created
+  `x/settings.json`, while the kernel answers ENOTDIR through that link, so Claude Code read no
+  settings and uninstall refused. One ending in `/..` could get a plan naming
+  `x/settings.json/..`, then a raw ENOENT. Install now stops before writing anything and names
+  the link (#343).
+
 ## [0.11.0] - 2026-11-14
 
 ### Changed

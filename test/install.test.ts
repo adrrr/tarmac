@@ -1074,6 +1074,24 @@ test('install stops at a missing directory in the link text instead of folding t
   assert.equal(fs.existsSync(path.join(home, 'x', 'settings.json')), false);
 });
 
+// A link text whose last name is empty, `.` or `..` can only name a directory, so Claude Code
+// reads no settings through it. The walk dropped the first two and wrote a file nothing would ever
+// read; the third got a plan naming `settings.json/..`, then a raw ENOENT (#343).
+test('install refuses a link text that ends in a separator, `.` or `..`, and creates nothing', () => {
+  for (const last of ['', '.', '..']) {
+    const home = fakeHome();
+    fs.mkdirSync(path.join(home, 'x'));
+    const text = ['..', 'x', 'settings.json', last].join(path.sep);
+    fs.symlinkSync(text, paths(home).settings);
+
+    assert.throws(() => planInstall({ home }), /can only name a directory/, text);
+    assert.throws(() => install({ home }), /can only name a directory/, text);
+    assert.deepEqual(fs.readdirSync(home).sort(), ['.claude', 'x'], text);
+    assert.deepEqual(fs.readdirSync(path.join(home, '.claude')), ['settings.json'], text);
+    assert.deepEqual(fs.readdirSync(path.join(home, 'x')), [], text);
+  }
+});
+
 test('install --yes installs into the home it runs under', () => {
   const home = fakeHome(MINE);
   const run = tarmac(['install', '--yes'], home);
