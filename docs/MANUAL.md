@@ -1081,8 +1081,8 @@ What comes back is aggregated, a month of minutes being a size nobody reads:
   `skipped`, `outOfRange`, `droppedSessions`, `capped` and `stopped`. How many days had a file is
   `days.length`. `capped` is true when the journal had stopped at its 256 MB cap, which the reader
   cannot see for itself: a journal that stopped has the shape of a fleet that went quiet.
-  `stopped` is true when it had stopped writing for any reason, the cap or a directory another
-  serve took; the reason is on serve's stderr.
+  `stopped` is true when nothing writes it any more: the cap, or a lock this serve lost and could
+  not take back. Another serve holding the directory is not a stop: it writes the days read.
 
 A line is skipped when it will not parse, when it parses into something that is not a reading, or
 when the clock it carries falls outside the range asked for, and skipping it is the point.

@@ -865,7 +865,7 @@ test('a range says when the journal it read had stopped writing', async () => {
   assert.equal(full.coverage.capped, true);
 });
 
-// The other way a journal stops: another serve took its directory. That is not a cap, and it has
+// The other way a journal stops: a lock its store could not take back. That is not a cap, and it has
 // the same shape on disk, so the writer carries it apart rather than inside `capped`.
 test('a range says when the journal it read had stopped for a reason other than its cap', async () => {
   const dir = journal();

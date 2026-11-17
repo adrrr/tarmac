@@ -174,7 +174,8 @@ export interface ReadRangeOptions {
    */
   capped?: boolean;
   /**
-   * Whether the store had stopped writing at all: its cap, or a directory another serve took.
+   * Whether nothing writes the journal any more: its cap, or a lock the store lost and could not
+   * take back. Not a directory another serve took, which that serve goes on writing.
    * The second cause has the same shape on disk as the first and as a serve that never ran, and
    * without this a journal that stopped mid-week reads as days nobody was there for.
    */

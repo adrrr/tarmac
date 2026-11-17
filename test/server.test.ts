@@ -1942,7 +1942,7 @@ test('a range served off a journal another serve took is not a capped one', asyn
       const res = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
       const body = (await res.json()) as { coverage: { capped: boolean; stopped: boolean; lines: number } };
       assert.equal(body.coverage.capped, false, 'nothing here is full');
-      assert.equal(body.coverage.stopped, true, 'but it did stop, and a page has to be able to say so');
+      assert.equal(body.coverage.stopped, false, 'and pid 1 is writing the journal this range was read from');
       assert.equal(body.coverage.lines, 1, 'and what was written before it stopped is still served');
     },
     { store },

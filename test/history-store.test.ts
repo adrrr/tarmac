@@ -878,19 +878,26 @@ test('a store that lost its directory says it stopped, and never that it was cap
   assert.equal(s.stats().capped, false, 'nothing here is full');
 });
 
-// And what it does read back says it stopped, or a journal that lost its directory mid-week
-// reads as one serve never wrote.
-test('a store that lost its directory carries the stop into the ranges it reads', async () => {
+// What it reads back says it stopped when nothing writes the journal any more: a lock it could
+// not take back. Another serve holding the directory is not that, since it writes the days read.
+test('a store carries the stop into the ranges it reads only when nothing writes the journal', async () => {
   const dir = path.join(tempDir('tarmac-lock-'), 'history');
   const clock = { now: at(2026, 8, 7) };
   const { lock } = acquireJournalLock({ dir, now: () => clock.now });
   const s = createHistoryStore({ dir, days: 30, now: () => clock.now, lock });
   assert.equal((await s.read('7d', clock.now)).coverage.stopped, false, 'a store still writing has not stopped');
+
   takenBy(dir, 1, clock.now);
-
   s.append(sample(clock.now));
+  assert.notEqual(s.stats().stopped, null, 'this store did stop');
+  assert.equal((await s.read('7d', clock.now)).coverage.stopped, false, 'but pid 1 writes the journal');
 
+  // A fresh lock naming no pid: held, by nobody this store can name, and not to be taken back.
+  fs.writeFileSync(lockFile(dir), '');
+  fs.utimesSync(lockFile(dir), clock.now / 1000, clock.now / 1000);
+  s.append(sample(clock.now));
   const week = await s.read('7d', clock.now);
+  assert.match(String(s.stats().stopped), /could not be taken back/);
   assert.equal(week.coverage.stopped, true);
   assert.equal(week.coverage.capped, false);
 });
