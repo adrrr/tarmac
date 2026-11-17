@@ -1851,6 +1851,7 @@ test('a range reads the journal on disk and aggregates it by hour and by day', a
         outOfRange: 0,
         droppedSessions: 0,
         capped: false,
+        stopped: false,
       });
       assert.equal(body.days[0].date, today());
       assert.deepEqual(body.days[0].byProject, [{ project: 'alpha', costUsd: 3 }], '4 spent, 1 of it before');
@@ -1912,8 +1913,9 @@ test('a range served off a journal that hit its cap says so', async () => {
     collectOk,
     async (base) => {
       const res = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
-      const body = (await res.json()) as { coverage: { capped: boolean; lines: number } };
+      const body = (await res.json()) as { coverage: { capped: boolean; stopped: boolean; lines: number } };
       assert.equal(body.coverage.capped, true);
+      assert.equal(body.coverage.stopped, true, 'a cap is a stop too');
       assert.equal(body.coverage.lines, 1, 'and what it did write is still served');
     },
     { store },
@@ -1938,8 +1940,9 @@ test('a range served off a journal another serve took is not a capped one', asyn
     collectOk,
     async (base) => {
       const res = await fetch(base + '/api/history?range=7d', { signal: AbortSignal.timeout(NET_DEADLINE_MS) });
-      const body = (await res.json()) as { coverage: { capped: boolean; lines: number } };
+      const body = (await res.json()) as { coverage: { capped: boolean; stopped: boolean; lines: number } };
       assert.equal(body.coverage.capped, false, 'nothing here is full');
+      assert.equal(body.coverage.stopped, true, 'but it did stop, and a page has to be able to say so');
       assert.equal(body.coverage.lines, 1, 'and what was written before it stopped is still served');
     },
     { store },
@@ -1997,7 +2000,7 @@ const emptyRange = (range: HistoryRange): RangeHistory => ({
   hours: [],
   days: [],
   resets: [],
-  coverage: { daysRequested: 7, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+  coverage: { daysRequested: 7, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
 });
 
 test('a journal read that never comes back is a 504 saying so, not a request that hangs', async () => {

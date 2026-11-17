@@ -534,10 +534,10 @@ export function createHistoryStore({
     },
     prune,
     read(range: HistoryRange, at: number): Promise<RangeHistory> {
-      // `capped` is read here rather than passed in by the caller: it is a fact about this
+      // `capped` and `stopped` are read here rather than passed in by the caller: facts about this
       // writer, and a journal at its ceiling looks from the disk alone exactly like a fleet
       // that went quiet.
-      return readRange({ dir, range, now: at, capped });
+      return readRange({ dir, range, now: at, capped, stopped: stopped !== null });
     },
     stats(): HistoryStats {
       const { files, bytes } = measure();

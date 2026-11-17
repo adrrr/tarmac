@@ -878,6 +878,23 @@ test('a store that lost its directory says it stopped, and never that it was cap
   assert.equal(s.stats().capped, false, 'nothing here is full');
 });
 
+// And what it does read back says it stopped, or a journal that lost its directory mid-week
+// reads as one serve never wrote.
+test('a store that lost its directory carries the stop into the ranges it reads', async () => {
+  const dir = path.join(tempDir('tarmac-lock-'), 'history');
+  const clock = { now: at(2026, 8, 7) };
+  const { lock } = acquireJournalLock({ dir, now: () => clock.now });
+  const s = createHistoryStore({ dir, days: 30, now: () => clock.now, lock });
+  assert.equal((await s.read('7d', clock.now)).coverage.stopped, false, 'a store still writing has not stopped');
+  takenBy(dir, 1, clock.now);
+
+  s.append(sample(clock.now));
+
+  const week = await s.read('7d', clock.now);
+  assert.equal(week.coverage.stopped, true);
+  assert.equal(week.coverage.capped, false);
+});
+
 // ── reading its own journal back ──────────────────────────────────────────────────────────
 //
 // The store owns both ends of the directory it holds: it writes the lines and it answers the

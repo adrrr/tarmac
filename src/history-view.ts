@@ -1632,9 +1632,11 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     if (state.range === '24h') return covers24;
     if (!d || !d.coverage) return state.range + ' from the journal';
     var c = d.coverage, said = state.range + ' from the journal · ' + d.days.length + ' of ' + c.daysRequested + ' ' + daysWord;
-    // Said once and quietly: a journal that stopped at its cap, and readings the reader could
-    // not use. Neither is a fault to shout about, and both change what the charts above mean.
+    // Said once and quietly: a journal that stopped, and readings the reader could not use.
+    // Neither is a fault to shout about, and both change what the charts above mean. The cap is
+    // named; any other stop is only said, since its reason is on serve's stderr.
     if (c.capped) said += ' · journal capped';
+    else if (c.stopped) said += ' · journal stopped';
     if (c.skipped > 0 || c.droppedSessions > 0) said += ' · ' + (c.skipped + c.droppedSessions) + ' unreadable';
     return said;
   }

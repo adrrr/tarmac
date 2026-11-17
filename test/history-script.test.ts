@@ -67,7 +67,7 @@ const journal = (range: string): unknown => ({
   })),
   days: [{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 4 }] }],
   resets: [{ limit: 'seven_day', t: T0 + HOUR, from: 90, to: 3, sinceMs: MIN }],
-  coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+  coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
 });
 
 const page = (historyEnabled = true, demo = false): string => renderPage({ rows: [row()], health: health() }, 'history', { historyEnabled, demo });
@@ -141,6 +141,30 @@ test('a range pill asks the journal for that range, and only for that one', asyn
   assert.equal(m.p.el('range-7d').getAttribute('aria-pressed'), 'true');
   assert.equal(m.p.el('range-24h').getAttribute('aria-pressed'), 'false');
   assert.match(m.p.el('hist-covers').textContent, /7d from the journal · 1 of 7 days on disk/);
+});
+
+// A journal that stopped mid-week reads as a serve that never ran, unless the line says it
+// stopped. The cap has its own words; any other stop says only that it stopped, since the reason
+// is serve's to print on stderr and not a page's to guess at.
+test('the coverage line says the journal stopped, and says capped only for the cap', async () => {
+  const said = async (cov: { capped: boolean; stopped: boolean }): Promise<string> => {
+    const m = mount(true, (u) => {
+      if (u === '/api/history') return ring();
+      const j = journal(u.slice(-2)) as { coverage: object };
+      return { ...j, coverage: { ...j.coverage, ...cov } };
+    });
+    await settle(m);
+    m.p.el('range-7d').fire('click');
+    await settle(m);
+    return m.p.el('hist-covers').textContent;
+  };
+  assert.doesNotMatch(await said({ capped: false, stopped: false }), /journal (capped|stopped)/);
+  const taken = await said({ capped: false, stopped: true });
+  assert.match(taken, / · journal stopped/);
+  assert.doesNotMatch(taken, /capped/, 'nothing filled');
+  const full = await said({ capped: true, stopped: true });
+  assert.match(full, / · journal capped/);
+  assert.doesNotMatch(full, /journal stopped/, 'one stop, said once');
 });
 
 test('a pill the journal cannot answer for is not asked at all', async () => {
@@ -355,7 +379,7 @@ test('a window the account barely touched is not drawn at the height of the one 
           // Dated inside the third hour, whose recorded high is 95 and whose last fifty minutes
           // belong to the window that has just started.
           resets: [{ limit: 'five_hour', t: T0 + 2 * HOUR, from: 95, to: 4, sinceMs: MIN }],
-          coverage: { daysRequested: 7, lines: 240, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+          coverage: { daysRequested: 7, lines: 240, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
         },
   );
   await settle(m);
@@ -510,7 +534,7 @@ test('the same project floors every column, whatever each day’s own ranking wa
           // Opposite rankings, same pair and same total: alpha owns Thursday, zulu owns Friday.
           days: [day('2026-08-27', 30, 5), day('2026-08-28', 5, 30)],
           resets: [],
-          coverage: { daysRequested: 7, lines: 240, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+          coverage: { daysRequested: 7, lines: 240, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
         },
   );
   await settle(m);
@@ -554,7 +578,7 @@ const thin = (range: string, window: { from: number; to: number }): unknown => (
   // the canvas here records every call made to it, the first range included.
   days: [{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 7 }] }],
   resets: [],
-  coverage: { daysRequested: range === '7d' ? 7 : 30, lines: 60, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+  coverage: { daysRequested: range === '7d' ? 7 : 30, lines: 60, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
 });
 
 test('a week with one day of journal in it is drawn a week wide', async () => {
@@ -684,7 +708,7 @@ const stub = (): unknown => ({
   hours: [0, 1, 2].map((i) => ({ t: T0 + i * HOUR, n: 60, sessions: [session()], rateLimits: { five_hour: 40 + i, seven_day: 20 + i } })),
   days: [{ date: '2026-08-29', byProject: [{ project: 'alpha', costUsd: 7 }] }],
   resets: [],
-  coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+  coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
 });
 
 /** T0 is 09:00 on the last day of a week that opened seven midnights earlier. */
@@ -757,7 +781,7 @@ test('a window the grid could not honour is not drawn on the axis either', async
   const m = mount(true, (url) =>
     url === '/api/history'
       ? ring()
-      : { ...(stub() as Record<string, unknown>), range: '30d', ...far, coverage: { daysRequested: 30, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false } },
+      : { ...(stub() as Record<string, unknown>), range: '30d', ...far, coverage: { daysRequested: 30, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false } },
   );
   await settle(m);
   m.p.el('range-30d').fire('click');
@@ -822,7 +846,7 @@ test('a turnover against the right edge keeps its whole name on the chart', asyn
           days: [],
           // Dated at the last minute the range holds, which is the right-hand end of the axis.
           resets: [{ limit: 'seven_day', t: WEEK.to - MIN, from: 90, to: 2, sinceMs: MIN }],
-          coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+          coverage: { daysRequested: 7, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
         },
   );
   await settle(m);
@@ -910,7 +934,7 @@ test('a turnover nobody watched keeps its qualifier even where the label is drop
           hours: [0, 1, 2].map((i) => ({ t: T0 + i * HOUR, n: 60, sessions: [session()], rateLimits: { five_hour: 10, seven_day: 20 } })),
           days: [],
           resets: [{ limit: 'seven_day', t: T0 + HOUR, from: 90, to: 2, sinceMs: 9 * HOUR }],
-          coverage: { daysRequested: 30, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+          coverage: { daysRequested: 30, lines: 180, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
         },
   );
   await settle(m);
@@ -1142,7 +1166,7 @@ test('an empty journal range is not a first run, and is not offered a minute of 
           hours: [],
           days: [],
           resets: [],
-          coverage: { daysRequested: 30, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false },
+          coverage: { daysRequested: 30, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped: false, stopped: false },
         },
   );
   await settle(m);
