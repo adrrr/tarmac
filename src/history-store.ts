@@ -375,6 +375,9 @@ export function createHistoryStore({
   // The cause behind `stopped`, when it is the ceiling. Kept apart from the sentence because one
   // of them is read by a page and the other by a person.
   let capped = false;
+  // Whether the stop is another live serve holding the directory. That serve keeps writing the
+  // journal this one reads back, so a range read from it has no gap to explain.
+  let taken = false;
   // Reassigned when the directory is erased under a running serve and this store takes its own
   // lock back, which is the one case where losing it is not losing the journal.
   let held = lock;
@@ -400,9 +403,11 @@ export function createHistoryStore({
     const { lock: again, heldBy } = acquireJournalLock({ dir, now });
     if (again === null) {
       stopped = heldBy === null ? `the lock in ${dir} could not be taken back` : `another serve (pid ${heldBy}) holds ${dir}`;
+      taken = heldBy !== null;
       return false;
     }
     held = again;
+    taken = false;
     return true;
   };
 
@@ -534,10 +539,10 @@ export function createHistoryStore({
     },
     prune,
     read(range: HistoryRange, at: number): Promise<RangeHistory> {
-      // `capped` is read here rather than passed in by the caller: it is a fact about this
+      // `capped` and `stopped` are read here rather than passed in by the caller: facts about this
       // writer, and a journal at its ceiling looks from the disk alone exactly like a fleet
       // that went quiet.
-      return readRange({ dir, range, now: at, capped });
+      return readRange({ dir, range, now: at, capped, stopped: stopped !== null && !taken });
     },
     stats(): HistoryStats {
       const { files, bytes } = measure();

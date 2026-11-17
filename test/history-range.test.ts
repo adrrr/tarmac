@@ -120,6 +120,7 @@ test('a range reads the days it covers and passes over the days no serve was run
     outOfRange: 0,
     droppedSessions: 0,
     capped: false,
+    stopped: false,
   });
   assert.deepEqual(
     range.days.map((d) => d.date),
@@ -153,6 +154,7 @@ test('a directory that is not there yet reads as an empty range, and never as a 
     outOfRange: 0,
     droppedSessions: 0,
     capped: false,
+    stopped: false,
   });
   assert.deepEqual(range.hours, []);
   assert.deepEqual(range.days, []);
@@ -861,6 +863,21 @@ test('a range says when the journal it read had stopped writing', async () => {
 
   assert.equal(open.coverage.capped, false);
   assert.equal(full.coverage.capped, true);
+});
+
+// The other way a journal stops: a lock its store could not take back. That is not a cap, and it has
+// the same shape on disk, so the writer carries it apart rather than inside `capped`.
+test('a range says when the journal it read had stopped for a reason other than its cap', async () => {
+  const dir = journal();
+  const now = at(2026, 8, 7);
+  day(dir, '2026-08-07', [rec(at(2026, 8, 7, 10), [sess()])]);
+
+  const open = await readRange({ dir, range: '7d', now });
+  const taken = await readRange({ dir, range: '7d', now, stopped: true });
+
+  assert.equal(open.coverage.stopped, false);
+  assert.equal(taken.coverage.stopped, true);
+  assert.equal(taken.coverage.capped, false, 'a stop is not a cap');
 });
 
 // #134 is about a torn line, and a reader that filed a line dated in 1970 under the same count

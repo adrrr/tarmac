@@ -795,8 +795,8 @@ they are greyed out and the view says so in place of the charts, naming the key 
 put it in. That sentence is rendered by the server, which is the side that knows what the config
 says, so it is on the page before any script runs and a browser with JavaScript off still gets
 told why there is nothing to draw. Under the pills, what the range actually covers: how many of
-the days asked for had a file, whether the journal had stopped at its cap, and how many readings
-came back unusable.
+the days asked for had a file, whether the journal had stopped (`journal capped` at its cap,
+`journal stopped` for any other reason), and how many readings came back unusable.
 
 On a serve that started a minute ago there is nothing in the ring yet, and three empty frames
 saying "no readings in this range" is a true answer to a question nobody asked. So the view says
@@ -1078,9 +1078,11 @@ What comes back is aggregated, a month of minutes being a size nobody reads:
   very first reading of a range has nothing to fall from, so `7d` and `30d` can disagree about a
   reset at the edge of the shorter one.
 - `coverage`, what was asked for against what was found: `daysRequested`, `lines` read and used,
-  `skipped`, `outOfRange`, `droppedSessions`, and `capped`. How many days had a file is
+  `skipped`, `outOfRange`, `droppedSessions`, `capped` and `stopped`. How many days had a file is
   `days.length`. `capped` is true when the journal had stopped at its 256 MB cap, which the reader
   cannot see for itself: a journal that stopped has the shape of a fleet that went quiet.
+  `stopped` is true when nothing writes it any more: the cap, or a lock this serve lost and could
+  not take back. Another serve holding the directory is not a stop: it writes the days read.
 
 A line is skipped when it will not parse, when it parses into something that is not a reading, or
 when the clock it carries falls outside the range asked for, and skipping it is the point.

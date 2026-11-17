@@ -129,6 +129,8 @@ export interface RangeCoverage {
   droppedSessions: number;
   /** Whether the journal had stopped at its cap. See `ReadRangeOptions`. */
   capped: boolean;
+  /** Whether the journal had stopped writing, for any reason, its cap included. See `ReadRangeOptions`. */
+  stopped: boolean;
 }
 
 export interface RangeHistory {
@@ -171,6 +173,13 @@ export interface ReadRangeOptions {
    * nothing, and this field is rendered as "journal capped".
    */
   capped?: boolean;
+  /**
+   * Whether nothing writes the journal any more: its cap, or a lock the store lost and could not
+   * take back. Not a directory another serve took, which that serve goes on writing.
+   * The second cause has the same shape on disk as the first and as a serve that never ran, and
+   * without this a journal that stopped mid-week reads as days nobody was there for.
+   */
+  stopped?: boolean;
   /**
    * How one local day is read back, `null` for a day there is nothing for. Defaults to the file
    * of that name in `dir`, which is what every real journal is — refusing anything that is not
@@ -235,9 +244,9 @@ interface DaySessionAcc {
  * the fleet on, and thirty files opened at once is thirty buffers of a day each in memory for
  * an answer that is a few hundred rows.
  */
-export async function readRange({ dir, range, now, capped = false, readDay }: ReadRangeOptions): Promise<RangeHistory> {
+export async function readRange({ dir, range, now, capped = false, stopped = false, readDay }: ReadRangeOptions): Promise<RangeHistory> {
   const daysRequested = RANGE_DAYS[range];
-  const coverage: RangeCoverage = { daysRequested, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped };
+  const coverage: RangeCoverage = { daysRequested, lines: 0, skipped: 0, outOfRange: 0, droppedSessions: 0, capped, stopped };
   // The default reader, built here rather than in the signature because it counts into
   // `coverage`: a day file refused by kind is a record this range could not read, which is the
   // question `skipped` answers — and only the DISK path can meet one. An injected reader

@@ -13,6 +13,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The history page says when nothing writes the journal any more.** A serve that lost its
+  journal's lock and could not take it back stopped writing and said so only on stderr, so its
+  `7d` and `30d` read as days serve never ran. `/api/history` now carries
+  `coverage.stopped`, and the coverage line under the pills says `journal stopped` (#349).
 - **Install refuses a settings.json link whose text ends in a separator, `.` or `..`.** A link
   spelled `../x/settings.json/` or `../x/settings.json/.` lost that last name: install created
   `x/settings.json`, while the kernel answers ENOTDIR through that link, so Claude Code read no
