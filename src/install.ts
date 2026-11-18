@@ -479,6 +479,22 @@ function followLinkText(from: string, link: string): string {
   return at;
 }
 
+/**
+ * A link into a directory that is not there — a dotfiles repo not cloned yet — is refused by the
+ * install plan, before the prompt: the write would fail on a raw ENOENT naming its temp file
+ * (#350). Only `ENOENT`, since any other failure of the stat is not "does not exist". `install`
+ * itself does not ask: its unwind tests reach a failing settings write through this very link.
+ */
+function refuseMissingDir(settings: string, target: string): void {
+  const dir = path.dirname(target);
+  try {
+    fs.statSync(dir);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return;
+    throw new Error(`${settings} links to ${target}, but ${dir} does not exist — create it, or clone what it belongs to, then install again`);
+  }
+}
+
 /** …and say so, when that is not the path the plan names. */
 function writesInstead(file: string): string | null {
   const target = resolveWriteTarget(file);
@@ -685,13 +701,15 @@ export function planInstall({ home, realHome = os.homedir(), snapshotsDir }: Pla
   });
   const isRealHome = sameFile(root, realHome);
   const before = commandOf(settings.statusLine);
+  const writes = writesInstead(p.settings);
+  if (writes !== null) refuseMissingDir(p.settings, writes);
   return {
     action: 'install',
     home: root,
     settings: p.settings,
     wrapper: p.wrapper,
     isRealHome,
-    writes: writesInstead(p.settings),
+    writes,
     before,
     // A re-install regenerates the wrapper and leaves settings.json alone, so announcing a
     // new value there would be a plan disagreeing with what runs.
