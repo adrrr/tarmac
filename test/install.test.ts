@@ -1069,9 +1069,25 @@ test('install stops at a missing directory in the link text instead of folding t
   fs.mkdirSync(path.join(home, 'x'));
   fs.symlinkSync(['..', 'missing', '..', 'x', 'settings.json'].join(path.sep), paths(home).settings);
 
-  assert.equal(planInstall({ home }).writes, [fs.realpathSync.native(home), 'missing', '..', 'x', 'settings.json'].join(path.sep));
+  const missing = path.join(fs.realpathSync.native(home), 'missing');
+  assert.throws(() => planInstall({ home }), (e: Error) => e.message.includes(`${missing}${path.sep}..${path.sep}x does not exist`));
   assert.throws(() => install({ home }), /ENOENT/);
   assert.equal(fs.existsSync(path.join(home, 'x', 'settings.json')), false);
+});
+
+// A dotfiles repo not cloned yet: the plan named the path the link leads to with no warning, and
+// the write after the confirmation failed on a raw ENOENT naming its temp file (#350).
+test('install refuses before the prompt a link into a directory that does not exist, and creates nothing', () => {
+  const home = fakeHome();
+  danglingSettings(home);
+  const dir = path.join(home, 'not-cloned');
+
+  assert.throws(() => planInstall({ home }), (e: Error) => e.message.includes(`${dir} does not exist`));
+  const run = tarmac(['install', '--yes'], home);
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /not-cloned does not exist/);
+  assert.doesNotMatch(run.stdout + run.stderr, /\.tmp/, 'no temp file is named');
+  assert.deepEqual(fs.readdirSync(path.join(home, '.claude')), ['settings.json'], 'nothing is written');
 });
 
 // A link text whose last name is empty, `.` or `..` can only name a directory, so Claude Code

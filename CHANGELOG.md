@@ -13,6 +13,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Install refuses a settings.json link into a directory that does not exist.** With a
+  dotfiles repo not cloned yet, the plan named the path the link leads to with no warning, and
+  the write after the confirmation failed on a raw ENOENT naming a temp file. The plan now names
+  the missing directory and stops before the prompt (#350).
 - **The history page says when nothing writes the journal any more.** A serve that lost its
   journal's lock and could not take it back stopped writing and said so only on stderr, so its
   `7d` and `30d` read as days serve never ran. `/api/history` now carries
