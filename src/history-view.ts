@@ -1504,7 +1504,10 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       }
     }
     g.c.save(); g.c.globalAlpha = a7; g.c.strokeStyle = g.fg; g.c.lineWidth = 2; g.c.lineJoin = 'round';
-    end7 = polyline(g, { v: q.seven, step: q.step }, b, t0, t1, yOf); g.c.restore();
+    // The long ranges' hour grid, like the bands (#345): a reading beside an empty hour is kept,
+    // and a lone one is the round cap of half a pixel of line.
+    if (!live) g.c.lineCap = 'round';
+    end7 = polyline(g, { v: q.seven, step: q.step }, b, t0, t1, yOf, !live); g.c.restore();
     var e5 = lastOf(q.five), e7 = lastOf(q.seven);
     // On the curve's own last point, which is the right edge only where the range ends at a
     // reading. A dot at the edge, over a week the serve was up for one day of, is a reading

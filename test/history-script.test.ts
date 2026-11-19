@@ -1380,3 +1380,48 @@ test('the fold closes again on a change of range', async () => {
   await settle(m);
   assert.deepEqual(bandNames(m.p), ['alpha', 'short-lived (2)']);
 });
+
+// A month on a phone groups the hour grid two by two (#345). A run of readings whose pairs each
+// hold an hour nobody read is still a stroke, and a reading with no neighbour is still drawn.
+test('a month on a phone keeps a reading beside an empty hour, and draws a lone one (#345)', async () => {
+  const window = { from: at(2026, 7, 31, 0), to: at(2026, 8, 30, 0) };
+  const read = (idx: number, ctxPct: number): unknown => ({
+    t: window.from + idx * HOUR,
+    n: 60,
+    sessions: [session({ ctxPct })],
+    rateLimits: { five_hour: 30, seven_day: 20 },
+  });
+  // Hours 3-4 straddle the pairs 2-3 and 4-5; hour 101 has no neighbour; 400-402 close the series.
+  const month = { ...(thin('30d', window) as object), hours: [read(3, 30), read(4, 40), read(101, 50), read(400, 20), read(401, 25), read(402, 30)] };
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : month));
+  await settle(m);
+  m.p.el('range-30d').fire('click');
+  await settle(m);
+
+  const MONTH = 30 * 24;
+  const near = (a: unknown, b: number): boolean => Math.abs(Number(a) - b) < 1e-6;
+  assert.ok(drew(m.p, 'ctx', 'moveTo').some((a) => near(a[0], xOfHour(2, MONTH))), 'the run beside an empty hour starts nowhere');
+  assert.ok(drew(m.p, 'ctx', 'lineTo').some((a) => near(a[0], xOfHour(4, MONTH))), 'the run beside an empty hour strokes nothing');
+  assert.ok(drew(m.p, 'ctx', 'lineTo').some((a) => near(a[0], xOfHour(100, MONTH) + 0.5)), 'the lone reading draws nothing');
+});
+
+// The quota's seven-day line sits on the same hour grid as the bands, and loses the same readings.
+test('a month on a phone keeps the seven-day reading beside an empty hour, and a lone one (#345)', async () => {
+  const window = { from: at(2026, 7, 31, 0), to: at(2026, 8, 30, 0) };
+  const read = (idx: number, seven: number): unknown => ({
+    t: window.from + idx * HOUR,
+    n: 60,
+    sessions: [session()],
+    rateLimits: { five_hour: 30, seven_day: seven },
+  });
+  const month = { ...(thin('30d', window) as object), hours: [read(3, 30), read(4, 40), read(101, 50), read(400, 20), read(401, 25), read(402, 30)] };
+  const m = mount(true, (url) => (url === '/api/history' ? ring() : month));
+  await settle(m);
+  m.p.el('range-30d').fire('click');
+  await settle(m);
+
+  const MONTH = 30 * 24;
+  const near = (a: unknown, b: number): boolean => Math.abs(Number(a) - b) < 1e-6;
+  assert.ok(drew(m.p, 'quota', 'lineTo').some((a) => near(a[0], xOfHour(4, MONTH))), 'the run beside an empty hour strokes nothing');
+  assert.ok(drew(m.p, 'quota', 'lineTo').some((a) => near(a[0], xOfHour(100, MONTH) + 0.5)), 'the lone reading draws nothing');
+});
