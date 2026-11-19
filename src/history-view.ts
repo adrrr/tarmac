@@ -149,8 +149,13 @@ export function slotIn(roster: Slot[], name: string | null): number {
  * point would drop the peak a context curve exists to show. A bucket holding a minute nobody
  * read stays a gap — a recycle must read as a break in the line and never as a fall to zero,
  * which is what averaging or skipping the hole would draw.
+ *
+ * `sparse` is for the hour grid of 7d and 30d, where that rule erases readings instead (#345):
+ * a project read a few hours a day has a null beside nearly every reading, and a bucket that
+ * straddles one would drop the reading with it. There a bucket is a gap only when it holds no
+ * reading at all.
  */
-export function decimate(v: (number | null)[], want: number): { v: (number | null)[]; step: number } {
+export function decimate(v: (number | null)[], want: number, sparse?: boolean): { v: (number | null)[]; step: number } {
   // A plot with no pixels to spend still has to answer with a series and a step somebody can
   // multiply by. Asked for none, it hands back one bucket rather than a step of Infinity, which
   // turns every x it is used to compute into NaN.
@@ -165,7 +170,7 @@ export function decimate(v: (number | null)[], want: number): { v: (number | nul
       if (v[j] === null) gap = true;
       else if (m === null || (v[j] as number) > m) m = v[j] as number;
     }
-    out.push(gap ? null : m);
+    out.push(gap && !sparse ? null : m);
   }
   return { v: out, step: step };
 }
@@ -1156,16 +1161,19 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
     g.c.beginPath(); g.c.arc(x, y, r || 4, 0, 7); g.c.fillStyle = color; g.c.fill(); g.c.restore();
   }
   // The pen lifts at every gap, which is what makes a recycle a break and not a cliff.
-  function polyline(g, s, b, t0, t1, yOf) {
-    var dec = decimate(s.v, Math.max(2, b.r - b.l)), v = dec.v, pen = false, end = null;
+  // Sparse is the hour grid's (#345): a reading with a gap on both sides is a run of one
+  // point, which strokes nothing, so it gets half a pixel of line and the round cap draws it.
+  function polyline(g, s, b, t0, t1, yOf, sparse) {
+    var dec = decimate(s.v, Math.max(2, b.r - b.l), sparse), v = dec.v, pen = false, end = null, lone = false;
     var span = t1 - t0 || 1;
     g.c.beginPath();
     for (var i = 0; i < v.length; i++) {
-      if (v[i] === null) { pen = false; continue; }
+      if (v[i] === null) { if (lone && sparse) g.c.lineTo(end.x + .5, end.y); pen = false; lone = false; continue; }
       var x = b.l + ((i * dec.step * s.step) / span) * (b.r - b.l), y = yOf(v[i]);
-      if (!pen) { g.c.moveTo(x, y); pen = true; } else g.c.lineTo(x, y);
+      if (!pen) { g.c.moveTo(x, y); pen = true; lone = true; } else { g.c.lineTo(x, y); lone = false; }
       end = { x: x, y: y };
     }
+    if (lone && sparse) g.c.lineTo(end.x + .5, end.y);
     g.c.stroke(); return end;
   }
   function xOf(b, cur) { return b.l + cur * (b.r - b.l); }
@@ -1327,7 +1335,7 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
         bd.members.forEach(function (s) {
           var up = rising(s), color = slotColor(s.slot);
           g.c.save(); g.c.strokeStyle = color; g.c.lineWidth = up ? 2 : 1.5; g.c.lineJoin = 'round'; g.c.lineCap = 'round';
-          var end = polyline(g, s, b, t0, t1, rowY); g.c.restore();
+          var end = polyline(g, s, b, t0, t1, rowY, true); g.c.restore();
           if (end) dot(g, end.x, end.y, color, up ? 3.5 : 2.5);
           if (idx !== null && s.v[idx] !== null) dot(g, xOf(b, cur), rowY(s.v[idx]), color, 3);
         });
@@ -1496,7 +1504,10 @@ ${PURE.map((fn) => String(fn)).join('\n\n')}
       }
     }
     g.c.save(); g.c.globalAlpha = a7; g.c.strokeStyle = g.fg; g.c.lineWidth = 2; g.c.lineJoin = 'round';
-    end7 = polyline(g, { v: q.seven, step: q.step }, b, t0, t1, yOf); g.c.restore();
+    // The long ranges' hour grid, like the bands (#345): a reading beside an empty hour is kept,
+    // and a lone one is the round cap of half a pixel of line.
+    if (!live) g.c.lineCap = 'round';
+    end7 = polyline(g, { v: q.seven, step: q.step }, b, t0, t1, yOf, !live); g.c.restore();
     var e5 = lastOf(q.five), e7 = lastOf(q.seven);
     // On the curve's own last point, which is the right edge only where the range ends at a
     // reading. A dot at the edge, over a week the serve was up for one day of, is a reading

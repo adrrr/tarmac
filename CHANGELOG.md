@@ -13,6 +13,12 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The 30d charts on a phone keep readings next to an empty hour.** At phone width the context
+  bands and the quota's seven-day line group hours two by two, and a group with one unread hour
+  became a gap, so a project read a few hours a day could lose most of its line. On the 7d and
+  30d ranges a group now keeps its highest reading unless it has none, and a reading with no
+  neighbour draws as a point, at every width. The 24h lines still break at a minute nobody read
+  (#345).
 - **Install refuses a settings.json link into a directory that does not exist.** With a
   dotfiles repo not cloned yet, the plan named the path the link leads to with no warning, and
   the write after the confirmation failed on a raw ENOENT naming a temp file. The plan now names

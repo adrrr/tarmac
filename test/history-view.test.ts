@@ -136,6 +136,13 @@ test('a bucket holding a minute nobody read is a gap, not the max of the rest', 
   assert.deepEqual(decimate(v, 2).v, [null, 14]);
 });
 
+test('on the hour grid a bucket keeps its highest reading even beside an hour nobody read (#345)', () => {
+  // Hours read 10:00-13:00 with the pairs shifted by one: every pair straddles the edge.
+  const v = [null, 30, 34, 38, 41, null, null, 22];
+  assert.deepEqual(decimate(v, 4, true).v, [30, 38, 41, 22]);
+  assert.deepEqual(decimate([null, null, 40, null], 2, true).v, [null, 40]);
+});
+
 test('a series already shorter than the plot is handed over untouched', () => {
   const v = [1, 2, 3];
   const out = decimate(v, 500);
