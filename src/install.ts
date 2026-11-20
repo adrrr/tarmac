@@ -495,6 +495,26 @@ function refuseMissingDir(settings: string, target: string): void {
   }
 }
 
+/**
+ * The same refusal one level up: a `.claude` that is itself a link leading nowhere. Nothing reads
+ * through it, so the plan printed with no warning, and the mkdir after the confirmation failed on
+ * a raw ENOENT (#353). The link text is named as spelled. Only `ENOENT`, as above.
+ */
+function refuseMissingClaude(claude: string): void {
+  let link: string;
+  try {
+    link = fs.readlinkSync(claude);
+  } catch {
+    return; // not a link, or not there: install creates it
+  }
+  try {
+    fs.statSync(claude);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return;
+    throw new Error(`${claude} links to ${link}, which does not exist — create it, or clone what it belongs to, then install again`);
+  }
+}
+
 /** …and say so, when that is not the path the plan names. */
 function writesInstead(file: string): string | null {
   const target = resolveWriteTarget(file);
@@ -693,6 +713,7 @@ function gitRepoOf(p: TarmacPaths, home: string): { dir: string; ignore: string 
 export function planInstall({ home, realHome = os.homedir(), snapshotsDir }: PlanOptions): InstallPlan {
   const root = requireHome(home);
   const p = paths(root, { snapshotsDir: snapshotsDir ?? undefined });
+  refuseMissingClaude(p.claude);
   const moving = relocationOrRefuse(p, snapshotsDir != null);
   const { settings } = readSettings(p);
   const { previous, alreadyInstalled } = chainStatusLine(settings, p.wrapper, {
