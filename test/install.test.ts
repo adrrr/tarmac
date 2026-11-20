@@ -1090,6 +1090,41 @@ test('install refuses before the prompt a link into a directory that does not ex
   assert.deepEqual(fs.readdirSync(path.join(home, '.claude')), ['settings.json'], 'nothing is written');
 });
 
+// The same dotfiles repo, linked one level up: `.claude` itself leads nowhere, the plan printed
+// with no warning, and install failed after the confirmation on a raw ENOENT from mkdir (#353).
+test('install refuses before the prompt a .claude that links into a directory that does not exist, and creates nothing', () => {
+  const home = tempDir('tarmac-home-');
+  fs.mkdirSync(path.join(home, 'dotfiles'));
+  const target = path.join(home, 'dotfiles', 'claude');
+  fs.symlinkSync(target, path.join(home, '.claude'));
+
+  assert.throws(() => planInstall({ home }), (e: Error) => e.message.includes(`${target}, which does not exist`));
+  const run = tarmac(['install', '--yes'], home);
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /dotfiles.claude, which does not exist/);
+  assert.doesNotMatch(run.stderr, /ENOENT/, 'no raw errno');
+  assert.deepEqual(fs.readdirSync(path.join(home, 'dotfiles')), [], 'nothing is written');
+});
+
+// The same dotfiles repo under the other directories install makes, and under a chosen one.
+for (const [where, link, flag] of [
+  ['.claude/tarmac', ['.claude', 'tarmac'], null],
+  ['~/.local', ['.local'], null],
+  ['a --snapshots-dir parent', ['cloud'], 'cloud/tarmac'],
+] as const) {
+  test(`install refuses before the prompt ${where} linking into a directory that does not exist`, () => {
+    const home = tempDir('tarmac-home-');
+    fs.mkdirSync(path.join(home, '.claude'));
+    fs.mkdirSync(path.join(home, 'dotfiles'));
+    fs.symlinkSync(path.join(home, 'dotfiles', 'gone'), path.join(home, ...link));
+    const snapshotsDir = flag === null ? undefined : path.join(home, flag);
+    assert.throws(() => planInstall({ home, snapshotsDir }), /gone, which does not exist/);
+    const run = tarmac(['install', '--yes', ...(snapshotsDir ? ['--snapshots-dir', snapshotsDir] : [])], home);
+    assert.notEqual(run.status, 0);
+    assert.doesNotMatch(run.stderr, /ENOENT/, 'no raw errno');
+  });
+}
+
 // A link text whose last name is empty, `.` or `..` can only name a directory, so Claude Code
 // reads no settings through it. The walk dropped the first two and wrote a file nothing would ever
 // read; the third got a plan naming `settings.json/..`, then a raw ENOENT (#343).

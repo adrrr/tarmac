@@ -495,6 +495,29 @@ function refuseMissingDir(settings: string, target: string): void {
   }
 }
 
+/**
+ * The same refusal for the directories install makes: a link on their way that leads nowhere —
+ * `.claude` itself, `.claude/tarmac`, `~/.local`, or a `--snapshots-dir` under one. Nothing
+ * reads through it, so the plan printed with no warning, and the mkdir after the confirmation
+ * failed on a raw ENOENT (#353). The link text is named as spelled. Only `ENOENT`, as above.
+ */
+function refuseMissingLinkAbove(dir: string): void {
+  for (let d = dir; d !== path.dirname(d); d = path.dirname(d)) {
+    let link: string;
+    try {
+      link = fs.readlinkSync(d);
+    } catch {
+      continue; // not a link, or not there: install creates it
+    }
+    try {
+      fs.statSync(d);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return;
+      throw new Error(`${d} links to ${link}, which does not exist — create it, or clone what it belongs to, then install again`);
+    }
+  }
+}
+
 /** …and say so, when that is not the path the plan names. */
 function writesInstead(file: string): string | null {
   const target = resolveWriteTarget(file);
@@ -693,6 +716,8 @@ function gitRepoOf(p: TarmacPaths, home: string): { dir: string; ignore: string 
 export function planInstall({ home, realHome = os.homedir(), snapshotsDir }: PlanOptions): InstallPlan {
   const root = requireHome(home);
   const p = paths(root, { snapshotsDir: snapshotsDir ?? undefined });
+  refuseMissingLinkAbove(p.dir);
+  refuseMissingLinkAbove(p.snapshots);
   const moving = relocationOrRefuse(p, snapshotsDir != null);
   const { settings } = readSettings(p);
   const { previous, alreadyInstalled } = chainStatusLine(settings, p.wrapper, {
