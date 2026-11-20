@@ -13,10 +13,11 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Install refuses a `.claude` that links into a directory that does not exist.** With
-  `~/.claude` itself a link into a dotfiles repo not cloned yet, the plan printed with no
-  warning and install failed after the confirmation on a raw ENOENT from mkdir. The plan now
-  names the link and stops before the prompt (#353).
+- **Install refuses a link into a directory that does not exist on the way to what it creates.**
+  With `~/.claude`, `~/.claude/tarmac`, `~/.local` or a directory above `--snapshots-dir` linked
+  into a dotfiles repo not cloned yet, the plan printed with no warning and install failed after
+  the confirmation on a raw ENOENT from mkdir. The plan now names the link and stops before the
+  prompt (#353).
 - **The 30d charts on a phone keep readings next to an empty hour.** At phone width the context
   bands and the quota's seven-day line group hours two by two, and a group with one unread hour
   became a gap, so a project read a few hours a day could lose most of its line. On the 7d and

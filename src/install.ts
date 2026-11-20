@@ -496,22 +496,25 @@ function refuseMissingDir(settings: string, target: string): void {
 }
 
 /**
- * The same refusal one level up: a `.claude` that is itself a link leading nowhere. Nothing reads
- * through it, so the plan printed with no warning, and the mkdir after the confirmation failed on
- * a raw ENOENT (#353). The link text is named as spelled. Only `ENOENT`, as above.
+ * The same refusal for the directories install makes: a link on their way that leads nowhere —
+ * `.claude` itself, `.claude/tarmac`, `~/.local`, or a `--snapshots-dir` under one. Nothing
+ * reads through it, so the plan printed with no warning, and the mkdir after the confirmation
+ * failed on a raw ENOENT (#353). The link text is named as spelled. Only `ENOENT`, as above.
  */
-function refuseMissingClaude(claude: string): void {
-  let link: string;
-  try {
-    link = fs.readlinkSync(claude);
-  } catch {
-    return; // not a link, or not there: install creates it
-  }
-  try {
-    fs.statSync(claude);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return;
-    throw new Error(`${claude} links to ${link}, which does not exist — create it, or clone what it belongs to, then install again`);
+function refuseMissingLinkAbove(dir: string): void {
+  for (let d = dir; d !== path.dirname(d); d = path.dirname(d)) {
+    let link: string;
+    try {
+      link = fs.readlinkSync(d);
+    } catch {
+      continue; // not a link, or not there: install creates it
+    }
+    try {
+      fs.statSync(d);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return;
+      throw new Error(`${d} links to ${link}, which does not exist — create it, or clone what it belongs to, then install again`);
+    }
   }
 }
 
@@ -713,7 +716,8 @@ function gitRepoOf(p: TarmacPaths, home: string): { dir: string; ignore: string 
 export function planInstall({ home, realHome = os.homedir(), snapshotsDir }: PlanOptions): InstallPlan {
   const root = requireHome(home);
   const p = paths(root, { snapshotsDir: snapshotsDir ?? undefined });
-  refuseMissingClaude(p.claude);
+  refuseMissingLinkAbove(p.dir);
+  refuseMissingLinkAbove(p.snapshots);
   const moving = relocationOrRefuse(p, snapshotsDir != null);
   const { settings } = readSettings(p);
   const { previous, alreadyInstalled } = chainStatusLine(settings, p.wrapper, {
