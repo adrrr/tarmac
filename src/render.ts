@@ -8,7 +8,7 @@
 // they are written side by side, and the suite can reach both.
 
 import { formatDuration } from './config.ts';
-import { HISTORY_MAX_BYTES } from './history-store.ts';
+import { HISTORY_MAX_BYTES, historyDirFor } from './history-store.ts';
 import type { Config, Source } from './config.ts';
 import { buildMap, stateOf } from './map.ts';
 import { INTERACTIVE } from './sessions.ts';
@@ -56,6 +56,11 @@ export function renderPlan(plan: Plan): string {
     // is now one the user asked for, which makes what happens to the old directory the thing
     // left to say. Named whether or not there is anything in it: the move is the news.
     if (plan.moving !== null) rows.push(['↳ moving from', `${plan.moving.dir}   (${movedFate(plan.moving)})`]);
+    if (plan.journal !== null)
+      rows.push([
+        '↳ journal stays',
+        `${plan.journal}   (serve journals in ${historyDirFor(plan.snapshots)} from now on; nothing reads or removes this one)`,
+      ]);
     // This operation now DELETES files, inside a directory people commit. A plan that can
     // disagree with what runs is worse than no plan — so it says how many, and where.
     // A directory that is THERE but holds none of our payloads is the state the previous
