@@ -24,6 +24,7 @@ import path from 'node:path';
 import { chainStatusLine, unchainStatusLine } from './settings.ts';
 import type { Settings, StatusLineCommand } from './settings.ts';
 import { firstWord, quoteArg } from './shell.ts';
+import { historyDirFor } from './history-store.ts';
 import { renderWrapper, PRUNE_MARKER, SNAPSHOT_NAME, TEMP_PREFIX, WRAPPER_MARKER } from './wrapper.ts';
 
 /** Every path tarmac owns under a given HOME. */
@@ -183,6 +184,14 @@ export interface InstallPlan extends PlanBase {
    * every install but a relocation — and a relocation is now one that was asked for.
    */
   moving: ClearedPayloads | null;
+  /**
+   * The serve journal this install leaves behind (#355). It sits beside the snapshots, named from
+   * their path rather than their identity, so a move, the migration out of `.claude` or another
+   * spelling of the same directory can each change it, and nothing sweeps, reads or removes the
+   * old one: the plan names it and the install leaves it. `null` when there is no installed
+   * wrapper, no journal beside it, or the same journal directory.
+   */
+  journal: string | null;
 }
 
 export interface UninstallPlan extends PlanBase {
@@ -745,6 +754,7 @@ export function planInstall({ home, realHome = os.homedir(), snapshotsDir }: Pla
     legacy: countLegacySnapshots(p, tarmacWasInstalledHere(p, alreadyInstalled)),
     gitRepo: gitRepoOf(p, root),
     moving: moving === null ? null : orEmpty(moving, countPayloads(p, moving)),
+    journal: journalLeft(installedSnapshotsDir(p), p.snapshots),
     undo: undoCommand('uninstall', root, isRealHome),
   };
 }
@@ -791,6 +801,12 @@ function relocationOrRefuse(p: TarmacPaths, chosen: boolean): string | null {
  * silent for exactly the relocation made before the first frame was drawn.
  */
 const orEmpty = (dir: string, found: ClearedPayloads | null): ClearedPayloads => found ?? { dir, payloads: 0, kept: 0 };
+
+function journalLeft(from: string | null, to: string): string | null {
+  if (from === null) return null;
+  const old = historyDirFor(from);
+  return !sameFile(old, historyDirFor(to)) && fs.existsSync(old) ? old : null;
+}
 
 /** The statusLine command as written, or `null` when there is none to read. */
 function commandOf(statusLine: unknown): string | null {

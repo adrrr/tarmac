@@ -13,6 +13,10 @@ follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The install plan names the serve journal a move leaves behind.** The journal sits beside
+  the snapshots, so a re-install with another `--snapshots-dir` moved where `serve` journals and
+  left the old `history/` in place with no word about it. When that directory is there and
+  changes, the plan now names it and where the journal goes; nothing removes it (#355).
 - **Install refuses a link into a directory that does not exist on the way to what it creates.**
   With `~/.claude`, `~/.claude/tarmac`, `~/.local` or a directory above `--snapshots-dir` linked
   into a dotfiles repo not cloned yet, the plan printed with no warning and install failed after

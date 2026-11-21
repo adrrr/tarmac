@@ -10,6 +10,7 @@ import type { UninstallMode } from '../src/install.ts';
 import { renderPlan } from '../src/render.ts';
 import { renderWrapper, PRUNE_MARKER, TEMP_PREFIX, WRAPPER_MARKER } from '../src/wrapper.ts';
 import { escapeRe } from '../src/reap.ts';
+import { historyDirFor } from '../src/history-store.ts';
 import { tempDir } from './sandbox.ts';
 
 function fakeHome(settingsText?: string): string {
@@ -2806,6 +2807,63 @@ test('a move is named even when the directory it leaves is empty or absent', () 
   assert.equal(plan.moving?.dir, elsewhere);
   assert.equal(plan.moving?.payloads, 0);
   assert.match(renderPlan(plan), new RegExp(escapeRe(elsewhere)));
+});
+
+// The serve journal sits beside the snapshots, so a move takes it somewhere else too, and nothing
+// collects the one left behind (#355). The plan names it, and only when it is there and moves.
+test('a move names the serve journal it leaves behind', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const old = historyDirFor(paths(home).snapshots);
+  fs.mkdirSync(old, { recursive: true });
+  fs.writeFileSync(path.join(old, '2026-01-01.jsonl'), '{}\n');
+  const to = path.join(tempDir('tarmac-to-'), 'snapshots');
+
+  const plan = planInstall({ home, snapshotsDir: to });
+  assert.equal(plan.journal, old);
+  const out = renderPlan(plan);
+  assert.match(out, new RegExp(`journal.*${escapeRe(old)}`));
+  assert.match(out, new RegExp(escapeRe(historyDirFor(to))), 'and where serve journals from now on');
+  install({ home, snapshotsDir: to });
+  assert.equal(fs.existsSync(path.join(old, '2026-01-01.jsonl')), true, 'left where it was');
+});
+
+test('a move says nothing of a journal that is not there, or that does not move', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const from = paths(home).snapshots;
+  const elsewhere = planInstall({ home, snapshotsDir: path.join(tempDir('tarmac-to-'), 'snapshots') });
+  assert.notEqual(elsewhere.moving, null);
+  assert.equal(elsewhere.journal, null, 'no journal was ever written');
+  assert.doesNotMatch(renderPlan(elsewhere), /journal/);
+
+  fs.mkdirSync(historyDirFor(from), { recursive: true });
+  const sibling = planInstall({ home, snapshotsDir: path.join(path.dirname(from), 'payloads') });
+  assert.notEqual(sibling.moving, null);
+  assert.equal(sibling.journal, null, 'same parent, same journal');
+  assert.doesNotMatch(renderPlan(sibling), /journal/);
+});
+
+// The journal is named from the snapshots PATH, so it changes wherever that path's parent does,
+// moved or not: the migration out of `.claude`, or another spelling of the same directory.
+test('a re-install names the journal it leaves whenever the journal changes, and only then', () => {
+  const home = fakeHome(MINE);
+  install({ home });
+  const old = historyDirFor(paths(home).snapshots);
+  fs.mkdirSync(old, { recursive: true });
+  assert.equal(planInstall({ home }).journal, null, 'nothing changes');
+  assert.doesNotMatch(renderPlan(planInstall({ home })), /journal/);
+
+  const link = path.join(tempDir('tarmac-link-'), 'snaps');
+  fs.symlinkSync(paths(home).snapshots, link);
+  const spelled = planInstall({ home, snapshotsDir: link });
+  assert.equal(spelled.moving, null, 'the same directory');
+  assert.equal(spelled.journal, old, 'and another journal');
+
+  const legacy = fakeHome(MINE);
+  install({ home: legacy, snapshotsDir: paths(legacy).legacySnapshots });
+  fs.mkdirSync(historyDirFor(paths(legacy).legacySnapshots));
+  assert.equal(planInstall({ home: legacy }).journal, historyDirFor(paths(legacy).legacySnapshots));
 });
 
 test('an install that changes nothing about the directory says nothing about moving it', () => {
