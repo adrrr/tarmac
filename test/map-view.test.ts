@@ -983,7 +983,7 @@ test('the tabs are links, and the current one says so', () => {
 //
 // A session carries a 96px dial with its number at 1.55rem. An agent carried `ctx 52%` at
 // 12.16px of grey, in the middle of "· Fable 5 · max". The two are the same quantity and only
-// one of them was visible — the reading Adrien could not find on the map.
+// one of them was visible — the reading the user could not find on the map.
 //
 // The vocabulary is the one the product already has: the table's Context column draws this
 // number as a bar. The strip borrows it. What it does NOT borrow is a dial — an arc at 18px
@@ -1025,7 +1025,7 @@ test('a reading over the top fills the bar and stops there', () => {
 
 // The phone trap, and the one that matters most: `@media (max-width:46rem)` carries an unscoped
 // `.bar { display:none }` written for the table's strip. Left alone it hides the agent's bar on
-// the map too — the one screen Adrien reads this on.
+// the map too — the one screen the user reads this on.
 test('the bar the table drops on a phone is not the bar the map just drew', () => {
   // The phone block hides `.bar` for the table's strip, where every value gets its column's
   // name back and a second telling of a number is width a phone has not got. On the map that
